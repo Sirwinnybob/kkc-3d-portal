@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KKC 3D Portal</title>
+    <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
+    <link rel="stylesheet" href="/css/viewer.css">
+</head>
+<body>
+    <div id="top-ui">
+        <div id="menu-container">
+            <div id="job-info" class="ui-panel">
+                <button id="menu-btn" title="Menu" style="border:none; margin-right:5px; background:none; font-size:18px;">&#9776;</button>
+                <span>Job: <span id="job-code-display">...</span></span>
+            </div>
+
+            <div id="dropdown-menu" class="ui-panel">
+                <div id="room-info" style="font-size: 0.8em; margin-bottom: 10px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                    Current Room: <b id="room-name-display" style="color: #000;">...</b>
+                </div>
+
+                <div id="room-switcher" style="display: none; margin-bottom: 15px;">
+                    <label class="slider-label">Switch Room:</label>
+                    <div id="room-list-ui" style="display: flex; flex-direction: column; gap: 5px;"></div>
+                </div>
+
+                <div>
+                    <label class="slider-label">Sensitivity: <span id="sens-val">1.00</span></label>
+                    <input type="range" id="sens-slider" min="0.1" max="3" step="0.1" value="1.0">
+                </div>
+
+                <a href="/" class="logout-btn">Log Out / Change Job</a>
+            </div>
+        </div>
+
+        <div id="help-btn" class="ui-panel">?</div>
+    </div>
+
+    <div id="status">Initializing 3D...</div>
+
+    <div id="help-modal">
+        <div class="modal-content">
+            <span id="close-help-x" class="close-help">&times;</span>
+            <h3 style="margin-top:0;">Controls</h3>
+            <div style="text-align:left; font-size: 0.9em; line-height: 1.6;">
+                <b>Rotate:</b> Left Click / 1 Finger Drag<br>
+                <b>Pan:</b> Right Click / 2 Finger Drag<br>
+                <b>Zoom:</b> Scroll / Use Right Joystick<br>
+                <b>Pivot:</b> Double Click to center rotation
+            </div>
+            <button id="close-help-btn" style="margin-top:20px; width:100%; padding:10px; border-radius:8px; border:none; background:#007bff; color:white; font-weight:bold; cursor:pointer;">Got it</button>
+        </div>
+    </div>
+
+    <!-- Zoom Joystick -->
+    <div id="joystick-container">
+        <div id="joystick-track"></div>
+        <div id="joystick-handle"></div>
+        <div style="position: absolute; top: -20px; width: 100%; text-align: center; color: white; font-size: 9px; font-weight: bold; text-transform: uppercase;">Zoom</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="/js/viewer.js?v=69"></script>
+</body>
+</html>

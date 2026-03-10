@@ -1,0 +1,12 @@
+services:
+  kkc-portal:
+    image: winnybob/kkc-3d-portal:v69
+    container_name: kkc-portal
+    restart: unless-stopped
+    ports:
+      - "5021:5021"
+    volumes:
+      - /mnt/KKC/kkc-3d-portal:/app/jobs
+    environment:
+      - NODE_ENV=production
+      - PORT=5021

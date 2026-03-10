@@ -1,0 +1,8 @@
+node_modules/
+jobs/
+338/
+AssimpAndroid/
+.claude/
+*.txt
+.env
+.DS_Store

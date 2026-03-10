@@ -1,0 +1,21 @@
+{
+  "name": "KKC 3D Portal",
+  "short_name": "KKC 3D",
+  "description": "Professional 3D Cabinet Viewer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": [
+    {
+      "src": "/images/kkc_logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/images/kkc_logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

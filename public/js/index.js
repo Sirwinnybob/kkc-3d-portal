@@ -1,0 +1,115 @@
+let currentJob = '';
+let pendingRedirectUrl = '';
+let pendingRooms = null;
+
+async function checkJob() {
+    const code = document.getElementById('jobCode').value.trim();
+    if (!code) return;
+
+    const btn = document.getElementById('btnCheckJob');
+    const errorMsg = document.getElementById('errorMsg');
+    
+    const originalText = btn.innerText;
+    btn.innerText = 'Checking...';
+    btn.disabled = true;
+    errorMsg.style.display = 'none';
+
+    try {
+        const response = await fetch(`/api/job/${encodeURIComponent(code)}`);
+        const data = await response.json();
+
+        if (response.ok) {
+            currentJob = code;
+            if (data.rooms.length === 1) {
+                pendingRedirectUrl = `/viewer.html?job=${encodeURIComponent(code)}&room=${encodeURIComponent(data.rooms[0])}`;
+                pendingRooms = null;
+            } else {
+                pendingRedirectUrl = '';
+                pendingRooms = data.rooms;
+            }
+            
+            // CHECK PREFERENCE: If they checked "Don't show again", skip the modal
+            if (localStorage.getItem('kkc_skip_disclaimer') === 'true') {
+                proceedAfterDisclaimer();
+            } else {
+                document.getElementById('disclaimer-modal').classList.add('show');
+            }
+        } else {
+            errorMsg.style.display = 'block';
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Could not connect to server.");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+
+function proceedAfterDisclaimer() {
+    // SAVE PREFERENCE: If the checkbox is checked, remember it
+    const chkDontShow = document.getElementById('chkDontShow');
+    if (chkDontShow && chkDontShow.checked) {
+        localStorage.setItem('kkc_skip_disclaimer', 'true');
+    }
+
+    document.getElementById('disclaimer-modal').classList.remove('show');
+    
+    if (pendingRedirectUrl) {
+        window.location.href = pendingRedirectUrl;
+    } else if (pendingRooms) {
+        showRoomSelection(pendingRooms);
+    }
+}
+
+function showRoomSelection(rooms) {
+    document.getElementById('login-container').style.display = 'none';
+    const roomContainer = document.getElementById('room-container');
+    const roomList = document.getElementById('room-list');
+    roomList.innerHTML = '';
+
+    rooms.forEach(room => {
+        const btn = document.createElement('button');
+        btn.innerText = room;
+        btn.className = 'room-btn';
+        btn.style.margin = '5px 0';
+        btn.style.padding = '10px';
+        btn.addEventListener('click', () => {
+            window.location.href = `/viewer.html?job=${encodeURIComponent(currentJob)}&room=${encodeURIComponent(room)}`;
+        });
+        roomList.appendChild(btn);
+    });
+
+    roomContainer.style.display = 'block';
+}
+
+function backToLogin() {
+    document.getElementById('room-container').style.display = 'none';
+    document.getElementById('login-container').style.display = 'block';
+}
+
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+            .then(reg => console.log('Service Worker Registered'))
+            .catch(err => console.log('Service Worker Failed', err));
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const checkBtn = document.getElementById('btnCheckJob');
+    const backBtn = document.getElementById('btnBackToLogin');
+    const acceptBtn = document.getElementById('btnAcceptDisclaimer');
+    const input = document.getElementById('jobCode');
+
+    if (checkBtn) checkBtn.addEventListener('click', checkJob);
+    if (backBtn) backBtn.addEventListener('click', backToLogin);
+    if (acceptBtn) acceptBtn.addEventListener('click', proceedAfterDisclaimer);
+
+    if (input) {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkJob();
+        });
+    }
+});

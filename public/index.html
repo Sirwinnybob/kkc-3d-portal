@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KKC 3D Portal</title>
+    <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KKC 3D Portal">
+    <link rel="apple-touch-icon" href="/images/kkc_logo.jpg">
+    <link rel="stylesheet" href="/css/index.css?v=36">
+</head>
+<body>
+    <div class="login-card" id="login-container">
+        <img src="/images/kkc_logo.jpg" alt="KKC Logo" style="max-width: 200px; margin-bottom: 20px;">
+        <p>Enter your job number (located on your drawings cover page) to view your 3D cabinets!</p>
+        <input type="text" id="jobCode" placeholder="Job Number (e.g. 12345)" autofocus>
+        <button id="btnCheckJob">View My Job</button>
+        <div id="errorMsg" class="error">Job code not found. Please check and try again.</div>
+    </div>
+
+    <!-- Room Selection Dialog -->
+    <div class="login-card" id="room-container" style="display: none;">
+        <h1>Select Room</h1>
+        <p>This job has multiple rooms. Which one would you like to view?</p>
+        <div id="room-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+            <!-- Rooms will be injected here -->
+        </div>
+        <button id="btnBackToLogin" style="background: #444;">Back</button>
+    </div>
+
+    <!-- Disclaimer Modal (TRUE OVERLAY) -->
+    <div id="disclaimer-modal" class="modal-overlay">
+        <div class="modal-content disclaimer-content">
+            <h2>3D Cabinet Portal Disclaimer</h2>
+            <div class="disclaimer-body">
+                <p>Welcome to the Kustom Kraft Cabinets 3D Portal. This tool is designed to help you visualize your project, but please keep the following limitations in mind as you review your designs:</p>
+                
+                <ul>
+                    <li><strong>Visual Representation Only:</strong> The 3D models provided are intended for visualization and conceptual approval. They are not exact engineering schematics.</li>
+                    <li><strong>Custom Objects:</strong> Specialized custom elements—such as range hoods, coat hook boards, built-in benches, and unique millwork—are modeled as approximations. Their final, handcrafted appearance may vary from what is shown in the digital representation.</li>
+                    <li><strong>Material and Color Variations:</strong> The colors, wood textures, and finishes displayed on your screen are digital approximations. Because wood is a natural material, the final product will feature inherent variations in grain pattern, texture, and color. Additionally, monitor settings and lighting conditions can drastically alter how colors appear on screen compared to the finished physical product.</li>
+                    <li><strong>Hardware and Details:</strong> The exact placements and styles of hardware (knobs, pulls, hinges) or internal components shown in the portal are representations and may be adjusted in the final build for functionality and proper clearance.</li>
+                    <li><strong>Final Authority:</strong> The actual construction of your cabinetry will be governed by the final signed contract, written specifications, and approved 2D shop drawings, which will always supersede this 3D visual model.</li>
+                </ul>
+
+                <p class="acknowledge-text">By using this 3D portal, you acknowledge that the final manufactured cabinets may differ from this digital representation.</p>
+            </div>
+            
+            <div class="disclaimer-footer">
+                <label class="dont-show-again">
+                    <input type="checkbox" id="chkDontShow"> Don't show again on this device
+                </label>
+                <button id="btnAcceptDisclaimer" class="accept-btn">I Acknowledge & Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/index.js?v=36"></script>
+</body>
+</html>
