@@ -204,24 +204,28 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, error: 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-    console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
-    const scan = (dir) => {
-        if (!fs.existsSync(dir)) return;
-        fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) scan(fullPath);
-            else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
-        });
-    };
-    scan(JOBS_DIR);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
+        const scan = (dir) => {
+            if (!fs.existsSync(dir)) return;
+            fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) scan(fullPath);
+                else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
+            });
+        };
+        scan(JOBS_DIR);
+    });
 
-chokidar.watch(JOBS_DIR, { 
-    ignoreInitial: true,
-    ignored: [/(\\|\/)\./, '**/*.glb'],
-    awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }
-}).on('all', (event, fp) => {
-    const dae = path.join(path.dirname(fp), '3D.dae');
-    if (fs.existsSync(dae)) convertDesign(dae);
-});
+    chokidar.watch(JOBS_DIR, {
+        ignoreInitial: true,
+        ignored: [/(\\|\/)\./, '**/*.glb'],
+        awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }
+    }).on('all', (event, fp) => {
+        const dae = path.join(path.dirname(fp), '3D.dae');
+        if (fs.existsSync(dae)) convertDesign(dae);
+    });
+}
+
+module.exports = app;
