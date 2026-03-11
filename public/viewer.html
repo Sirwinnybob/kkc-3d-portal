@@ -11,7 +11,7 @@
     <div id="top-ui">
         <div id="menu-container">
             <div id="job-info" class="ui-panel">
-                <button id="menu-btn" title="Menu" style="border:none; margin-right:5px; background:none; font-size:18px;">&#9776;</button>
+                <button id="menu-btn" title="Menu" aria-label="Menu" aria-expanded="false" style="border:none; margin-right:5px; background:none; font-size:18px;">&#9776;</button>
                 <span>Job: <span id="job-code-display">...</span></span>
             </div>
 
@@ -34,14 +34,14 @@
             </div>
         </div>
 
-        <div id="help-btn" class="ui-panel">?</div>
+        <button id="help-btn" class="ui-panel" aria-label="Help">?</button>
     </div>
 
     <div id="status">Initializing 3D...</div>
 
     <div id="help-modal">
         <div class="modal-content">
-            <span id="close-help-x" class="close-help">&times;</span>
+            <button id="close-help-x" class="close-help" aria-label="Close help">&times;</button>
             <h3 style="margin-top:0;">Controls</h3>
             <div style="text-align:left; font-size: 0.9em; line-height: 1.6;">
                 <b>Rotate:</b> Left Click / 1 Finger Drag<br>
