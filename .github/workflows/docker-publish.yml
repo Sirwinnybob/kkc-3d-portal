@@ -23,7 +23,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5.7.0
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/kkc-cabinet-portal
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/kkc-3d-portal
           tags: |
             type=raw,value=latest
 
