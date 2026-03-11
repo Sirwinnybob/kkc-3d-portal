@@ -72,7 +72,7 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-app.get('/api/job/:code', (req, res) => {
+app.get('/api/job/:code', async (req, res) => {
     const code = req.params.code;
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(safeBase, path.join('.', code));
@@ -81,16 +81,26 @@ app.get('/api/job/:code', (req, res) => {
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
-    if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
+    try {
+        await fs.promises.access(jobPath);
+    } catch {
+        return res.status(404).json({ success: false });
+    }
+
     const rooms = [];
-    const findGlbs = (dir) => {
-        fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+    const findGlbs = async (dir) => {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        const promises = entries.map(entry => {
             const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) findGlbs(fullPath);
-            else if (entry.name.toLowerCase().endsWith('.glb')) rooms.push(path.basename(entry.name, '.glb'));
+            if (entry.isDirectory()) {
+                return findGlbs(fullPath);
+            } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                rooms.push(path.basename(entry.name, '.glb'));
+            }
         });
+        await Promise.all(promises);
     };
-    findGlbs(jobPath);
+    await findGlbs(jobPath);
     res.json({ success: true, rooms: [...new Set(rooms)] });
 });
 

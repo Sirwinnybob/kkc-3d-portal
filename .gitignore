@@ -6,3 +6,4 @@ AssimpAndroid/
 *.txt
 .env
 .DS_Store
+test/benchmark_jobs/
