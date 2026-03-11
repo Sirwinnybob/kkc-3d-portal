@@ -196,7 +196,7 @@ async function init() {
         if (sensSlider && sensVal) {
             sensSlider.oninput = () => {
                 const v = parseFloat(sensSlider.value);
-                display.innerText = v.toFixed(2);
+                sensVal.innerText = v.toFixed(2);
                 controls.zoomSpeed = v;
                 controls.rotateSpeed = v;
             };
