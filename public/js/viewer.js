@@ -98,21 +98,24 @@ async function init() {
     const closeHelpBtn = document.getElementById('close-help-btn');
 
     if (menuBtn && dropdown) {
-        menuBtn.onpointerdown = (e) => {
+        menuBtn.onclick = (e) => {
             e.stopPropagation();
             dropdown.classList.toggle('show');
+            const isExpanded = dropdown.classList.contains('show');
+            menuBtn.setAttribute('aria-expanded', isExpanded.toString());
         };
         window.addEventListener('pointerdown', (e) => {
             if (!document.getElementById('menu-container').contains(e.target)) {
                 dropdown.classList.remove('show');
+                menuBtn.setAttribute('aria-expanded', 'false');
             }
         });
     }
 
     const toggleHelp = (show) => { if (helpModal) helpModal.classList.toggle('show', show); };
-    if (helpBtn) helpBtn.onpointerdown = () => toggleHelp(true);
-    if (closeHelpX) closeHelpX.onpointerdown = () => toggleHelp(false);
-    if (closeHelpBtn) closeHelpBtn.onpointerdown = () => toggleHelp(false);
+    if (helpBtn) helpBtn.onclick = () => toggleHelp(true);
+    if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
+    if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
 
     try {
         const response = await fetch(`/api/job/${encodeURIComponent(jobCode)}`);
