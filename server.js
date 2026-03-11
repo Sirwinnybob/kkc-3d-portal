@@ -27,10 +27,10 @@ if (process.env.NODE_ENV === 'production') {
         // DEBUG LOGGING FOR HEADERS
         console.log(`[DEBUG] Request: ${req.method} ${req.url} | Host: ${host} | Proto: ${proto}`);
 
-        if (proto && proto !== 'https') return res.redirect(301, `https://${host}${req.url}`);
+        if (proto && proto !== 'https') return res.status(403).send('Forbidden: HTTPS required.');
         
         // Temporarily relaxed domain check to ensure access works
-        if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && !host.includes('localhost')) {
+        if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && host !== 'localhost' && !host.startsWith('localhost:')) {
             console.warn(`[SECURITY] Blocked access from unauthorized host: ${host}`);
             return res.status(403).send(`Forbidden: Host ${host} not allowed.`);
         }
