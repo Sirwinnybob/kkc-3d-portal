@@ -152,7 +152,7 @@ async function processQueue() {
         else {
             const genGlb = path.join(dir, outputGlb);
             if (outputGlb !== `${roomName}.glb` && fs.existsSync(genGlb)) {
-                try { fs.renameSync(genGlb, finalGlb); } catch(e) {}
+                try { fs.renameSync(genGlb, finalGlb); } catch(e) { console.error(`!!! [FAILED] Rename ${roomName}: ${e.message}`); }
             }
             console.log(`SUCCESS: ${roomName} is live.`);
         }
