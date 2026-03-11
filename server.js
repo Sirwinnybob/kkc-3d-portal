@@ -66,7 +66,12 @@ app.use('/jobs', (req, res, next) => {
 // --- API ---
 app.get('/api/job/:code', (req, res) => {
     const code = req.params.code;
-    const jobPath = path.join(JOBS_DIR, code);
+    const safeBase = path.resolve(JOBS_DIR);
+    const jobPath = path.resolve(JOBS_DIR, code);
+    // Security: Prevent path traversal
+    if (!jobPath.startsWith(safeBase + path.sep)) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
     if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
     const rooms = [];
     const findGlbs = (dir) => {
@@ -82,7 +87,12 @@ app.get('/api/job/:code', (req, res) => {
 
 app.get('/api/job/:code/:room', (req, res) => {
     const { code, room } = req.params;
-    const jobPath = path.join(JOBS_DIR, code);
+    const safeBase = path.resolve(JOBS_DIR);
+    const jobPath = path.resolve(JOBS_DIR, code);
+    // Security: Prevent path traversal
+    if (!jobPath.startsWith(safeBase + path.sep)) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
     const findGlb = (dir) => {
         let found = null;
         fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
@@ -159,6 +169,12 @@ function convertDesign(filePath, skipTimer = false) {
         processQueue();
     }, 15000));
 }
+
+// --- ERROR HANDLING ---
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${err.message}`);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+});
 
 app.listen(PORT, () => {
     console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
