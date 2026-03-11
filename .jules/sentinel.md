@@ -15,3 +15,8 @@
 **Vulnerability:** Even if the primary path parameter (`code`) was validated against path traversal, secondary parameters (`room`) used in subsequent path operations (`path.resolve(jobPath, room)`) were still vulnerable if not explicitly validated.
 **Learning:** Path traversal validation must be applied to *every* segment of user input used to construct a file path, not just the base directory.
 **Prevention:** Resolve the full path including all user inputs (`roomPath`), and verify that it strictly starts with the previously validated base directory for that segment (`jobPath + path.sep`).
+
+## 2024-05-24 - HTTPS Enforcement Bypass
+**Vulnerability:** The HTTPS enforcement middleware in `server.js` was checking `req.headers['x-forwarded-proto']` and only blocking the request if the header was present and not equal to 'https' (`proto && proto !== 'https'`). This allowed direct HTTP requests to completely bypass the HTTPS requirement.
+**Learning:** Directly inspecting the `x-forwarded-proto` header is error-prone when Express's `trust proxy` is enabled. It fails to account for requests that arrive without the header entirely (e.g., direct HTTP access).
+**Prevention:** Rely on Express's `req.protocol` property, which correctly interprets the `X-Forwarded-Proto` header when `app.set('trust proxy', 1)` is used, and enforces strict equality (`req.protocol !== 'https'`) to block all non-HTTPS traffic securely.

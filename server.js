@@ -21,14 +21,15 @@ if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
 app.set('trust proxy', 1);
 if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
-        const proto = req.headers['x-forwarded-proto'];
+        const proto = req.protocol;
         const host = req.headers.host || '';
         const allowedDomain = '3dportal.kustomkraftcabinets.ddns.net';
 
         // DEBUG LOGGING FOR HEADERS
         console.log(`[DEBUG] Request: ${req.method} ${req.url} | Host: ${host} | Proto: ${proto}`);
 
-        if (proto && proto !== 'https') return res.status(403).send('Forbidden: HTTPS required.');
+        // Security: Ensure all traffic is strictly HTTPS (trust proxy handles X-Forwarded-Proto)
+        if (proto !== 'https') return res.status(403).send('Forbidden: HTTPS required.');
         
         // Temporarily relaxed domain check to ensure access works
         if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && host !== 'localhost' && !host.startsWith('localhost:')) {
