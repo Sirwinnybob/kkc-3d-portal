@@ -76,7 +76,7 @@ app.use('/api/', apiLimiter);
 app.get('/api/job/:code', (req, res) => {
     const code = req.params.code;
     const safeBase = path.resolve(JOBS_DIR);
-    const jobPath = path.resolve(JOBS_DIR, code);
+    const jobPath = path.resolve(safeBase, path.join('.', code));
     // Security: Prevent path traversal
     if (!jobPath.startsWith(safeBase + path.sep)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
@@ -97,8 +97,8 @@ app.get('/api/job/:code', (req, res) => {
 app.get('/api/job/:code/:room', (req, res) => {
     const { code, room } = req.params;
     const safeBase = path.resolve(JOBS_DIR);
-    const jobPath = path.resolve(JOBS_DIR, code);
-    const roomPath = path.resolve(jobPath, room);
+    const jobPath = path.resolve(safeBase, path.join('.', code));
+    const roomPath = path.resolve(jobPath, path.join('.', room));
 
     // Security: Prevent path traversal for both code and room
     if (!jobPath.startsWith(safeBase + path.sep) || !roomPath.startsWith(jobPath + path.sep)) {
