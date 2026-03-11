@@ -7,6 +7,8 @@ services:
       - "5021:5021"
     volumes:
       - /mnt/KKC/kkc-3d-portal:/app/jobs
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=5021
