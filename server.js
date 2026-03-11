@@ -118,21 +118,32 @@ app.get('/api/job/:code/:room', (req, res) => {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
     if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
-    const findGlb = (dir) => {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                const found = findGlb(fullPath);
-                if (found) return found;
-            } else if (entry.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) {
-                return fullPath;
+    const findGlb = async (dir) => {
+        try {
+            const dirObj = await fs.promises.opendir(dir);
+            const dirs = [];
+            for await (const dirent of dirObj) {
+                if (dirent.isDirectory()) {
+                    dirs.push(path.join(dir, dirent.name));
+                } else if (dirent.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) {
+                    return path.join(dir, dirent.name);
+                }
             }
+
+            for (const subDir of dirs) {
+                const result = await findGlb(subDir);
+                if (result) return result;
+            }
+        } catch (err) {
+            // ignore
         }
         return null;
     };
-    const absPath = findGlb(jobPath);
-    if (absPath) return res.json({ success: true, url: `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}` });
-    res.status(404).json({ success: false });
+
+    findGlb(jobPath).then(absPath => {
+        if (absPath) return res.json({ success: true, url: `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}` });
+        res.status(404).json({ success: false });
+    });
 });
 
 // --- CONVERSION ENGINE ---
@@ -204,24 +215,28 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, error: 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-    console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
-    const scan = (dir) => {
-        if (!fs.existsSync(dir)) return;
-        fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) scan(fullPath);
-            else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
-        });
-    };
-    scan(JOBS_DIR);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
+        const scan = (dir) => {
+            if (!fs.existsSync(dir)) return;
+            fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) scan(fullPath);
+                else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
+            });
+        };
+        scan(JOBS_DIR);
+    });
 
-chokidar.watch(JOBS_DIR, { 
-    ignoreInitial: true,
-    ignored: [/(\\|\/)\./, '**/*.glb'],
-    awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }
-}).on('all', (event, fp) => {
-    const dae = path.join(path.dirname(fp), '3D.dae');
-    if (fs.existsSync(dae)) convertDesign(dae);
-});
+    chokidar.watch(JOBS_DIR, {
+        ignoreInitial: true,
+        ignored: [/(\\|\/)\./, '**/*.glb'],
+        awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }
+    }).on('all', (event, fp) => {
+        const dae = path.join(path.dirname(fp), '3D.dae');
+        if (fs.existsSync(dae)) convertDesign(dae);
+    });
+}
+
+module.exports = app;
