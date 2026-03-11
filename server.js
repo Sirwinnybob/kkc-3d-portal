@@ -193,14 +193,11 @@ async function convertDesign(filePath, skipTimer = false) {
     const glbPath = path.join(roomDir, `${roomName}.glb`);
 
     try {
-        const hasGlb = await fs.promises.access(glbPath, fs.constants.F_OK).then(() => true).catch(() => false);
-        if (hasGlb) {
-            const [daeStat, glbStat] = await Promise.all([
-                fs.promises.stat(filePath),
-                fs.promises.stat(glbPath)
-            ]);
-            if (glbStat.mtimeMs > daeStat.mtimeMs) return;
-        }
+        const [daeStat, glbStat] = await Promise.all([
+            fs.promises.stat(filePath).catch(() => null),
+            fs.promises.stat(glbPath).catch(() => null)
+        ]);
+        if (glbStat && daeStat && glbStat.mtimeMs > daeStat.mtimeMs) return;
     } catch (e) {
         // Suppress stat errors (e.g. file deleted during check)
     }
@@ -227,15 +224,16 @@ app.use((err, req, res, next) => {
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
-        const scan = (dir) => {
+        const scan = async (dir) => {
             if (!fs.existsSync(dir)) return;
-            fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
                 const fullPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) scan(fullPath);
-                else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
-            });
+                if (entry.isDirectory()) await scan(fullPath);
+                else if (entry.name.toLowerCase() === '3d.dae') await convertDesign(fullPath, true);
+            }
         };
-        scan(JOBS_DIR);
+        scan(JOBS_DIR).catch(console.error);
     });
 
     chokidar.watch(JOBS_DIR, {
