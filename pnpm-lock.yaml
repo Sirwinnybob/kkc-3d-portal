@@ -21,7 +21,7 @@ importers:
         specifier: ^8.1.0
         version: 8.1.0
       morgan:
-        specifier: ^1.10.0
+        specifier: ^1.10.1
         version: 1.10.1
     devDependencies:
       jsdom:
