@@ -1,2 +1,11 @@
+
+> kkc-cabinet-portal@1.0.0 start /app
+> node server.js
+
 KKC PORTAL v1.1.5-DEBUG-HEADERS ACTIVE ON PORT 5021
-GET /api/job/testcode/testroom 200 61 - 15.843 ms
+GET /viewer.html?job=TEST_JOB&room=Room1 200 3315 - 5.241 ms
+GET /css/viewer.css 200 5334 - 4.181 ms
+GET /js/viewer.js?v=69 200 18695 - 3.341 ms
+GET /api/job/TEST_JOB 200 34 - 27.464 ms
+GET /api/job/TEST_JOB/Room1 200 55 - 1.489 ms
+GET /jobs/TEST_JOB/Room1/Room1.glb 200 5 - 1.805 ms

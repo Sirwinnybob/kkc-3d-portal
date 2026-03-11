@@ -254,6 +254,108 @@ async function init() {
             };
         }
 
+        // --- PHOTO RENDER ---
+        const cameraBtn = document.getElementById('camera-btn');
+        if (cameraBtn) {
+            cameraBtn.onclick = async () => {
+                updateStatus("Rendering 4K Photo...");
+
+                // Save original state
+                const origWidth = window.innerWidth;
+                const origHeight = window.innerHeight;
+                const origDpr = renderer.getPixelRatio();
+                const origAspect = camera.aspect;
+
+                // 4K resolution targeting a 3840 width
+                const targetWidth = 3840;
+                const targetHeight = Math.round(targetWidth / origAspect);
+
+                // Set new resolution
+                renderer.setPixelRatio(1);
+                renderer.setSize(targetWidth, targetHeight, false);
+                composer.setSize(targetWidth, targetHeight);
+                camera.aspect = targetWidth / targetHeight;
+                camera.updateProjectionMatrix();
+
+                if (fxaaPass) {
+                    fxaaPass.material.uniforms['resolution'].value.x = 1 / targetWidth;
+                    fxaaPass.material.uniforms['resolution'].value.y = 1 / targetHeight;
+                }
+
+                // Render frame
+                composer.render();
+
+                // Create offscreen canvas to combine render + logo + text
+                const canvas2d = document.createElement('canvas');
+                canvas2d.width = targetWidth;
+                canvas2d.height = targetHeight;
+                const ctx = canvas2d.getContext('2d');
+
+                // Draw WebGL render synchronously immediately after render
+                ctx.drawImage(renderer.domElement, 0, 0, targetWidth, targetHeight);
+
+                // Restore original state immediately to prevent flicker while waiting for logo
+                renderer.setPixelRatio(origDpr);
+                renderer.setSize(origWidth, origHeight);
+                composer.setSize(origWidth, origHeight);
+                camera.aspect = origAspect;
+                camera.updateProjectionMatrix();
+
+                if (fxaaPass) {
+                    fxaaPass.material.uniforms['resolution'].value.x = 1 / (origWidth * origDpr);
+                    fxaaPass.material.uniforms['resolution'].value.y = 1 / (origHeight * origDpr);
+                }
+                composer.render();
+
+                // Try to load and draw logo onto the saved 2D canvas
+                let logoImg = null;
+                try {
+                    logoImg = new Image();
+                    logoImg.src = '/images/kkc_logo.jpg';
+                    await new Promise((resolve, reject) => {
+                        logoImg.onload = resolve;
+                        logoImg.onerror = reject;
+                    });
+                } catch (err) {
+                    console.error("Failed to load logo for photo export", err);
+                }
+
+                if (logoImg) {
+                    // Draw logo at bottom left
+                    const logoWidth = 400; // arbitrary scale for 4K
+                    const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
+                    const padding = 60;
+                    const logoX = padding;
+                    const logoY = targetHeight - logoHeight - padding;
+                    ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+
+                    // Draw text next to logo
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 4;
+                    ctx.font = 'bold 80px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
+                    ctx.textBaseline = 'bottom';
+
+                    const textX = logoX + logoWidth + 40;
+                    const textY = targetHeight - padding;
+                    const textContent = `Job: ${jobCode} | Room: ${initialRoom}`;
+
+                    ctx.strokeText(textContent, textX, textY);
+                    ctx.fillText(textContent, textX, textY);
+                }
+
+                // Download image
+                const dataUrl = canvas2d.toDataURL('image/jpeg', 0.95);
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `KKC_${jobCode}_${initialRoom.replace(/ /g, '_')}.jpg`;
+                a.click();
+
+                updateStatus("Photo Saved");
+                setTimeout(() => updateStatus(""), 3000);
+            };
+        }
+
         // --- LOAD MODEL ---
         updateStatus("Loading Design...");
         const loader = new GLTFLoader();
