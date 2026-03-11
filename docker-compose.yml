@@ -1,6 +1,6 @@
 services:
   kkc-portal:
-    image: winnybob/kkc-3d-portal:v69
+    image: winnybob/kkc-3d-portal:latest
     container_name: kkc-portal
     restart: unless-stopped
     ports:
