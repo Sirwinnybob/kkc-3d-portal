@@ -10,7 +10,6 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
 let zoomVelocity = 0;
-let loadedModel = null;
 
 const SETTINGS = {
     exposure:      1.75, // Magic number
@@ -168,7 +167,6 @@ async function init() {
             camera.add(light);
             camera.add(target);
             light.target = target;
-            return light;
         };
 
         makeCamLight(li * 0.5,  1,   1,    1);
@@ -281,7 +279,6 @@ async function init() {
                     }
                 }
             });
-            loadedModel = model;
             scene.add(model);
             const box    = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
