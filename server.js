@@ -122,15 +122,15 @@ app.get('/api/job/:code/:room', (req, res) => {
 const conversionQueue = [];
 let isConverting = false;
 
-function cleanDae(filePath) {
+async function cleanDae(filePath) {
     try {
-        let content = fs.readFileSync(filePath, 'utf8');
+        let content = await fs.promises.readFile(filePath, 'utf8');
         let cleaned = content;
         cleaned = cleaned.replace(/<h>[\s\S]*?<\/h>/g, '');
         cleaned = cleaned.replace(/<ph>/g, '').replace(/<\/ph>/g, '');
         cleaned = cleaned.replace(/\t/g, ' ').replace(/ +/g, ' ');
         cleaned = cleaned.replace(/> /g, '>').replace(/ <\//g, '</');
-        if (content !== cleaned) fs.writeFileSync(filePath, cleaned, 'utf8');
+        if (content !== cleaned) await fs.promises.writeFile(filePath, cleaned, 'utf8');
     } catch (e) { console.error(`!!! [Cleaner] Error: ${e.message}`); }
 }
 
@@ -142,7 +142,7 @@ async function processQueue() {
     const roomName = path.basename(dir);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
-    cleanDae(filePath);
+    await cleanDae(filePath);
     execFile(ASSIMP_PATH, ['export', '3D.dae', outputGlb, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, (err, stdout, stderr) => {
         if (err) console.error(`!!! [FAILED] ${roomName}: ${stderr || err.message}`);
         else {
