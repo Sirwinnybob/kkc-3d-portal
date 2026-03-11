@@ -62,6 +62,11 @@ button {
 
 button:hover { background: #0056b3; }
 
+.login-logo { max-width: 200px; margin-bottom: 20px; }
+.hidden-container { display: none; }
+.room-list-container { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.btn-back { background: #444; }
+
 .error {
     color: #ff4d4d;
     margin-top: 15px;

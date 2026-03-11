@@ -45,11 +45,10 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
-            scriptSrcAttr: ["'unsafe-inline'"], 
+            scriptSrc: ["'self'", "'sha256-eGFYqAHm7QB8cassdFBbBxhusmh76P1pfh3ymxPZOUw='", "https://unpkg.com"],
             connectSrc: ["'self'", "https://unpkg.com"],
             imgSrc: ["'self'", "data:", "blob:"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'"],
             workerSrc: ["'self'", "blob:"],
         }
     },

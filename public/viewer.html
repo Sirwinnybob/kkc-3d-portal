@@ -11,18 +11,18 @@
     <div id="top-ui">
         <div id="menu-container">
             <div id="job-info" class="ui-panel">
-                <button id="menu-btn" title="Menu" aria-label="Menu" aria-expanded="false" style="border:none; margin-right:5px; background:none; font-size:18px;">&#9776;</button>
+                <button id="menu-btn" title="Menu" aria-label="Menu" aria-expanded="false" class="menu-btn-style">&#9776;</button>
                 <span>Job: <span id="job-code-display">...</span></span>
             </div>
 
             <div id="dropdown-menu" class="ui-panel">
-                <div id="room-info" style="font-size: 0.8em; margin-bottom: 10px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                    Current Room: <b id="room-name-display" style="color: #000;">...</b>
+                <div id="room-info" class="room-info-style">
+                    Current Room: <b id="room-name-display" class="room-name-style">...</b>
                 </div>
 
-                <div id="room-switcher" style="display: none; margin-bottom: 15px;">
+                <div id="room-switcher" class="room-switcher-style">
                     <label class="slider-label">Switch Room:</label>
-                    <div id="room-list-ui" style="display: flex; flex-direction: column; gap: 5px;"></div>
+                    <div id="room-list-ui" class="room-list-ui-style"></div>
                 </div>
 
                 <div>
@@ -42,14 +42,14 @@
     <div id="help-modal">
         <div class="modal-content">
             <button id="close-help-x" class="close-help" aria-label="Close help">&times;</button>
-            <h3 style="margin-top:0;">Controls</h3>
-            <div style="text-align:left; font-size: 0.9em; line-height: 1.6;">
+            <h3 class="controls-title">Controls</h3>
+            <div class="controls-body">
                 <b>Rotate:</b> Left Click / 1 Finger Drag<br>
                 <b>Pan:</b> Right Click / 2 Finger Drag<br>
                 <b>Zoom:</b> Scroll / Use Right Joystick<br>
                 <b>Pivot:</b> Double Click to center rotation
             </div>
-            <button id="close-help-btn" style="margin-top:20px; width:100%; padding:10px; border-radius:8px; border:none; background:#007bff; color:white; font-weight:bold; cursor:pointer;">Got it</button>
+            <button id="close-help-btn" class="close-help-btn-style">Got it</button>
         </div>
     </div>
 
@@ -57,7 +57,7 @@
     <div id="joystick-container">
         <div id="joystick-track"></div>
         <div id="joystick-handle"></div>
-        <div style="position: absolute; top: -20px; width: 100%; text-align: center; color: white; font-size: 9px; font-weight: bold; text-transform: uppercase;">Zoom</div>
+        <div class="joystick-label">Zoom</div>
     </div>
 
     <div id="canvas-container"></div>
