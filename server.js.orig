@@ -31,7 +31,7 @@ if (process.env.NODE_ENV === 'production') {
 
         // Security: Ensure all traffic is strictly HTTPS (trust proxy handles X-Forwarded-Proto)
         if (proto !== 'https') return res.status(403).send('Forbidden: HTTPS required.');
-        
+
         // Temporarily relaxed domain check to ensure access works
         if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && host !== 'localhost' && !host.startsWith('localhost:')) {
             console.warn(`[SECURITY] Blocked access from unauthorized host: ${host}`);
@@ -46,7 +46,7 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
-            scriptSrcAttr: ["'unsafe-inline'"], 
+            scriptSrcAttr: ["'unsafe-inline'"],
             connectSrc: ["'self'", "https://unpkg.com"],
             imgSrc: ["'self'", "data:", "blob:"],
             styleSrc: ["'self'", "'unsafe-inline'"],
@@ -98,20 +98,18 @@ app.get('/api/job/:code/:room', (req, res) => {
     const { code, room } = req.params;
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(safeBase, path.join('.', code));
-    const safeRoom = path.basename(room);
-    const roomPath = path.resolve(jobPath, safeRoom);
+    const roomPath = path.resolve(jobPath, path.join('.', room));
 
     // Security: Prevent path traversal for both code and room
     if (!jobPath.startsWith(safeBase + path.sep) || !roomPath.startsWith(jobPath + path.sep)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
-    if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
     const findGlb = (dir) => {
         let found = null;
         fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) { let r = findGlb(fullPath); if (r) found = r; }
-            else if (entry.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) found = fullPath;
+            else if (entry.name.toLowerCase() === `${room.toLowerCase()}.glb`) found = fullPath;
         });
         return found;
     };
@@ -168,7 +166,7 @@ function convertDesign(filePath, skipTimer = false) {
     if (fs.existsSync(glbPath)) {
         const daeTime = fs.statSync(filePath).mtimeMs;
         const glbTime = fs.statSync(glbPath).mtimeMs;
-        if (glbTime > daeTime) return; 
+        if (glbTime > daeTime) return;
     }
     if (skipTimer) {
         conversionQueue.push({ filePath });
@@ -202,7 +200,7 @@ app.listen(PORT, () => {
     scan(JOBS_DIR);
 });
 
-chokidar.watch(JOBS_DIR, { 
+chokidar.watch(JOBS_DIR, {
     ignoreInitial: true,
     ignored: [/(\\|\/)\./, '**/*.glb'],
     awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }

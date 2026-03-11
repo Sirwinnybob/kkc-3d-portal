@@ -1,0 +1,10 @@
+--- server.js
++++ server.js
+@@ -103,6 +103,7 @@
+     if (!jobPath.startsWith(safeBase + path.sep) || !roomPath.startsWith(jobPath + path.sep)) {
+         return res.status(403).json({ success: false, error: 'Forbidden' });
+     }
++    if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
+     const findGlb = (dir) => {
+         let found = null;
+         fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {

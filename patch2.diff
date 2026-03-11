@@ -1,0 +1,21 @@
+--- server.js
++++ server.js
+@@ -98,8 +98,9 @@
+     const { code, room } = req.params;
+     const safeBase = path.resolve(JOBS_DIR);
+     const jobPath = path.resolve(safeBase, path.join('.', code));
+-    const roomPath = path.resolve(jobPath, path.join('.', room));
++    const safeRoom = path.basename(room);
++    const roomPath = path.resolve(jobPath, safeRoom);
+
+     // Security: Prevent path traversal for both code and room
+     if (!jobPath.startsWith(safeBase + path.sep) || !roomPath.startsWith(jobPath + path.sep)) {
+@@ -109,7 +110,7 @@
+         fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+             const fullPath = path.join(dir, entry.name);
+             if (entry.isDirectory()) { let r = findGlb(fullPath); if (r) found = r; }
+-            else if (entry.name.toLowerCase() === `${room.toLowerCase()}.glb`) found = fullPath;
++            else if (entry.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) found = fullPath;
+         });
+         return found;
+     };
