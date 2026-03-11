@@ -78,7 +78,8 @@ app.get('/api/job/:code', (req, res) => {
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(safeBase, path.join('.', code));
     // Security: Prevent path traversal
-    if (!jobPath.startsWith(safeBase + path.sep)) {
+    const relative = path.relative(safeBase, jobPath);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
     if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
@@ -101,7 +102,9 @@ app.get('/api/job/:code/:room', (req, res) => {
     const roomPath = path.resolve(jobPath, path.join('.', room));
 
     // Security: Prevent path traversal for both code and room
-    if (!jobPath.startsWith(safeBase + path.sep) || !roomPath.startsWith(jobPath + path.sep)) {
+    const relCode = path.relative(safeBase, jobPath);
+    const relRoom = path.relative(jobPath, roomPath);
+    if (!relCode || relCode.startsWith('..') || path.isAbsolute(relCode) || !relRoom || relRoom.startsWith('..') || path.isAbsolute(relRoom)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
     const findGlb = (dir) => {
