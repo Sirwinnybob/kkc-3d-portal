@@ -186,16 +186,25 @@ async function processQueue() {
 }
 
 const pendingTimers = new Map();
-function convertDesign(filePath, skipTimer = false) {
+async function convertDesign(filePath, skipTimer = false) {
     if (path.extname(filePath).toLowerCase() !== '.dae') return;
     const roomDir = path.dirname(filePath);
     const roomName = path.basename(roomDir);
     const glbPath = path.join(roomDir, `${roomName}.glb`);
-    if (fs.existsSync(glbPath)) {
-        const daeTime = fs.statSync(filePath).mtimeMs;
-        const glbTime = fs.statSync(glbPath).mtimeMs;
-        if (glbTime > daeTime) return; 
+
+    try {
+        const hasGlb = await fs.promises.access(glbPath, fs.constants.F_OK).then(() => true).catch(() => false);
+        if (hasGlb) {
+            const [daeStat, glbStat] = await Promise.all([
+                fs.promises.stat(filePath),
+                fs.promises.stat(glbPath)
+            ]);
+            if (glbStat.mtimeMs > daeStat.mtimeMs) return;
+        }
+    } catch (e) {
+        // Suppress stat errors (e.g. file deleted during check)
     }
+
     if (skipTimer) {
         conversionQueue.push({ filePath });
         processQueue();
