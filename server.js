@@ -109,13 +109,16 @@ app.get('/api/job/:code/:room', (req, res) => {
     }
     if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
     const findGlb = (dir) => {
-        let found = null;
-        fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) { let r = findGlb(fullPath); if (r) found = r; }
-            else if (entry.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) found = fullPath;
-        });
-        return found;
+            if (entry.isDirectory()) {
+                const found = findGlb(fullPath);
+                if (found) return found;
+            } else if (entry.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) {
+                return fullPath;
+            }
+        }
+        return null;
     };
     const absPath = findGlb(jobPath);
     if (absPath) return res.json({ success: true, url: `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}` });
