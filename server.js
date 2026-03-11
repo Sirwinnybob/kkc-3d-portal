@@ -6,6 +6,7 @@ const chokidar = require('chokidar');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const jobsAuth = require('./middleware/jobsAuth');
 
 const app = express();
 const APP_VERSION = "1.1.5-DEBUG-HEADERS";
@@ -59,17 +60,7 @@ app.use(helmet({
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/jobs', (req, res, next) => {
-    try {
-        const decodedPath = decodeURIComponent(req.path);
-        const ext = path.extname(decodedPath).toLowerCase();
-        // Security: Prevent serving unauthorized file types or files without extensions by explicitly requiring allowed extensions.
-        if (['.glb', '.jpg', '.png', '.jpeg'].includes(ext)) return next();
-        res.status(403).send('Forbidden');
-    } catch (e) {
-        res.status(400).send('Bad Request');
-    }
-}, express.static(JOBS_DIR));
+app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
 
 // --- API ---
 const apiLimiter = rateLimit({
