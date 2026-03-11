@@ -5,6 +5,7 @@ const { execFile } = require('child_process');
 const chokidar = require('chokidar');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const APP_VERSION = "1.1.5-DEBUG-HEADERS";
@@ -27,10 +28,10 @@ if (process.env.NODE_ENV === 'production') {
         // DEBUG LOGGING FOR HEADERS
         console.log(`[DEBUG] Request: ${req.method} ${req.url} | Host: ${host} | Proto: ${proto}`);
 
-        if (proto && proto !== 'https') return res.redirect(301, `https://${host}${req.url}`);
+        if (proto && proto !== 'https') return res.status(403).send('Forbidden: HTTPS required.');
         
         // Temporarily relaxed domain check to ensure access works
-        if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && !host.includes('localhost')) {
+        if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && host !== 'localhost' && !host.startsWith('localhost:')) {
             console.warn(`[SECURITY] Blocked access from unauthorized host: ${host}`);
             return res.status(403).send(`Forbidden: Host ${host} not allowed.`);
         }
@@ -64,6 +65,16 @@ app.use('/jobs', (req, res, next) => {
 }, express.static(JOBS_DIR));
 
 // --- API ---
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
+    standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
+    message: { success: false, error: 'Too many requests, please try again later.' }
+});
+
+app.use('/api/', apiLimiter);
+
 app.get('/api/job/:code', (req, res) => {
     const code = req.params.code;
     const safeBase = path.resolve(JOBS_DIR);
@@ -89,8 +100,10 @@ app.get('/api/job/:code/:room', (req, res) => {
     const { code, room } = req.params;
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(JOBS_DIR, code);
-    // Security: Prevent path traversal
-    if (!jobPath.startsWith(safeBase + path.sep)) {
+    const roomPath = path.resolve(jobPath, room);
+
+    // Security: Prevent path traversal for both code and room
+    if (!jobPath.startsWith(safeBase + path.sep) || !roomPath.startsWith(jobPath + path.sep)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
     const findGlb = (dir) => {
