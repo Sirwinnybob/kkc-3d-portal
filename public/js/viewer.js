@@ -258,7 +258,7 @@ async function init() {
         const cameraBtn = document.getElementById('camera-btn');
         if (cameraBtn) {
             cameraBtn.onclick = async () => {
-                updateStatus("Rendering 4K Photo...");
+                updateStatus("Rendering Photo...");
 
                 // Save original state
                 const origWidth = window.innerWidth;
@@ -266,8 +266,9 @@ async function init() {
                 const origDpr = renderer.getPixelRatio();
                 const origAspect = camera.aspect;
 
-                // 4K resolution targeting a 3840 width
-                const targetWidth = 3840;
+                // Resolution logic: Native for mobile (safer), 4K for PC
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                const targetWidth = isMobile ? (window.innerWidth * window.devicePixelRatio) : 3840;
                 const targetHeight = Math.round(targetWidth / origAspect);
 
                 // Set new resolution
@@ -284,6 +285,11 @@ async function init() {
 
                 // Render frame
                 composer.render();
+                
+                // CRITICAL: Flush GPU commands to ensure the buffer is populated before capture
+                const gl = renderer.getContext();
+                gl.flush();
+                gl.finish(); // Hard sync for mobile stability
 
                 // Create offscreen canvas to combine render + logo + text
                 const canvas2d = document.createElement('canvas');
@@ -294,7 +300,7 @@ async function init() {
                 // Draw WebGL render synchronously immediately after render
                 ctx.drawImage(renderer.domElement, 0, 0, targetWidth, targetHeight);
 
-                // Restore original state immediately to prevent flicker while waiting for logo
+                // Restore original state immediately to prevent flicker
                 renderer.setPixelRatio(origDpr);
                 renderer.setSize(origWidth, origHeight);
                 composer.setSize(origWidth, origHeight);
@@ -321,31 +327,43 @@ async function init() {
                 }
 
                 if (logoImg) {
-                    // Draw logo at bottom left
-                    const logoWidth = 400; // arbitrary scale for 4K
+                    // Base scale on 4K (3840), but reduce further if on mobile to ensure fit
+                    let logoScale = targetWidth / 3840;
+                    if (isMobile) logoScale *= 0.8; // Make slightly smaller on mobile
+
+                    const logoWidth = 400 * logoScale;
                     const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
-                    const padding = 60;
+                    const padding = 60 * logoScale;
                     const logoX = padding;
                     const logoY = targetHeight - logoHeight - padding;
                     ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
 
-                    // Draw text next to logo
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
-                    ctx.lineWidth = 4;
-                    ctx.font = 'bold 80px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
+                    ctx.lineWidth = Math.max(2, 4 * logoScale);
+                    
+                    // Adjust font size based on scale
+                    const fontSize = Math.round(80 * logoScale);
+                    ctx.font = `bold ${fontSize}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
                     ctx.textBaseline = 'bottom';
 
-                    const textX = logoX + logoWidth + 40;
+                    const textX = logoX + logoWidth + (20 * logoScale);
                     const textY = targetHeight - padding;
                     const textContent = `Job: ${jobCode} | Room: ${initialRoom}`;
+
+                    // Safety check: if text is too wide, shrink it
+                    const metrics = ctx.measureText(textContent);
+                    if (textX + metrics.width > targetWidth - padding) {
+                        const maxTextWidth = targetWidth - textX - padding;
+                        const scaleFactor = maxTextWidth / metrics.width;
+                        ctx.font = `bold ${Math.floor(fontSize * scaleFactor)}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
+                    }
 
                     ctx.strokeText(textContent, textX, textY);
                     ctx.fillText(textContent, textX, textY);
                 }
 
-                // Download image
-                const dataUrl = canvas2d.toDataURL('image/jpeg', 0.95);
+                const dataUrl = canvas2d.toDataURL('image/jpeg', 0.92);
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = `KKC_${jobCode}_${initialRoom.replace(/ /g, '_')}.jpg`;
