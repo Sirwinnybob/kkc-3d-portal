@@ -227,13 +227,20 @@ app.use((err, req, res, next) => {
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
-        const scan = (dir) => {
-            if (!fs.existsSync(dir)) return;
-            fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
-                const fullPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) scan(fullPath);
-                else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
-            });
+        const scan = async (dir) => {
+            try {
+                const hasAccess = await fs.promises.access(dir).then(() => true).catch(() => false);
+                if (!hasAccess) return;
+                const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+                const promises = entries.map(entry => {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) return scan(fullPath);
+                    else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
+                });
+                await Promise.all(promises);
+            } catch (err) {
+                // ignore
+            }
         };
         scan(JOBS_DIR);
     });
