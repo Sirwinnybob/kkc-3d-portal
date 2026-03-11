@@ -9,7 +9,6 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
-let ambientLight, keyLight, fillLight, backLight;
 let zoomVelocity = 0;
 let loadedModel = null;
 
@@ -160,8 +159,7 @@ async function init() {
 
         // --- LIGHTING ---
         const li = SETTINGS.lightIntensity;
-        ambientLight = new THREE.AmbientLight(0xffffff, li * 0.8);
-        scene.add(ambientLight);
+        scene.add(new THREE.AmbientLight(0xffffff, li * 0.8));
 
         const makeCamLight = (intensity, px, py, pz) => {
             const light  = new THREE.DirectionalLight(0xffffff, intensity);
@@ -173,9 +171,9 @@ async function init() {
             return light;
         };
 
-        keyLight  = makeCamLight(li * 0.5,  1,   1,    1);
-        fillLight = makeCamLight(li * 0.4, -1,   0.2,  0.5);
-        backLight = makeCamLight(li * 0.4,  0,   1,   -1);
+        makeCamLight(li * 0.5,  1,   1,    1);
+        makeCamLight(li * 0.4, -1,   0.2,  0.5);
+        makeCamLight(li * 0.4,  0,   1,   -1);
 
         // --- POST-PROCESSING ---
         composer = new EffectComposer(renderer);
