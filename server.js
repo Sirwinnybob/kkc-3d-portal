@@ -120,9 +120,10 @@ app.get('/api/job/:code/:room', (req, res) => {
     if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
     const findGlb = async (dir) => {
         try {
-            const dirObj = await fs.promises.opendir(dir);
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
             const dirs = [];
-            for await (const dirent of dirObj) {
+            for (let i = 0; i < entries.length; i++) {
+                const dirent = entries[i];
                 if (dirent.isDirectory()) {
                     dirs.push(path.join(dir, dirent.name));
                 } else if (dirent.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) {
@@ -130,8 +131,8 @@ app.get('/api/job/:code/:room', (req, res) => {
                 }
             }
 
-            for (const subDir of dirs) {
-                const result = await findGlb(subDir);
+            for (let i = 0; i < dirs.length; i++) {
+                const result = await findGlb(dirs[i]);
                 if (result) return result;
             }
         } catch (err) {
