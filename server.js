@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 
 const app = express();
-const APP_VERSION = "1.0.11";
+const APP_VERSION = "1.0.2";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
