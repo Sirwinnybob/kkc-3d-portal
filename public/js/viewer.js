@@ -267,9 +267,11 @@ async function init() {
                 const origAspect = camera.aspect;
 
                 // Resolution logic: Native for mobile (safer), 4K for PC
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                const targetWidth = isMobile ? (window.innerWidth * window.devicePixelRatio) : 3840;
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 800 && window.innerHeight <= 1000);
+                const targetWidth = isMobile ? Math.min(window.innerWidth * window.devicePixelRatio, 3000) : 3840;
                 const targetHeight = Math.round(targetWidth / origAspect);
+                
+                console.log(`[Screenshot] Mode: ${isMobile ? 'Mobile' : 'PC'}, Resolution: ${targetWidth}x${targetHeight}`);
 
                 // Set new resolution
                 renderer.setPixelRatio(1);
