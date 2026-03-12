@@ -12,7 +12,7 @@ let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
 let zoomVelocity = 0;
 
 const SETTINGS = {
-    exposure:      1.75, // Magic number
+    exposure:      1.75,
     saturation:    0.65,
     contrast:      1.55,
     lightIntensity: 1.0,
