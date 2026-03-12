@@ -27,3 +27,25 @@ test('Express /jobs route integration', async (t) => {
         assert.strictEqual(response.status, 404);
     });
 });
+
+test('Job limits validation tests', async (t) => {
+    await t.test('returns 400 Bad Request for long code', async () => {
+        const longCode = 'a'.repeat(51);
+        const response = await request(app).get(`/api/job/${longCode}`);
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.body.error, 'Bad Request: Invalid job code format');
+    });
+
+    await t.test('returns 400 Bad Request for invalid characters', async () => {
+        const invalidCode = 'job..1*23';
+        const response = await request(app).get(`/api/job/${encodeURIComponent(invalidCode)}`);
+        assert.strictEqual(response.status, 400);
+    });
+
+    await t.test('accepts valid alphanumeric with dash and underscore', async () => {
+        // Will be 404 because not exist, but pass 400
+        const validCode = 'job_1-A';
+        const response = await request(app).get(`/api/job/${validCode}`);
+        assert.strictEqual(response.status, 404);
+    });
+});

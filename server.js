@@ -48,7 +48,8 @@ app.use(helmet({
             scriptSrc: ["'self'", "'sha256-eGFYqAHm7QB8cassdFBbBxhusmh76P1pfh3ymxPZOUw='", "https://unpkg.com"],
             connectSrc: ["'self'", "https://unpkg.com"],
             imgSrc: ["'self'", "data:", "blob:"],
-            styleSrc: ["'self'"],
+            // Security: 'unsafe-inline' is required for frontend JS that sets inline styles
+            styleSrc: ["'self'", "'unsafe-inline'"],
             workerSrc: ["'self'", "blob:"],
         }
     },
@@ -74,6 +75,12 @@ app.use('/api/', apiLimiter);
 
 app.get('/api/job/:code', async (req, res) => {
     const code = req.params.code;
+
+    // Security: Input validation to prevent excessively long codes or unexpected formats
+    if (typeof code !== 'string' || code.length > 50 || !/^[a-zA-Z0-9\-_]+$/.test(code)) {
+        return res.status(400).json({ success: false, error: 'Bad Request: Invalid job code format' });
+    }
+
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(safeBase, path.join('.', code));
     // Security: Prevent path traversal
@@ -106,6 +113,12 @@ app.get('/api/job/:code', async (req, res) => {
 
 app.get('/api/job/:code/:room', (req, res) => {
     const { code, room } = req.params;
+
+    // Security: Input validation
+    if (typeof code !== 'string' || code.length > 50 || !/^[a-zA-Z0-9\-_]+$/.test(code)) {
+        return res.status(400).json({ success: false, error: 'Bad Request: Invalid job code format' });
+    }
+
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(safeBase, path.join('.', code));
     const safeRoom = path.basename(room);
