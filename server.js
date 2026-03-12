@@ -164,14 +164,140 @@ app.get('/api/job/:code/:room', (req, res) => {
 const conversionQueue = [];
 let isConverting = false;
 
+// --- COLLADA ph/h TRIANGULATOR ---
+// Parses index tuples from a whitespace-delimited string, grouped by stride.
+function parseIndices(text, stride) {
+    const nums = text.trim().split(/\s+/).map(Number);
+    const tuples = [];
+    for (let i = 0; i < nums.length; i += stride) tuples.push(nums.slice(i, i + stride));
+    return tuples;
+}
+
+// Ear-clipping triangulation of a simple polygon given as an array of index tuples.
+// Returns an array of triangle tuples [[a,b,c], ...].
+function earClip(ring) {
+    const n = ring.length;
+    if (n < 3) return [];
+    if (n === 3) return [[ring[0], ring[1], ring[2]]];
+
+    // Map each ring position to a point on a unit circle so that vertices are
+    // never collinear, cross products are always well-defined, and the winding
+    // order (CCW) is guaranteed for a convex ring laid out this way.
+    const pts = ring.map((_, i) => [
+        Math.cos(2 * Math.PI * i / n),
+        Math.sin(2 * Math.PI * i / n)
+    ]);
+
+    const active = ring.map((_, i) => i); // indices into ring[] / pts[]
+    const triangles = [];
+    let guard = active.length * active.length; // O(n²) worst case
+    let i = 0;
+    while (active.length > 3 && guard-- > 0) {
+        const len = active.length;
+        const pi = (i - 1 + len) % len;
+        const ci = i % len;
+        const ni = (i + 1) % len;
+        const prev = active[pi], curr = active[ci], next = active[ni];
+        if (isEar(pts, active, prev, curr, next)) {
+            triangles.push([ring[prev], ring[curr], ring[next]]);
+            active.splice(ci, 1);
+            i = ci % active.length;
+        } else {
+            i = (i + 1) % active.length;
+        }
+    }
+    if (active.length === 3) triangles.push([ring[active[0]], ring[active[1]], ring[active[2]]]);
+    return triangles;
+}
+
+function cross2d(oa, ob, oc) {
+    return (ob[0] - oa[0]) * (oc[1] - oa[1]) - (ob[1] - oa[1]) * (oc[0] - oa[0]);
+}
+
+function pointInTriangle(p, a, b, c) {
+    const d1 = cross2d(p, a, b), d2 = cross2d(p, b, c), d3 = cross2d(p, c, a);
+    const hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    const hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+    return !(hasNeg && hasPos);
+}
+
+// pts: array of [x,y] coordinates indexed by ring position.
+function isEar(pts, active, prev, curr, next) {
+    const a = pts[prev], b = pts[curr], c = pts[next];
+    if (cross2d(a, b, c) < 0) return false; // reflex vertex
+    for (const idx of active) {
+        if (idx === prev || idx === curr || idx === next) continue;
+        if (pointInTriangle(pts[idx], a, b, c)) return false;
+    }
+    return true;
+}
+
+// Bridge a hole ring into the outer ring at their closest index positions,
+// returning a new merged ring (simple polygon).
+function bridgeHole(outer, hole) {
+    // Find rightmost point of hole (max first-index value) and nearest outer vertex.
+    let hBest = 0;
+    for (let i = 1; i < hole.length; i++) {
+        if (hole[i][0] > hole[hBest][0]) hBest = i;
+    }
+    let oBest = 0;
+    for (let i = 1; i < outer.length; i++) {
+        if (outer[i][0] > outer[oBest][0]) oBest = i;
+    }
+    // Stitch: outer[0..oBest] + hole[hBest..end] + hole[0..hBest] + outer[oBest..end]
+    const merged = [
+        ...outer.slice(0, oBest + 1),
+        ...hole.slice(hBest),
+        ...hole.slice(0, hBest + 1),
+        ...outer.slice(oBest),
+    ];
+    return merged;
+}
+
+// Convert <ph>...</ph> blocks inside <polygons> to triangulated <p> elements.
+function convertPhElements(content) {
+    return content.replace(
+        /(<polygons[^>]*>)([\s\S]*?)(<\/polygons>)/g,
+        (fullMatch, openTag, inner, closeTag) => {
+            // Count unique input offsets to get stride.
+            const offsets = new Set();
+            for (const m of inner.matchAll(/offset="(\d+)"/g)) offsets.add(+m[1]);
+            const stride = offsets.size || 1;
+
+            // Replace each <ph>...</ph> block with triangulated <p> elements.
+            const newInner = inner.replace(
+                /<ph>([\s\S]*?)<\/ph>/g,
+                (phMatch, phContent) => {
+                    const pMatch = phContent.match(/<p>([\s\S]*?)<\/p>/);
+                    if (!pMatch) return ''; // malformed — drop it
+                    let ring = parseIndices(pMatch[1], stride);
+
+                    // Process each <h> hole.
+                    for (const hMatch of phContent.matchAll(/<h>([\s\S]*?)<\/h>/g)) {
+                        const hole = parseIndices(hMatch[1], stride);
+                        if (hole.length >= 3) ring = bridgeHole(ring, hole);
+                    }
+
+                    const triangles = earClip(ring);
+                    if (triangles.length === 0) return '';
+                    return triangles.map(([a, b, c]) =>
+                        `<p>${[...a, ...b, ...c].join(' ')}</p>`
+                    ).join('\n');
+                }
+            );
+
+            return `${openTag}${newInner}${closeTag}`;
+        }
+    );
+}
+
 async function cleanDae(filePath) {
     try {
         let content = await fs.promises.readFile(filePath, 'utf8');
         let cleaned = content;
-        cleaned = cleaned.replace(/<h>[\s\S]*?<\/h>/g, '');
-        cleaned = cleaned.replace(/<ph>/g, '').replace(/<\/ph>/g, '');
         cleaned = cleaned.replace(/\t/g, ' ').replace(/ +/g, ' ');
         cleaned = cleaned.replace(/> /g, '>').replace(/ <\//g, '</');
+        cleaned = convertPhElements(cleaned);
         if (content !== cleaned) await fs.promises.writeFile(filePath, cleaned, 'utf8');
     } catch (e) { console.error(`!!! [Cleaner] Error: ${e.message}`); }
 }
