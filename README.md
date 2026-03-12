@@ -26,6 +26,14 @@ If you update a `.dae` file, the portal automatically re-converts it so the cust
 *   **Engine:** Assimp (C++) + Three.js (WebGL)
 *   **Deployment:** Designed for Docker on TrueNAS SCALE
 
+## Configuration
+
+Create a `.env` file in the root directory and set the allowed domain for the application to function correctly in production:
+
+```
+ALLOWED_DOMAIN=your.domain.com
+```
+
 ## Running Locally
 
 1. `npm install`
