@@ -33,6 +33,18 @@ test('/jobs middleware tests', async (t) => {
         assert.strictEqual(response.text, 'Bad Request');
     });
 
+    await t.test('returns 400 Bad Request for single percent sign in URI (decodeURIComponent error)', async () => {
+        const response = await request(app).get('/jobs/invalid%uri.glb');
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.text, 'Bad Request');
+    });
+
+    await t.test('returns 400 Bad Request for truncated percent encoding (decodeURIComponent error)', async () => {
+        const response = await request(app).get('/jobs/test%E0');
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.text, 'Bad Request');
+    });
+
     await t.test('returns 403 Forbidden for unauthorized file types', async () => {
         const response = await request(app).get('/jobs/test_mock.txt');
         assert.strictEqual(response.status, 403);
