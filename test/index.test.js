@@ -107,4 +107,31 @@ test('frontend index.js proceedAfterDisclaimer', async (t) => {
         assert.strictEqual(roomList.children[0].innerText, 'Room A');
         assert.strictEqual(roomList.children[1].innerText, 'Room B');
     });
+
+    await t.test('Scenario 6: Does not throw if chkDontShow is completely missing from DOM', () => {
+        dom.window.localStorage.clear();
+        const chkDontShow = dom.window.document.getElementById('chkDontShow');
+        chkDontShow.remove(); // Remove element completely
+
+        dom.window.proceedAfterDisclaimer();
+        assert.strictEqual(dom.window.localStorage.getItem('kkc_skip_disclaimer'), null);
+    });
+
+    await t.test('Scenario 7: Does nothing if pendingRedirectUrl and pendingRooms are both empty/null', () => {
+        dom.window.setGlobals('', null);
+
+        // Reset location to ensure it doesn't change
+        dom.window._mockLocation.href = 'http://localhost/';
+
+        const loginContainer = dom.window.document.getElementById('login-container');
+        const roomContainer = dom.window.document.getElementById('room-container');
+        loginContainer.style.display = 'block';
+        roomContainer.style.display = 'none';
+
+        dom.window.proceedAfterDisclaimer();
+
+        assert.strictEqual(dom.window._mockLocation.href, 'http://localhost/');
+        assert.strictEqual(loginContainer.style.display, 'block');
+        assert.strictEqual(roomContainer.style.display, 'none');
+    });
 });
