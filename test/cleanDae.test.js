@@ -83,6 +83,10 @@ test('cleanDae behavior', async (t) => {
             const nums = m[1].trim().split(/\s+/);
             assert.strictEqual(nums.length, 3, 'each triangle <p> should have 3 indices');
         });
+        // count attribute must be updated from "1" to "2" (Assimp assertion fix)
+        const countMatch = result.match(/<polygons[^>]*count="(\d+)"/);
+        assert.ok(countMatch, 'should have count attribute');
+        assert.strictEqual(countMatch[1], '2', 'count should be updated to match actual <p> count');
     });
 
     await t.test('converts ph with one hole into triangulated p elements', async () => {

@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 
 const app = express();
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.3";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -286,7 +286,10 @@ function convertPhElements(content) {
                 }
             );
 
-            return `${openTag}${newInner}${closeTag}`;
+            // Count actual <p> elements and update the count attribute.
+            const pCount = (newInner.match(/<p>/g) || []).length;
+            const patchedTag = openTag.replace(/count="[^"]*"/, `count="${pCount}"`);
+            return `${patchedTag}${newInner}${closeTag}`;
         }
     );
 }
