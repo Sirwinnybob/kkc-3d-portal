@@ -11,8 +11,12 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
 let zoomVelocity = 0;
 
+// Empirically derived default exposure value for optimal visibility.
+// Currently acts as a baseline magic number pending dynamic calculation.
+const DEFAULT_EXPOSURE = 1.75;
+
 const SETTINGS = {
-    exposure:      1.75, // Magic number
+    exposure:      DEFAULT_EXPOSURE,
     saturation:    0.65,
     contrast:      1.55,
     lightIntensity: 1.0,
