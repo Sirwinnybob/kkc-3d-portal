@@ -61,9 +61,8 @@ test('cleanDae behavior', async (t) => {
         assert.ok(loggedError.includes('Error: ENOENT'));
     });
 
-    await t.test('converts simple ph (quad outer, no holes) to two triangles', async () => {
+    await t.test('converts simple ph (quad outer, no holes) to a single p', async () => {
         const filePath = path.join(TEST_DIR, 'test_ph_no_holes.dae');
-        // stride=1 (one input), outer is a quad (4 verts) → 2 triangles
         const input = [
             '<polygons count="1">',
             '<input semantic="VERTEX" source="#verts" offset="0"/>',
@@ -76,23 +75,11 @@ test('cleanDae behavior', async (t) => {
         // No <ph> or <h> should remain
         assert.ok(!result.includes('<ph>'), 'should not contain <ph>');
         assert.ok(!result.includes('<h>'), 'should not contain <h>');
-        // Should contain two <p> triangle entries (3 indices each)
-        const pMatches = [...result.matchAll(/<p>([^<]*)<\/p>/g)];
-        assert.strictEqual(pMatches.length, 2);
-        pMatches.forEach(m => {
-            const nums = m[1].trim().split(/\s+/);
-            assert.strictEqual(nums.length, 3, 'each triangle <p> should have 3 indices');
-        });
-        // count attribute must be updated from "1" to "2" (Assimp assertion fix)
-        const countMatch = result.match(/<polygons[^>]*count="(\d+)"/);
-        assert.ok(countMatch, 'should have count attribute');
-        assert.strictEqual(countMatch[1], '2', 'count should be updated to match actual <p> count');
+        assert.ok(result.includes('<p>0 1 2 3</p>'), 'should preserve outer ring unchanged');
     });
 
-    await t.test('converts ph with one hole into triangulated p elements', async () => {
+    await t.test('converts ph with one hole by stripping the hole', async () => {
         const filePath = path.join(TEST_DIR, 'test_ph_one_hole.dae');
-        // stride=2 (two inputs: VERTEX offset=0, TEXCOORD offset=1)
-        // outer: 4 verts (indices 0-3), hole: 4 verts (indices 4-7) — real VANITIES-style
         const input = [
             '<polygons material="M" count="1">',
             '<input semantic="VERTEX" source="#verts" offset="0"/>',
@@ -109,14 +96,7 @@ test('cleanDae behavior', async (t) => {
 
         assert.ok(!result.includes('<ph>'), 'should not contain <ph>');
         assert.ok(!result.includes('<h>'), 'should not contain <h>');
-
-        // Each triangle has 3 tuples × stride(2) = 6 numbers per <p>
-        const pMatches = [...result.matchAll(/<p>([^<]*)<\/p>/g)];
-        assert.ok(pMatches.length > 0, 'should produce at least one triangle <p>');
-        pMatches.forEach(m => {
-            const nums = m[1].trim().split(/\s+/);
-            assert.strictEqual(nums.length, 6, 'each stride-2 triangle <p> should have 6 numbers');
-        });
+        assert.ok(result.includes('<p>0 0 1 1 2 2 3 3</p>'), 'should keep outer p values');
     });
 
     await t.test('preserves regular <p> elements inside <polygons> unchanged', async () => {

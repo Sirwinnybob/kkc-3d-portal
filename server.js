@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 
 const app = express();
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.4";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -254,42 +254,15 @@ function bridgeHole(outer, hole) {
     return merged;
 }
 
-// Convert <ph>...</ph> blocks inside <polygons> to triangulated <p> elements.
+// Convert <ph>...</ph> blocks by simply keeping the outer <p> and discarding the <h> holes.
+// This allows Assimp to triangulate the polygon naturally and preserves texture mapping.
 function convertPhElements(content) {
     return content.replace(
-        /(<polygons[^>]*>)([\s\S]*?)(<\/polygons>)/g,
-        (fullMatch, openTag, inner, closeTag) => {
-            // Count unique input offsets to get stride.
-            const offsets = new Set();
-            for (const m of inner.matchAll(/offset="(\d+)"/g)) offsets.add(+m[1]);
-            const stride = offsets.size || 1;
-
-            // Replace each <ph>...</ph> block with triangulated <p> elements.
-            const newInner = inner.replace(
-                /<ph>([\s\S]*?)<\/ph>/g,
-                (phMatch, phContent) => {
-                    const pMatch = phContent.match(/<p>([\s\S]*?)<\/p>/);
-                    if (!pMatch) return ''; // malformed — drop it
-                    let ring = parseIndices(pMatch[1], stride);
-
-                    // Process each <h> hole.
-                    for (const hMatch of phContent.matchAll(/<h>([\s\S]*?)<\/h>/g)) {
-                        const hole = parseIndices(hMatch[1], stride);
-                        if (hole.length >= 3) ring = bridgeHole(ring, hole);
-                    }
-
-                    const triangles = earClip(ring);
-                    if (triangles.length === 0) return '';
-                    return triangles.map(([a, b, c]) =>
-                        `<p>${[...a, ...b, ...c].join(' ')}</p>`
-                    ).join('\n');
-                }
-            );
-
-            // Count actual <p> elements and update the count attribute.
-            const pCount = (newInner.match(/<p>/g) || []).length;
-            const patchedTag = openTag.replace(/count="[^"]*"/, `count="${pCount}"`);
-            return `${patchedTag}${newInner}${closeTag}`;
+        /<ph>([\s\S]*?)<\/ph>/g,
+        (phMatch, phContent) => {
+            const pMatch = phContent.match(/<p>([\s\S]*?)<\/p>/);
+            if (!pMatch) return ''; // malformed — drop it
+            return `<p>${pMatch[1].trim()}</p>`;
         }
     );
 }
@@ -314,7 +287,7 @@ async function processQueue() {
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
     await cleanDae(filePath);
-    execFile(ASSIMP_PATH, ['export', '3D.dae', outputGlb, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, (err, stdout, stderr) => {
+    execFile(ASSIMP_PATH, ['export', path.basename(filePath), outputGlb, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, (err, stdout, stderr) => {
         if (err) console.error(`!!! [FAILED] ${roomName}: ${stderr || err.message}`);
         else {
             const genGlb = path.join(dir, outputGlb);
@@ -378,7 +351,7 @@ if (require.main === module) {
                 const promises = entries.map(entry => {
                     const fullPath = path.join(dir, entry.name);
                     if (entry.isDirectory()) return scan(fullPath);
-                    else if (entry.name.toLowerCase() === '3d.dae') convertDesign(fullPath, true);
+                    else if (entry.name.toLowerCase().endsWith('.dae')) convertDesign(fullPath, true);
                 });
                 await Promise.all(promises);
             } catch (err) {
@@ -393,8 +366,13 @@ if (require.main === module) {
         ignored: [/(\\|\/)\./, '**/*.glb'],
         awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }
     }).on('all', (event, fp) => {
-        const dae = path.join(path.dirname(fp), '3D.dae');
-        if (fs.existsSync(dae)) convertDesign(dae);
+        const dir = path.dirname(fp);
+        fs.readdir(dir, (err, files) => {
+            if (!err) {
+                files.filter(f => f.toLowerCase().endsWith('.dae'))
+                     .forEach(f => convertDesign(path.join(dir, f)));
+            }
+        });
     });
 }
 
