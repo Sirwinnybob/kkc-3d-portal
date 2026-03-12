@@ -1,8 +1,8 @@
-const { defineConfig } = require('@playwrigh./e2e_tests');
+const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './e2e_tests',
-  testMatch: /.*\.e2e\.test\.js/,
+  testMatch: /.*\.spec\.js/,
   use: {
     baseURL: 'http://localhost:5021',
   },
