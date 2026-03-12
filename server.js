@@ -24,7 +24,7 @@ if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
         const proto = req.protocol;
         const host = req.headers.host || '';
-        const allowedDomain = '3dportal.kustomkraftcabinets.ddns.net';
+        const allowedDomain = process.env.ALLOWED_DOMAIN;
 
         // DEBUG LOGGING FOR HEADERS
         console.log(`[DEBUG] Request: ${req.method} ${req.url} | Host: ${host} | Proto: ${proto}`);
