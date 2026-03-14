@@ -271,8 +271,6 @@ async function init() {
                 const targetWidth = isMobile ? Math.min(window.innerWidth * window.devicePixelRatio, 3000) : 3840;
                 const targetHeight = Math.round(targetWidth / origAspect);
                 
-                console.log(`[Screenshot] Mode: ${isMobile ? 'Mobile' : 'PC'}, Resolution: ${targetWidth}x${targetHeight}`);
-
                 // Set new resolution
                 renderer.setPixelRatio(1);
                 renderer.setSize(targetWidth, targetHeight, false);
