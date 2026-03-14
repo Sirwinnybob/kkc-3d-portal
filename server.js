@@ -26,9 +26,6 @@ if (process.env.NODE_ENV === 'production') {
         const host = req.headers.host || '';
         const allowedDomain = process.env.ALLOWED_DOMAIN;
 
-        // DEBUG LOGGING FOR HEADERS
-        console.log(`[DEBUG] Request: ${req.method} ${req.url} | Host: ${host} | Proto: ${proto}`);
-
         // Security: Ensure all traffic is strictly HTTPS (trust proxy handles X-Forwarded-Proto)
         if (proto !== 'https') return res.status(403).send('Forbidden: HTTPS required.');
         
