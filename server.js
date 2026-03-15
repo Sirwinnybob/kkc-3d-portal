@@ -31,7 +31,8 @@ if (process.env.NODE_ENV === 'production') {
         
         // Temporarily relaxed domain check to ensure access works
         if (host !== allowedDomain && !host.startsWith(`${allowedDomain}:`) && host !== 'localhost' && !host.startsWith('localhost:')) {
-            console.warn(`[SECURITY] Blocked access from unauthorized host: ${host}`);
+            // Security: Prevent log injection and reflected XSS in log viewers by using generic description
+            console.warn(`[SECURITY] Blocked access from unauthorized host.`);
             return res.status(403).send('Forbidden: Invalid Host.');
         }
         next();
