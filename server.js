@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
+const { cross2d, pointInTriangle } = require('./utils/geometry');
 
 const app = express();
 const APP_VERSION = "1.0.4";
@@ -210,16 +211,6 @@ function earClip(ring) {
     return triangles;
 }
 
-function cross2d(oa, ob, oc) {
-    return (ob[0] - oa[0]) * (oc[1] - oa[1]) - (ob[1] - oa[1]) * (oc[0] - oa[0]);
-}
-
-function pointInTriangle(p, a, b, c) {
-    const d1 = cross2d(p, a, b), d2 = cross2d(p, b, c), d3 = cross2d(p, c, a);
-    const hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
-    const hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
-    return !(hasNeg && hasPos);
-}
 
 // pts: array of [x,y] coordinates indexed by ring position.
 function isEar(pts, active, prev, curr, next) {
@@ -378,3 +369,5 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.cleanDae = cleanDae;
+module.exports.cross2d = cross2d;
+module.exports.pointInTriangle = pointInTriangle;
