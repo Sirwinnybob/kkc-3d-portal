@@ -7,3 +7,7 @@
 **Vulnerability:** The Express server reflected the user-controlled `Host` header back to the user within a `text/html` error response when domain validation failed. Since the `Host` header was unescaped, it allowed an attacker to inject arbitrary HTML or JavaScript, resulting in a Cross-Site Scripting (XSS) vulnerability.
 **Learning:** Even low-level network components like header validation must sanitize user input or avoid reflecting it directly in HTML error responses.
 **Prevention:** Always respond with generic, static error messages when rejecting requests based on untrusted headers, or ensure all reflected content is properly escaped.
+## 2024-05-18 - Log Injection (CWE-117) via Unsanitized Headers
+**Vulnerability:** The application was vulnerable to Log Injection because it logged the unescaped, user-controlled `Host` header using `console.warn`. An attacker could inject newline characters (`\r\n`) into the `Host` header to spoof log entries, potentially covering up malicious activities or triggering false alerts in monitoring systems.
+**Learning:** Untrusted input from network headers can be used to exploit logging mechanisms even if it is not reflected back to the user or used in backend logic.
+**Prevention:** Always sanitize untrusted input before logging by stripping or escaping control characters like newlines (`replace(/[\r\n]/g, "")`).
