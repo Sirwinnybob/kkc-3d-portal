@@ -11,3 +11,7 @@
 **Vulnerability:** The application was vulnerable to Log Injection because it logged the unescaped, user-controlled `Host` header using `console.warn`. An attacker could inject newline characters (`\r\n`) into the `Host` header to spoof log entries, potentially covering up malicious activities or triggering false alerts in monitoring systems.
 **Learning:** Untrusted input from network headers can be used to exploit logging mechanisms even if it is not reflected back to the user or used in backend logic.
 **Prevention:** Always sanitize untrusted input before logging by stripping or escaping control characters like newlines (`replace(/[\r\n]/g, "")`).
+## 2024-05-18 - Missing Input Validation on Room API Parameter
+**Vulnerability:** The `/api/job/:code/:room` endpoint properly validated the `code` parameter but omitted the same regex and length validation checks for the `room` parameter. While a path traversal validation existed (`if (relRoom.startsWith('..'))`), an attacker could still supply abnormally long strings or unexpected formats.
+**Learning:** Input validation must be consistently applied to all URL parameters. Relying only on backend path resolution logic to catch malicious inputs is incomplete defense-in-depth and leaves the application open to potential ReDoS or uncontrolled resource consumption.
+**Prevention:** Always validate every segment of user input at the route-entry level, using both length restrictions (`room.length > 100`) and format enforcing regexes (`/^[a-zA-Z0-9\-_ ]+$/`).
