@@ -12,3 +12,5 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5021
+      - JOBS_DIR=/app/jobs
+      - TEXTURES_DIR=/app/jobs/textures
