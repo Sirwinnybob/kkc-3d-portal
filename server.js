@@ -519,26 +519,32 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
                 const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
                 const gltf = result.gltf;
 
+                // Parse GLB header to find BIN chunk offset
+                const jsonChunkLength = glbBuffer.readUInt32LE(12);
+                const binChunkOffset = 12 + 8 + jsonChunkLength + 8;
+
                 // Extract embedded images from buffers
-                if (gltf.images && gltf.buffers && gltf.bufferViews) {
+                if (gltf.images && gltf.bufferViews) {
                     for (const image of gltf.images) {
                         if (image.bufferView === undefined) continue;
                         const bufferView = gltf.bufferViews[image.bufferView];
-                        const buffer = gltf.buffers[bufferView.buffer];
 
                         // Get the image data from the binary buffer
                         let imageData;
-                        if (buffer.uri) {
+                        if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
                             // Data URI
-                            const base64 = buffer.uri.split(',')[1];
+                            const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
                             imageData = Buffer.from(base64, 'base64');
+                            const byteOffset = bufferView.byteOffset || 0;
+                            const byteLength = bufferView.byteLength;
+                            imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
                         } else {
                             // Binary chunk
                             const byteOffset = bufferView.byteOffset || 0;
                             const byteLength = bufferView.byteLength;
                             imageData = glbBuffer.subarray(
-                                12 + 8 + byteOffset, // Skip GLB header + chunk header
-                                12 + 8 + byteOffset + byteLength
+                                binChunkOffset + byteOffset,
+                                binChunkOffset + byteOffset + byteLength
                             );
                         }
 
@@ -612,26 +618,37 @@ async function extractTexturesFromGlb(glbPath) {
     const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
     const gltf = result.gltf;
 
-    if (!gltf.images || !gltf.buffers || !gltf.bufferViews) return;
+    if (!gltf.images || !gltf.bufferViews) return;
 
     const index = await buildTextureHashIndex();
     const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
     if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
 
+    // Parse GLB header to find BIN chunk offset
+    const jsonChunkLength = glbBuffer.readUInt32LE(12);
+    const binChunkOffset = 12 + 8 + jsonChunkLength + 8; // header + json chunk header + json + bin chunk header
+
     for (const image of gltf.images) {
         if (image.bufferView === undefined) continue;
         const bufferView = gltf.bufferViews[image.bufferView];
-        const buffer = gltf.buffers[bufferView.buffer];
 
         let imageData;
-        if (buffer.uri) {
-            const base64 = buffer.uri.split(',')[1];
+        // Try to get from buffer URI first (if gltf-pipeline converted to data URI)
+        if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
+            const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
             imageData = Buffer.from(base64, 'base64');
-        } else {
+            // Extract just the portion this bufferView needs
             const byteOffset = bufferView.byteOffset || 0;
             const byteLength = bufferView.byteLength;
-            imageData = glbBuffer.subarray(12 + 8 + byteOffset, 12 + 8 + byteOffset + byteLength);
+            imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
+        } else {
+            // Extract from GLB binary chunk
+            const byteOffset = bufferView.byteOffset || 0;
+            const byteLength = bufferView.byteLength;
+            imageData = glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + byteLength);
         }
+
+        if (imageData.length === 0) continue;
 
         const hash = averageHash(imageData);
         let isMatched = false;
