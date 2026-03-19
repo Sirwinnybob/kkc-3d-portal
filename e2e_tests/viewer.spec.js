@@ -17,6 +17,13 @@ test.describe('Viewer E2E Tests', () => {
         fs.rmSync(path.join(process.cwd(), 'jobs', 'TESTJOB'), { recursive: true, force: true });
     });
 
+    test.beforeEach(async ({ page }) => {
+        // Pre-set help shown to prevent modal from blocking interactions
+        await page.addInitScript(() => {
+            window.localStorage.setItem('kkc_help_shown', 'true');
+        });
+    });
+
     test('Redirects to / if URL parameters are missing', async ({ page }) => {
         await page.goto('http://localhost:5021/viewer.html');
         // Because of the initial redirect, we expect to be on the home page '/'
@@ -56,6 +63,11 @@ test.describe('Viewer E2E Tests', () => {
     });
 
     test('Help modal is toggled by buttons', async ({ page }) => {
+        // Specifically for this test, clear the storage so it starts open or we test manual toggle
+        await page.addInitScript(() => {
+            window.localStorage.removeItem('kkc_help_shown');
+        });
+
         await page.goto('http://localhost:5021/viewer.html?job=TESTJOB&room=TESTROOM');
 
         const helpBtn = page.locator('#help-btn');
@@ -63,7 +75,11 @@ test.describe('Viewer E2E Tests', () => {
         const closeX = page.locator('#close-help-x');
         const closeBtn = page.locator('#close-help-btn');
 
-        // Initial state
+        // Initial state - should be shown because we cleared localStorage
+        await expect(helpModal).toHaveClass(/show/);
+
+        // Click close
+        await closeBtn.click();
         await expect(helpModal).not.toHaveClass(/show/);
 
         // Click to open
