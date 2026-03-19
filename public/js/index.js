@@ -32,7 +32,10 @@ async function checkJob() {
             if (localStorage.getItem('kkc_skip_disclaimer') === 'true') {
                 proceedAfterDisclaimer();
             } else {
-                document.getElementById('disclaimer-modal').classList.add('show');
+                const modal = document.getElementById('disclaimer-modal');
+                modal.classList.add('show');
+                const acceptBtn = document.getElementById('btnAcceptDisclaimer');
+                if (acceptBtn) acceptBtn.focus();
             }
         } else {
             errorMsg.style.display = 'block';
@@ -68,10 +71,11 @@ function showRoomSelection(rooms) {
     const roomList = document.getElementById('room-list');
     roomList.innerHTML = '';
 
-    rooms.forEach(room => {
+    rooms.forEach((room, index) => {
         const btn = document.createElement('button');
         btn.innerText = room;
         btn.className = 'room-btn';
+        btn.id = `room-btn-${index}`;
         btn.style.margin = '5px 0';
         btn.style.padding = '10px';
         btn.addEventListener('click', () => {
@@ -81,6 +85,8 @@ function showRoomSelection(rooms) {
     });
 
     roomContainer.style.display = 'block';
+    const firstBtn = document.getElementById('room-btn-0');
+    if (firstBtn) firstBtn.focus();
 }
 
 function backToLogin() {

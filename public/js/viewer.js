@@ -110,7 +110,16 @@ async function init() {
         });
     }
 
-    const toggleHelp = (show) => { if (helpModal) helpModal.classList.toggle('show', show); };
+    const toggleHelp = (show) => {
+        if (helpModal) {
+            helpModal.classList.toggle('show', show);
+            if (show) {
+                if (closeHelpBtn) closeHelpBtn.focus();
+            } else {
+                if (helpBtn) helpBtn.focus();
+            }
+        }
+    };
     if (helpBtn) helpBtn.onclick = () => toggleHelp(true);
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);

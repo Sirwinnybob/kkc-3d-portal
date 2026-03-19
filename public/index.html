@@ -18,12 +18,12 @@
         <p>Enter your job number (located on your drawings cover page) to view your 3D cabinets!</p>
         <input type="text" id="jobCode" aria-label="Job Number" placeholder="123..." autofocus>
         <button id="btnCheckJob">View My Job</button>
-        <div id="errorMsg" class="error">Job code not found. Please check and try again.</div>
+        <div id="errorMsg" class="error" role="alert">Job code not found. Please check and try again.</div>
     </div>
 
     <!-- Room Selection Dialog -->
-    <div class="login-card hidden-container" id="room-container">
-        <h1>Select Room</h1>
+    <div class="login-card hidden-container" id="room-container" role="dialog" aria-labelledby="room-selection-title">
+        <h1 id="room-selection-title">Select Room</h1>
         <p>This job has multiple rooms. Which one would you like to view?</p>
         <div id="room-list" class="room-list-container">
             <!-- Rooms will be injected here -->
@@ -32,9 +32,9 @@
     </div>
 
     <!-- Disclaimer Modal (TRUE OVERLAY) -->
-    <div id="disclaimer-modal" class="modal-overlay">
+    <div id="disclaimer-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
         <div class="modal-content disclaimer-content">
-            <h2>3D Cabinet Portal Disclaimer</h2>
+            <h2 id="disclaimer-title">3D Cabinet Portal Disclaimer</h2>
             <div class="disclaimer-body">
                 <p>Welcome to the Kustom Kraft Cabinets 3D Portal. This tool is designed to help you visualize your project, but please keep the following limitations in mind as you review your designs:</p>
                 
