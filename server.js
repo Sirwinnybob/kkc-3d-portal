@@ -118,6 +118,9 @@ app.get('/api/job/:code/:room', (req, res) => {
     if (typeof code !== 'string' || code.length > 50 || !/^[a-zA-Z0-9\-_]+$/.test(code)) {
         return res.status(400).json({ success: false, error: 'Bad Request: Invalid job code format' });
     }
+    if (typeof room !== 'string' || room.length > 100 || !/^[a-zA-Z0-9\-_ ]+$/.test(room)) {
+        return res.status(400).json({ success: false, error: 'Bad Request: Invalid room format' });
+    }
 
     const safeBase = path.resolve(JOBS_DIR);
     const jobPath = path.resolve(safeBase, path.join('.', code));
