@@ -196,6 +196,7 @@ async function processQueue() {
     const { filePath } = conversionQueue.shift();
     const dir = path.dirname(filePath);
     const roomName = path.basename(dir);
+    const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
     const inputFilename = path.basename(filePath);
@@ -207,12 +208,17 @@ async function processQueue() {
     const safeInputPath = `${pathPrefix}${inputFilename}`;
     const safeOutputPath = `${pathPrefix}${outputGlb}`;
 
-    execFile(ASSIMP_PATH, ['export', safeInputPath, safeOutputPath, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, (err, stdout, stderr) => {
+    execFile(ASSIMP_PATH, ['export', safeInputPath, safeOutputPath, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, async (err, stdout, stderr) => {
         if (err) console.error(`!!! [FAILED] ${roomName}: ${stderr || err.message}`);
         else {
             const genGlb = path.join(dir, outputGlb);
-            if (outputGlb !== `${roomName}.glb` && fs.existsSync(genGlb)) {
-                try { fs.renameSync(genGlb, finalGlb); } catch(e) { console.error(`!!! [FAILED] Rename ${roomName}: ${e.message}`); }
+            if (outputGlb !== `${roomName}.glb`) {
+                try {
+                    await fs.promises.access(genGlb);
+                    await fs.promises.rename(genGlb, finalGlb);
+                } catch(e) {
+                    if (e.code !== 'ENOENT') console.error(`!!! [FAILED] Rename ${roomName}: ${e.message}`);
+                }
             }
             console.log(`SUCCESS: ${roomName} is live.`);
         }
