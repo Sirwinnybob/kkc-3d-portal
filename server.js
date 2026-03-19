@@ -752,9 +752,15 @@ async function processQueue() {
             }
             console.log(`SUCCESS: ${roomName} is live.`);
 
-            // Auto-extract textures from newly created GLB
+            // Auto-extract textures from newly created GLB (only if not already extracted)
             try {
-                await extractTexturesFromGlb(finalGlb);
+                const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
+                const existingFiles = fs.existsSync(uncategorizedDir) ? await fs.promises.readdir(uncategorizedDir) : [];
+                const hasExtracted = existingFiles.some(f => f.startsWith(`${roomName}_texture_`));
+                
+                if (!hasExtracted) {
+                    await extractTexturesFromGlb(finalGlb);
+                }
             } catch(e) {
                 console.error(`[Texture Extract] Error for ${roomName}: ${e.message}`);
             }
@@ -839,13 +845,60 @@ if (require.main === module) {
     });
 
     // Watch textures folder for live changes
+    let textureRescanTimer = null;
     chokidar.watch(TEXTURES_DIR, {
         ignoreInitial: true,
-        ignored: [/(\\|\/)\./],
+        ignored: [/(\\|\/)\./, '**/Thumbs.db'],
         awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 }
-    }).on('all', (event, fp) => {
+    }).on('all', async (event, fp) => {
         console.log(`[Texture] ${event}: ${fp}`);
         textureHashCache = null; // Invalidate cache on any change
+
+        // Auto re-scan jobs after textures are organized (debounced)
+        if (['add', 'unlink', 'addDir', 'unlinkDir'].includes(event)) {
+            if (textureRescanTimer) clearTimeout(textureRescanTimer);
+            textureRescanTimer = setTimeout(async () => {
+                // Extract job name from texture filename if it's a job texture (e.g., "548_texture_xxx.jpg")
+                const fileName = path.basename(fp);
+                const jobMatch = fileName.match(/^(\d+)_texture_/);
+                
+                if (jobMatch) {
+                    // Only re-scan the specific job that had this texture
+                    const jobName = jobMatch[1];
+                    console.log(`[Texture] Auto re-scanning job ${jobName} after texture organization...`);
+                    try {
+                        const jobDir = path.join(JOBS_DIR, jobName);
+                        const findGlbs = async (dir) => {
+                            const glbs = [];
+                            try {
+                                const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+                                for (const entry of entries) {
+                                    const fullPath = path.join(dir, entry.name);
+                                    if (entry.isDirectory()) {
+                                        glbs.push(...(await findGlbs(fullPath)));
+                                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                                        glbs.push(fullPath);
+                                    }
+                                }
+                            } catch { /* ignore */ }
+                            return glbs;
+                        };
+                        const glbFiles = await findGlbs(jobDir);
+                        for (const glbPath of glbFiles) {
+                            try {
+                                await extractTexturesFromGlb(glbPath);
+                            } catch (e) {
+                                console.error(`[Texture Rescan] Error for ${glbPath}: ${e.message}`);
+                            }
+                        }
+                        console.log(`[Texture] Auto re-scan complete for job ${jobName}.`);
+                    } catch (e) {
+                        console.error(`[Texture] Auto re-scan error: ${e.message}`);
+                    }
+                }
+                // If not a job texture (manually added), cache was already invalidated above
+            }, 60000); // Wait 1 minute after last change before re-scanning
+        }
     });
 }
 

@@ -423,25 +423,28 @@ async function init() {
                         child.material.map.magFilter  = THREE.LinearFilter;
                     }
 
-                    // Deduplicate: group meshes sharing the same material
-                    // Use material identity or texture source as key
+                    // Deduplicate: group meshes sharing the same texture
+                    // Use texture source as primary key (not material UUID)
                     const mat = child.material;
-                    const texSrc = mat.map?.image?.src || mat.map?.uuid || '';
-                    const colorKey = mat.color ? mat.color.getHexString() : 'none';
-                    const key = prevMat.uuid || `${colorKey}_${texSrc}`;
-
-                    if (materialMap.has(key)) {
-                        materialMap.get(key).meshes.push(child);
-                    } else {
-                        const matName = prevMat.name || child.name || `Material_${materialMap.size}`;
-                        materialMap.set(key, {
-                            name: matName,
-                            material: mat,
-                            meshes: [child],
-                            hasTexture: !!mat.map,
-                            originalMap: mat.map
-                        });
+                    const hasTexture = !!mat.map;
+                    
+                    if (hasTexture) {
+                        // For textured materials, use texture source as key
+                        const texSrc = mat.map.image?.src || mat.map.uuid;
+                        if (materialMap.has(texSrc)) {
+                            materialMap.get(texSrc).meshes.push(child);
+                        } else {
+                            const matName = prevMat.name || child.name || `Material_${materialMap.size}`;
+                            materialMap.set(texSrc, {
+                                name: matName,
+                                material: mat,
+                                meshes: [child],
+                                hasTexture: true,
+                                originalMap: mat.map
+                            });
+                        }
                     }
+                    // Skip color-only materials (no texture to swap)
                 }
             });
 
