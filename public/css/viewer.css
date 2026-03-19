@@ -226,17 +226,17 @@ body {
     border: 2px solid white;
 }
 
-/* Texture Button */
+/* Texture Button - matches camera button */
 #texture-btn {
     position: absolute;
     bottom: 90px;
     right: 20px;
     width: 50px;
     height: 50px;
-    border-radius: 12px;
+    border-radius: 50%;
     background: #ffffff;
-    border: 2px solid #ccc;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    border: 3px solid #ccc;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     cursor: pointer;
     z-index: 1000;
     display: flex;
@@ -247,33 +247,33 @@ body {
 }
 
 #texture-btn:hover {
-    background: #f0f0f0;
-    border-color: #007bff;
+    background: #f8f8f8;
+    border-color: #bbb;
 }
 
 #texture-btn:active {
     transform: scale(0.95);
+    background: #e0e0e0;
 }
 
 #texture-btn svg {
     color: #333;
 }
 
-/* Texture Panel */
+/* Texture Panel - light theme matching dropdown */
 #texture-panel {
     position: fixed;
     top: 0;
     right: -380px;
     width: 360px;
     height: 100vh;
-    background: rgba(20, 20, 20, 0.97);
+    background: #fff;
     z-index: 1500;
     display: flex;
     flex-direction: column;
     transition: right 0.3s ease;
-    box-shadow: -5px 0 20px rgba(0,0,0,0.5);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
+    box-shadow: -5px 0 20px rgba(0,0,0,0.3);
+    border-left: 1px solid #ddd;
 }
 
 #texture-panel.show {
@@ -285,30 +285,31 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    background: rgba(0,123,255,0.15);
+    border-bottom: 1px solid #ddd;
+    background: #f8f8f8;
 }
 
 .texture-panel-header h3 {
     margin: 0;
-    color: #fff;
+    color: #333;
     font-size: 1.1em;
 }
 
 #close-texture-btn {
     background: none;
-    border: none;
-    color: #fff;
-    font-size: 24px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    color: #333;
+    font-size: 20px;
     cursor: pointer;
-    padding: 0;
+    padding: 2px 8px;
     line-height: 1;
-    opacity: 0.7;
-    transition: opacity 0.2s;
+    transition: background 0.2s, border-color 0.2s;
 }
 
 #close-texture-btn:hover {
-    opacity: 1;
+    background: #f0f0f0;
+    border-color: #999;
 }
 
 .texture-panel-body {
@@ -318,7 +319,7 @@ body {
 }
 
 .texture-hint {
-    color: rgba(255,255,255,0.5);
+    color: #666;
     font-size: 0.85em;
     margin: 0 0 15px 0;
     text-align: center;
@@ -335,20 +336,20 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 15px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.1);
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #ddd;
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.2s, border-color 0.2s;
-    color: #fff;
+    color: #333;
     text-align: left;
     width: 100%;
     font-size: 0.9em;
 }
 
 .material-item:hover {
-    background: rgba(255,255,255,0.15);
+    background: #f0f0f0;
     border-color: #007bff;
 }
 
@@ -364,7 +365,11 @@ body {
     height: 44px;
     border-radius: 6px;
     object-fit: cover;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid #ddd;
+}
+
+.material-preview-placeholder {
+    background: #f0f0f0;
 }
 
 .material-info {
@@ -378,39 +383,40 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #fff;
+    color: #000;
 }
 
 .material-status {
     font-size: 0.75em;
-    color: rgba(255,255,255,0.4);
+    color: #999;
 }
 
 .material-badge {
     font-size: 0.72em;
     padding: 3px 8px;
     border-radius: 12px;
-    background: rgba(0,123,255,0.3);
-    color: #a0cfff;
+    background: #007bff;
+    color: #fff;
     white-space: nowrap;
 }
 
 /* Back Button */
 .back-btn {
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.2);
-    color: #fff;
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #333;
     padding: 8px 12px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.85em;
     margin-bottom: 12px;
-    transition: background 0.2s;
+    transition: background 0.2s, border-color 0.2s;
     width: 100%;
 }
 
 .back-btn:hover {
-    background: rgba(255,255,255,0.2);
+    background: #f0f0f0;
+    border-color: #007bff;
 }
 
 /* Texture Search */
@@ -418,9 +424,9 @@ body {
     width: 100%;
     padding: 10px 12px;
     border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.1);
-    color: #fff;
+    border: 1px solid #ddd;
+    background: #fff;
+    color: #333;
     font-size: 0.9em;
     margin-bottom: 15px;
     outline: none;
@@ -428,7 +434,7 @@ body {
 }
 
 #texture-search::placeholder {
-    color: rgba(255,255,255,0.4);
+    color: #999;
 }
 
 #texture-search:focus {
@@ -439,11 +445,11 @@ body {
 .texture-category-btn {
     display: block;
     width: 100%;
-    padding: 14px 15px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.1);
+    padding: 12px 15px;
+    background: #fff;
+    border: 1px solid #ddd;
     border-radius: 8px;
-    color: #fff;
+    color: #333;
     font-size: 0.95em;
     font-weight: 600;
     cursor: pointer;
@@ -453,8 +459,9 @@ body {
 }
 
 .texture-category-btn:hover {
-    background: rgba(0,123,255,0.2);
+    background: #f0f0f0;
     border-color: #007bff;
+    color: #007bff;
 }
 
 /* Texture Grid */
@@ -469,9 +476,9 @@ body {
     border-radius: 8px;
     overflow: hidden;
     cursor: pointer;
-    border: 2px solid transparent;
+    border: 2px solid #ddd;
     transition: border-color 0.2s, transform 0.15s;
-    background: rgba(255,255,255,0.05);
+    background: #f8f8f8;
 }
 
 .texture-thumb:hover {
@@ -490,13 +497,15 @@ body {
     display: block;
     padding: 6px 8px;
     font-size: 0.75em;
-    color: rgba(255,255,255,0.8);
-    background: rgba(0,0,0,0.5);
+    color: #333;
+    background: #f0f0f0;
+    border-top: 1px solid #ddd;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+/* Mobile Responsive */
 @media (max-width: 600px) {
     #joystick-container { right: 10px; height: 140px; }
     #joystick-handle { top: 52px; }
@@ -505,6 +514,43 @@ body {
     .camera-inner svg { width: 20px; height: 20px; }
     #texture-btn { bottom: 70px; right: 10px; width: 44px; height: 44px; }
     #texture-btn svg { width: 18px; height: 18px; }
-    #texture-panel { width: 300px; right: -320px; }
-    #texture-grid { grid-template-columns: repeat(2, 1fr); }
+    
+    /* Full width panel on mobile */
+    #texture-panel { 
+        width: 100%; 
+        right: -100%; 
+    }
+    #texture-panel.show { 
+        right: 0; 
+    }
+    
+    .texture-panel-header { 
+        padding: 12px 15px; 
+    }
+    .texture-panel-body { 
+        padding: 12px; 
+    }
+    .material-item { 
+        padding: 10px; 
+        font-size: 0.85em; 
+    }
+    .material-item-left {
+        gap: 8px;
+    }
+    .material-preview, .material-preview-placeholder {
+        width: 36px;
+        height: 36px;
+    }
+    #texture-grid { 
+        grid-template-columns: repeat(2, 1fr); 
+        gap: 8px; 
+    }
+    .texture-thumb span { 
+        font-size: 0.7em; 
+        padding: 5px 6px; 
+    }
+    .texture-category-btn {
+        padding: 10px 12px;
+        font-size: 0.9em;
+    }
 }

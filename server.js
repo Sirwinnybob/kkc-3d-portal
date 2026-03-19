@@ -1,3 +1,4 @@
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -174,34 +175,137 @@ let textureHashCache = null;
 let textureHashCacheTime = 0;
 const HASH_CACHE_TTL = 60000; // 1 minute
 
-// Average Hash (aHash) - simple perceptual fingerprint
-function averageHash(imageBuffer, hashSize = 8) {
-    // Convert image buffer to grayscale average using a small canvas approach
-    // For Node.js, we'll use a simple pixel sampling method
-    const pixels = [];
-    const len = imageBuffer.length;
-    const step = Math.max(1, Math.floor(len / (hashSize * hashSize * 4)));
-
-    for (let i = 0; i < len && pixels.length < hashSize * hashSize; i += step) {
-        if (i + 2 < len) {
-            // Simple RGB to grayscale
-            const r = imageBuffer[i] || 0;
-            const g = imageBuffer[i + 1] || 0;
-            const b = imageBuffer[i + 2] || 0;
-            pixels.push(0.299 * r + 0.587 * g + 0.114 * b);
-        }
+// Simple PNG decoder for hash computation (handles most catalog textures)
+function decodePngPixels(buffer) {
+    // Check PNG signature
+    if (buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4E || buffer[3] !== 0x47) {
+        return null; // Not a PNG
     }
 
-    // Pad if needed
-    while (pixels.length < hashSize * hashSize) pixels.push(0);
+    let offset = 8; // Skip signature
+    let width = 0, height = 0, bitDepth = 0, colorType = 0;
+    let compressedData = Buffer.alloc(0);
+
+    while (offset < buffer.length) {
+        const length = buffer.readUInt32BE(offset);
+        const type = buffer.toString('ascii', offset + 4, offset + 8);
+
+        if (type === 'IHDR') {
+            width = buffer.readUInt32BE(offset + 8);
+            height = buffer.readUInt32BE(offset + 12);
+            bitDepth = buffer[offset + 16];
+            colorType = buffer[offset + 17];
+        } else if (type === 'IDAT') {
+            compressedData = Buffer.concat([compressedData, buffer.subarray(offset + 8, offset + 8 + length)]);
+        } else if (type === 'IEND') {
+            break;
+        }
+        offset += 12 + length;
+    }
+
+    if (width === 0 || height === 0) return null;
+
+    // Decompress using Node.js zlib
+    try {
+        const zlib = require('zlib');
+        const rawData = zlib.inflateSync(compressedData);
+
+        const pixels = [];
+        const bpp = colorType === 2 ? 3 : colorType === 6 ? 4 : 1; // RGB or RGBA or grayscale
+        const stride = width * bpp + 1; // +1 for filter byte
+
+        for (let y = 0; y < height; y++) {
+            const filterType = rawData[y * stride];
+            for (let x = 0; x < width; x++) {
+                const idx = y * stride + 1 + x * bpp;
+                let r = rawData[idx] || 0;
+                let g = bpp > 1 ? rawData[idx + 1] || 0 : r;
+                let b = bpp > 2 ? rawData[idx + 2] || 0 : r;
+
+                // Simple filter reversal (sub filter)
+                if (filterType === 1 && x > 0) {
+                    const prevIdx = y * stride + 1 + (x - 1) * bpp;
+                    r = (r + rawData[prevIdx]) & 0xFF;
+                    g = bpp > 1 ? (g + rawData[prevIdx + 1]) & 0xFF : r;
+                    b = bpp > 2 ? (b + rawData[prevIdx + 2]) & 0xFF : r;
+                }
+
+                pixels.push(0.299 * r + 0.587 * g + 0.114 * b);
+            }
+        }
+        return { pixels, width, height };
+    } catch {
+        return null;
+    }
+}
+
+// Simple JPEG decoder fallback - extract approximate pixels from JPEG
+function decodeJpegPixels(buffer) {
+    // Very basic JPEG: scan for SOS marker and extract approximate pixel data
+    // This is a simplified approach - finds pixel-like data in the compressed stream
+    const pixels = [];
+    // Skip JPEG header bytes and sample data regions
+    const startOffset = Math.min(20, buffer.length); // Skip header
+    const dataRegion = buffer.length - startOffset - 2; // Skip end marker
+    const sampleCount = 64; // 8x8 hash
+    const step = Math.max(1, Math.floor(dataRegion / sampleCount));
+
+    for (let i = 0; i < sampleCount && (startOffset + i * step) < buffer.length - 2; i++) {
+        const pos = startOffset + i * step;
+        const r = buffer[pos] || 0;
+        const g = buffer[pos + 1] || r;
+        const b = buffer[pos + 2] || r;
+        pixels.push(0.299 * r + 0.587 * g + 0.114 * b);
+    }
+
+    while (pixels.length < sampleCount) pixels.push(0);
+    return { pixels, width: 8, height: 8 };
+}
+
+// Average Hash (aHash) - perceptual fingerprint with proper image decoding
+function averageHash(imageBuffer, hashSize = 8) {
+    let decoded = null;
+
+    // Try PNG first (most common for catalog textures)
+    if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+        decoded = decodePngPixels(imageBuffer);
+    }
+
+    // Fallback to JPEG approximation
+    if (!decoded && imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
+        decoded = decodeJpegPixels(imageBuffer);
+    }
+
+    // Final fallback: raw byte sampling
+    if (!decoded) {
+        const pixels = [];
+        const len = imageBuffer.length;
+        const step = Math.max(1, Math.floor(len / (hashSize * hashSize * 3)));
+        for (let i = 0; i < len && pixels.length < hashSize * hashSize; i += step) {
+            if (i + 2 < len) {
+                pixels.push(0.299 * (imageBuffer[i] || 0) + 0.587 * (imageBuffer[i + 1] || 0) + 0.114 * (imageBuffer[i + 2] || 0));
+            }
+        }
+        while (pixels.length < hashSize * hashSize) pixels.push(0);
+        decoded = { pixels };
+    }
+
+    // Resize to hashSize x hashSize using nearest neighbor
+    const srcPixels = decoded.pixels;
+    const srcLen = srcPixels.length;
+    const sampled = [];
+    for (let i = 0; i < hashSize * hashSize; i++) {
+        const srcIdx = Math.floor((i / (hashSize * hashSize)) * srcLen);
+        sampled.push(srcPixels[Math.min(srcIdx, srcLen - 1)]);
+    }
 
     // Calculate average
-    const avg = pixels.reduce((a, b) => a + b, 0) / pixels.length;
+    const avg = sampled.reduce((a, b) => a + b, 0) / sampled.length;
 
     // Generate hash bits
     let hash = 0n;
     for (let i = 0; i < hashSize * hashSize; i++) {
-        if (pixels[i] >= avg) hash |= (1n << BigInt(i));
+        if (sampled[i] >= avg) hash |= (1n << BigInt(i));
     }
     return hash;
 }
