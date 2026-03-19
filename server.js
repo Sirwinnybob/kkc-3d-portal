@@ -604,6 +604,63 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
     }
 });
 
+// Extract textures from a GLB file and save unmatched to Uncategorized
+async function extractTexturesFromGlb(glbPath) {
+    const glbBuffer = await fs.promises.readFile(glbPath);
+    const result = await gltfPipeline.glbToGltf(glbBuffer);
+    const gltf = result.gltf;
+
+    if (!gltf.images || !gltf.buffers || !gltf.bufferViews) return;
+
+    const index = await buildTextureHashIndex();
+    const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
+    if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+
+    for (const image of gltf.images) {
+        if (image.bufferView === undefined) continue;
+        const bufferView = gltf.bufferViews[image.bufferView];
+        const buffer = gltf.buffers[bufferView.buffer];
+
+        let imageData;
+        if (buffer.uri) {
+            const base64 = buffer.uri.split(',')[1];
+            imageData = Buffer.from(base64, 'base64');
+        } else {
+            const byteOffset = bufferView.byteOffset || 0;
+            const byteLength = bufferView.byteLength;
+            imageData = glbBuffer.subarray(12 + 8 + byteOffset, 12 + 8 + byteOffset + byteLength);
+        }
+
+        const hash = averageHash(imageData);
+        let isMatched = false;
+
+        for (const [category, textures] of Object.entries(index)) {
+            for (const tex of textures) {
+                const catHash = BigInt(tex.hash);
+                const distance = hammingDistance(hash, catHash);
+                if (distance <= 15) {
+                    isMatched = true;
+                    break;
+                }
+            }
+            if (isMatched) break;
+        }
+
+        if (!isMatched) {
+            const jobName = path.basename(path.dirname(glbPath));
+            const ext = image.mimeType === 'image/png' ? '.png' : '.jpg';
+            const safeName = `${jobName}_texture_${Date.now()}${ext}`;
+            const destPath = path.join(uncategorizedDir, safeName);
+            if (!fs.existsSync(destPath)) {
+                await fs.promises.writeFile(destPath, imageData);
+                console.log(`[Texture Extract] Saved: ${safeName}`);
+            }
+        }
+    }
+
+    textureHashCache = null; // Invalidate cache
+}
+
 // --- CONVERSION ENGINE ---
 const conversionQueue = [];
 let isConverting = false;
@@ -675,6 +732,13 @@ async function processQueue() {
                 }
             }
             console.log(`SUCCESS: ${roomName} is live.`);
+
+            // Auto-extract textures from newly created GLB
+            try {
+                await extractTexturesFromGlb(finalGlb);
+            } catch(e) {
+                console.error(`[Texture Extract] Error for ${roomName}: ${e.message}`);
+            }
         }
         isConverting = false;
         processQueue();
@@ -753,6 +817,16 @@ if (require.main === module) {
                      .forEach(f => convertDesign(path.join(dir, f)));
             }
         });
+    });
+
+    // Watch textures folder for live changes
+    chokidar.watch(TEXTURES_DIR, {
+        ignoreInitial: true,
+        ignored: [/(\\|\/)\./],
+        awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 }
+    }).on('all', (event, fp) => {
+        console.log(`[Texture] ${event}: ${fp}`);
+        textureHashCache = null; // Invalidate cache on any change
     });
 }
 
