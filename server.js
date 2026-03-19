@@ -15,10 +15,12 @@ const APP_VERSION = "1.0.4";
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
 const JOBS_DIR = process.env.JOBS_DIR ? path.resolve(process.env.JOBS_DIR) : path.join(__dirname, 'jobs');
+const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURES_DIR) : path.join(__dirname, 'textures');
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 
 if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
+if (!fs.existsSync(TEXTURES_DIR)) fs.mkdirSync(TEXTURES_DIR, { recursive: true });
 
 // --- MIDDLEWARE ---
 app.set('trust proxy', 1);
@@ -62,6 +64,7 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms'))
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
+app.use('/textures', express.static(TEXTURES_DIR));
 
 // --- API ---
 const apiLimiter = rateLimit({
@@ -162,6 +165,211 @@ app.get('/api/job/:code/:room', (req, res) => {
         if (absPath) return res.json({ success: true, url: `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}` });
         res.status(404).json({ success: false });
     });
+});
+
+// --- TEXTURE CATALOG API ---
+
+// Perceptual hash cache
+let textureHashCache = null;
+let textureHashCacheTime = 0;
+const HASH_CACHE_TTL = 60000; // 1 minute
+
+// Average Hash (aHash) - simple perceptual fingerprint
+function averageHash(imageBuffer, hashSize = 8) {
+    // Convert image buffer to grayscale average using a small canvas approach
+    // For Node.js, we'll use a simple pixel sampling method
+    const pixels = [];
+    const len = imageBuffer.length;
+    const step = Math.max(1, Math.floor(len / (hashSize * hashSize * 4)));
+
+    for (let i = 0; i < len && pixels.length < hashSize * hashSize; i += step) {
+        if (i + 2 < len) {
+            // Simple RGB to grayscale
+            const r = imageBuffer[i] || 0;
+            const g = imageBuffer[i + 1] || 0;
+            const b = imageBuffer[i + 2] || 0;
+            pixels.push(0.299 * r + 0.587 * g + 0.114 * b);
+        }
+    }
+
+    // Pad if needed
+    while (pixels.length < hashSize * hashSize) pixels.push(0);
+
+    // Calculate average
+    const avg = pixels.reduce((a, b) => a + b, 0) / pixels.length;
+
+    // Generate hash bits
+    let hash = 0n;
+    for (let i = 0; i < hashSize * hashSize; i++) {
+        if (pixels[i] >= avg) hash |= (1n << BigInt(i));
+    }
+    return hash;
+}
+
+// Hamming distance between two hashes
+function hammingDistance(hash1, hash2) {
+    let diff = hash1 ^ hash2;
+    let count = 0;
+    while (diff > 0n) {
+        count += Number(diff & 1n);
+        diff >>= 1n;
+    }
+    return count;
+}
+
+// Build hash index for all textures in the catalog
+async function buildTextureHashIndex() {
+    const now = Date.now();
+    if (textureHashCache && (now - textureHashCacheTime) < HASH_CACHE_TTL) {
+        return textureHashCache;
+    }
+
+    const index = {};
+
+    try {
+        const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory() && entry.name !== 'Uncategorized') {
+                const categoryPath = path.join(TEXTURES_DIR, entry.name);
+                const files = await fs.promises.readdir(categoryPath);
+                index[entry.name] = [];
+
+                for (const file of files) {
+                    const ext = path.extname(file).toLowerCase();
+                    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+                        try {
+                            const filePath = path.join(categoryPath, file);
+                            const buffer = await fs.promises.readFile(filePath);
+                            const hash = averageHash(buffer);
+                            index[entry.name].push({
+                                name: path.basename(file, ext),
+                                file: file,
+                                url: `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
+                                hash: hash.toString()
+                            });
+                        } catch (e) {
+                            console.error(`[Texture] Hash error for ${file}: ${e.message}`);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error(`[Texture] Index build error: ${e.message}`);
+    }
+
+    textureHashCache = index;
+    textureHashCacheTime = now;
+    return index;
+}
+
+// GET /api/textures - List all categories
+app.get('/api/textures', async (req, res) => {
+    try {
+        const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
+        const categories = entries
+            .filter(e => e.isDirectory() && e.name !== 'Uncategorized')
+            .map(e => e.name);
+        res.json({ success: true, categories });
+    } catch (e) {
+        res.status(500).json({ success: false, error: 'Failed to read texture categories' });
+    }
+});
+
+// GET /api/textures/:category - List textures in a category
+app.get('/api/textures/:category', async (req, res) => {
+    const category = req.params.category;
+    if (typeof category !== 'string' || category.length > 100) {
+        return res.status(400).json({ success: false, error: 'Invalid category' });
+    }
+
+    const categoryPath = path.join(TEXTURES_DIR, path.basename(category));
+    const rel = path.relative(TEXTURES_DIR, categoryPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    try {
+        const files = await fs.promises.readdir(categoryPath);
+        const textures = files
+            .filter(f => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(f).toLowerCase()))
+            .map(f => ({
+                name: path.basename(f, path.extname(f)),
+                url: `/textures/${encodeURIComponent(category)}/${encodeURIComponent(f)}`
+            }));
+        res.json({ success: true, category, textures });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Category not found' });
+        res.status(500).json({ success: false, error: 'Failed to read textures' });
+    }
+});
+
+// POST /api/textures/match - Match an image against the catalog
+app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res) => {
+    const { imageData, jobCode, room, materialName } = req.body;
+
+    if (!imageData) {
+        return res.status(400).json({ success: false, error: 'No image data provided' });
+    }
+
+    try {
+        // Decode base64 image data
+        const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+
+        // Compute hash for the input image
+        const inputHash = averageHash(imageBuffer);
+        const inputHashStr = inputHash.toString();
+
+        // Build/load hash index
+        const index = await buildTextureHashIndex();
+
+        // Find best match across all categories
+        let bestMatch = null;
+        let bestDistance = Infinity;
+        const allMatches = [];
+
+        for (const [category, textures] of Object.entries(index)) {
+            for (const tex of textures) {
+                const catHash = BigInt(tex.hash);
+                const distance = hammingDistance(inputHash, catHash);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestMatch = { ...tex, category };
+                }
+                if (distance <= 20) { // Threshold for "similar enough"
+                    allMatches.push({ ...tex, category, distance });
+                }
+            }
+        }
+
+        // Sort matches by distance
+        allMatches.sort((a, b) => a.distance - b.distance);
+
+        // If no good match found, copy to Uncategorized
+        const MATCH_THRESHOLD = 30;
+        if (bestDistance > MATCH_THRESHOLD) {
+            const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
+            if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+
+            const safeName = `${jobCode || 'unknown'}_${room || 'room'}_${materialName || 'material'}`.replace(/[^a-zA-Z0-9\-_]/g, '_');
+            const destPath = path.join(uncategorizedDir, `${safeName}.jpg`);
+            await fs.promises.writeFile(destPath, imageBuffer);
+            console.log(`[Texture] Saved unmatched texture to Uncategorized: ${safeName}.jpg`);
+        }
+
+        res.json({
+            success: true,
+            matched: bestDistance <= MATCH_THRESHOLD,
+            bestMatch: bestDistance <= MATCH_THRESHOLD ? bestMatch : null,
+            bestCategory: bestMatch ? bestMatch.category : null,
+            distance: bestDistance,
+            similarTextures: allMatches.slice(0, 12)
+        });
+    } catch (e) {
+        console.error(`[Texture] Match error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to match texture' });
+    }
 });
 
 // --- CONVERSION ENGINE ---

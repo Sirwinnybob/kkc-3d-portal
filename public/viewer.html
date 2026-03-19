@@ -69,6 +69,36 @@
         </div>
     </button>
 
+    <button id="texture-btn" title="Texture Catalog" aria-label="Texture Catalog">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+    </button>
+
+    <!-- Texture Catalog Panel -->
+    <div id="texture-panel" role="dialog" aria-label="Texture Catalog">
+        <div class="texture-panel-header">
+            <h3 id="catalog-title">Materials</h3>
+            <button id="close-texture-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="texture-panel-body">
+            <!-- Materials View -->
+            <div id="materials-view">
+                <p class="texture-hint">Select a material to replace its texture</p>
+                <div id="material-list"></div>
+            </div>
+            <!-- Catalog View -->
+            <div id="catalog-view" style="display:none">
+                <button id="back-to-materials" class="back-btn">&larr; Back to Materials</button>
+                <input type="text" id="texture-search" placeholder="Search textures..." autocomplete="off">
+                <div id="texture-grid"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="canvas-container"></div>
 
     <script type="importmap">
@@ -79,6 +109,6 @@
         }
     }
     </script>
-    <script type="module" src="/js/viewer.js?v=70"></script>
+<script type="module" src="/js/viewer.js?v=71"></script>
 </body>
 </html>
