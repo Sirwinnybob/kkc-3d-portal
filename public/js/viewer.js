@@ -523,11 +523,12 @@ async function init() {
                         previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
                     }
 
+                    const displayName = mat.matchedName || mat.name;
                     btn.innerHTML = `
                         <div class="material-item-left">
                             ${previewHtml}
                             <div class="material-info">
-                                <span class="material-name">${mat.name}</span>
+                                <span class="material-name">${displayName}</span>
                                 <span class="material-status">${mat.hasTexture ? 'Customizable' : 'Color Only'}</span>
                             </div>
                         </div>
@@ -577,6 +578,11 @@ async function init() {
                     const data = await resp.json();
 
                     if (data.success && data.matched && data.bestCategory) {
+                        // Update material name in UI to show matched texture name
+                        if (data.bestMatch) {
+                            mat.matchedName = data.bestMatch.name;
+                        }
+                        
                         // Show matched category textures first, then similar
                         await loadCategoryTextures(data.bestCategory);
                         if (data.similarTextures && data.similarTextures.length > 0) {
@@ -662,9 +668,10 @@ async function init() {
                     newTex.magFilter = THREE.LinearFilter;
                     newTex.wrapS = THREE.RepeatWrapping;
                     newTex.wrapT = THREE.RepeatWrapping;
-                    // Apply to all meshes sharing this material
+                    // Apply to all meshes sharing this material, preserving color tint
                     matGroup.meshes.forEach(mesh => {
                         mesh.material.map = newTex;
+                        // Preserve original color tint for color-corrected textures
                         mesh.material.needsUpdate = true;
                     });
                 });
