@@ -130,4 +130,14 @@ test('cleanDae behavior', async (t) => {
         assert.ok(!result.includes('<ph>'), 'no <ph> should remain');
         assert.ok(!result.includes('<h>'), 'no <h> should remain');
     });
+
+    await t.test('replaces transparency values with GLASS_TRANSPARENCY', async () => {
+        const filePath = path.join(TEST_DIR, 'test_transparency.dae');
+        const input = '<transparent><transparency><float>0.100000</float></transparency></transparent>';
+        fs.writeFileSync(filePath, input);
+        await cleanDae(filePath);
+        const result = fs.readFileSync(filePath, 'utf8');
+        // Default GLASS_TRANSPARENCY is 0.8
+        assert.ok(result.includes('<float>0.8</float>'), 'should replace transparency value with default 0.8');
+    });
 });

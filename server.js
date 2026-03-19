@@ -16,6 +16,7 @@ const APP_VERSION = "1.0.4";
 const PORT = parseInt(process.env.PORT) || 5021;
 const JOBS_DIR = process.env.JOBS_DIR ? path.resolve(process.env.JOBS_DIR) : path.join(__dirname, 'jobs');
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
+const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 
 if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
 
@@ -169,6 +170,16 @@ let isConverting = false;
 
 // --- COLLADA ph/h TRIANGULATOR ---
 
+// Fix COLLADA transparency for RGB_ZERO mode: final alpha = 1 - (color.rgb × transparency)
+// For glass that's 10% transparent (0.1 in DAE), it renders 90% opaque.
+// We replace this with a higher value (default 0.8) to make it more transparent.
+function fixTransparency(content) {
+    return content.replace(
+        /<transparency>\s*<float>([\d.]+)<\/float>\s*<\/transparency>/g,
+        `<transparency><float>${GLASS_TRANSPARENCY}</float></transparency>`
+    );
+}
+
 // Convert <ph>...</ph> blocks by simply keeping the outer <p> and discarding the <h> holes.
 // This allows Assimp to triangulate the polygon naturally and preserves texture mapping.
 function convertPhElements(content) {
@@ -189,6 +200,7 @@ async function cleanDae(filePath) {
         cleaned = cleaned.replace(/\t/g, ' ').replace(/ +/g, ' ');
         cleaned = cleaned.replace(/> /g, '>').replace(/ <\//g, '</');
         cleaned = convertPhElements(cleaned);
+        cleaned = fixTransparency(cleaned);
         if (content !== cleaned) await fs.promises.writeFile(filePath, cleaned, 'utf8');
     } catch (e) { console.error(`!!! [Cleaner] Error: ${e.message}`); }
 }
