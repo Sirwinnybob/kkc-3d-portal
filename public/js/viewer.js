@@ -124,6 +124,12 @@ async function init() {
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
 
+    // AUTO-SHOW HELP: If it's their first time in the viewer on this device, show the controls modal
+    if (localStorage.getItem('kkc_help_shown') !== 'true') {
+        toggleHelp(true);
+        localStorage.setItem('kkc_help_shown', 'true');
+    }
+
     try {
         const response = await fetch(`/api/job/${encodeURIComponent(jobCode)}`);
         const data = await response.json();
