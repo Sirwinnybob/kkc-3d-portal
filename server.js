@@ -515,7 +515,8 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
                 const glbBuffer = await fs.promises.readFile(glbPath);
 
                 // Parse GLB using gltf-pipeline
-                const result = await gltfPipeline.glbToGltf(glbBuffer);
+                const resourceDirectory = path.dirname(glbPath);
+                const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
                 const gltf = result.gltf;
 
                 // Extract embedded images from buffers
@@ -607,7 +608,8 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
 // Extract textures from a GLB file and save unmatched to Uncategorized
 async function extractTexturesFromGlb(glbPath) {
     const glbBuffer = await fs.promises.readFile(glbPath);
-    const result = await gltfPipeline.glbToGltf(glbBuffer);
+    const resourceDirectory = path.dirname(glbPath);
+    const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
     const gltf = result.gltf;
 
     if (!gltf.images || !gltf.buffers || !gltf.bufferViews) return;
