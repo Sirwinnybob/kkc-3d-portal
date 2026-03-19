@@ -148,7 +148,7 @@ app.get('/api/job/:code/:room', (req, res) => {
                 const result = await findGlb(dirs[i]);
                 if (result) return result;
             }
-        } catch (err) {
+        } catch {
             // ignore
         }
         return null;
@@ -237,7 +237,7 @@ async function convertDesign(filePath, skipTimer = false) {
             ]);
             if (glbStat.mtimeMs > daeStat.mtimeMs) return;
         }
-    } catch (e) {
+    } catch {
         // Suppress stat errors (e.g. file deleted during check)
     }
 
@@ -274,7 +274,7 @@ if (require.main === module) {
                     else if (entry.name.toLowerCase().endsWith('.dae')) convertDesign(fullPath, true);
                 });
                 await Promise.all(promises);
-            } catch (err) {
+            } catch {
                 // ignore
             }
         };
