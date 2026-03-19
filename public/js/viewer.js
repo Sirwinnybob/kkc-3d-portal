@@ -394,6 +394,7 @@ async function init() {
 
         // --- LOAD MODEL ---
         updateStatus("Loading Design...");
+        window.setupTexturePanel = setupTexturePanel; // Expose for testing
         const loader = new GLTFLoader();
         loader.load(urlData.url, (gltf) => {
             const model = gltf.scene;
