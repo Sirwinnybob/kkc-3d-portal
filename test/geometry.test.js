@@ -1,6 +1,46 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { cross2d } = require('../utils/geometry');
+const { cross2d, parseIndices } = require('../utils/geometry');
+
+test('parseIndices utility function', async (t) => {
+    await t.test('parses a simple space-delimited string with stride 1', () => {
+        const text = "1 2 3";
+        const result = parseIndices(text, 1);
+        assert.deepStrictEqual(result, [[1], [2], [3]]);
+    });
+
+    await t.test('parses indices with stride 3', () => {
+        const text = "0 1 2 3 4 5";
+        const result = parseIndices(text, 3);
+        assert.deepStrictEqual(result, [[0, 1, 2], [3, 4, 5]]);
+    });
+
+    await t.test('handles extra whitespace and newlines', () => {
+        const text = "  10  20 \n 30\t40  ";
+        const result = parseIndices(text, 2);
+        assert.deepStrictEqual(result, [[10, 20], [30, 40]]);
+    });
+
+    await t.test('handles non-multiple lengths by slicing correctly', () => {
+        const text = "1 2 3 4 5";
+        const result = parseIndices(text, 2);
+        // [1, 2, 3, 4, 5] with stride 2
+        // i=0: slice(0, 2) -> [1, 2]
+        // i=2: slice(2, 4) -> [3, 4]
+        // i=4: slice(4, 6) -> [5]
+        assert.deepStrictEqual(result, [[1, 2], [3, 4], [5]]);
+    });
+
+    await t.test('handles empty or whitespace-only input (current behavior returns [[0]])', () => {
+        // Based on the current implementation:
+        // "".trim() -> ""
+        // "".split(/\s+/) -> [""]
+        // [""].map(Number) -> [0]
+        // loop runs once (i=0, stride=1), tuples.push([0])
+        assert.deepStrictEqual(parseIndices("", 1), [[0]]);
+        assert.deepStrictEqual(parseIndices("   ", 3), [[0]]);
+    });
+});
 
 test('cross2d utility function', async (t) => {
     await t.test('calculates positive cross product for counter-clockwise points', () => {
