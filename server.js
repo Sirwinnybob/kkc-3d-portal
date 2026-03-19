@@ -10,7 +10,7 @@ const jobsAuth = require('./middleware/jobsAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
 
 const app = express();
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.0.5";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -196,10 +196,23 @@ async function processQueue() {
     const { filePath } = conversionQueue.shift();
     const dir = path.dirname(filePath);
     const roomName = path.basename(dir);
+    const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
+
+    // Security: Validate filenames to prevent argument injection or other shell-related attacks.
+    // Ensure roomName and inputFilename consist only of safe characters.
+    const safeRegex = /^[a-zA-Z0-9\._\- ]+$/;
+    if (!safeRegex.test(roomName) || !safeRegex.test(inputFilename)) {
+        console.warn(`[SECURITY] Skipping conversion for suspicious path: ${filePath}`);
+        isConverting = false;
+        processQueue();
+        return;
+    }
+
     const finalGlb = path.join(dir, `${roomName}.glb`);
     await cleanDae(filePath);
-    execFile(ASSIMP_PATH, ['export', path.basename(filePath), outputGlb, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, (err, stdout, stderr) => {
+    // Security: Prepend './' to filenames to ensure they are interpreted as paths, not as CLI options (e.g., if starting with a dash).
+    execFile(ASSIMP_PATH, ['export', `./${inputFilename}`, `./${outputGlb}`, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, (err, stdout, stderr) => {
         if (err) console.error(`!!! [FAILED] ${roomName}: ${stderr || err.message}`);
         else {
             const genGlb = path.join(dir, outputGlb);
