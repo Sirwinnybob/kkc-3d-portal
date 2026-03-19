@@ -394,6 +394,7 @@ async function init() {
 
         // --- LOAD MODEL ---
         updateStatus("Loading Design...");
+        window.setupTexturePanel = setupTexturePanel; // Expose for testing
         const loader = new GLTFLoader();
         loader.load(urlData.url, (gltf) => {
             const model = gltf.scene;
@@ -485,8 +486,33 @@ async function init() {
                 detectedMaterials.forEach((mat, i) => {
                     const btn = document.createElement('button');
                     btn.className = 'material-item';
+
+                    let previewHtml = '';
+                    if (mat.hasTexture && mat.material.map && mat.material.map.image) {
+                        try {
+                            const img = mat.material.map.image;
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 64;
+                            canvas.height = 64;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, 64, 64);
+                            previewHtml = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
+                        } catch {
+                            previewHtml = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+                        }
+                    } else {
+                        const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+                        previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+                    }
+
                     btn.innerHTML = `
-                        <span class="material-name">${mat.name}</span>
+                        <div class="material-item-left">
+                            ${previewHtml}
+                            <div class="material-info">
+                                <span class="material-name">${mat.name}</span>
+                                <span class="material-status">${mat.hasTexture ? 'Customizable' : 'Color Only'}</span>
+                            </div>
+                        </div>
                         <span class="material-badge">${mat.hasTexture ? 'Has Texture' : 'No Texture'}</span>
                     `;
                     btn.onclick = () => selectMaterial(i);

@@ -352,20 +352,47 @@ body {
     border-color: #007bff;
 }
 
+.material-item-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 70%;
+}
+
+.material-preview, .material-preview-placeholder {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.material-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 .material-name {
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 60%;
+    color: #fff;
+}
+
+.material-status {
+    font-size: 0.75em;
+    color: rgba(255,255,255,0.4);
 }
 
 .material-badge {
-    font-size: 0.75em;
+    font-size: 0.72em;
     padding: 3px 8px;
     border-radius: 12px;
     background: rgba(0,123,255,0.3);
     color: #a0cfff;
+    white-space: nowrap;
 }
 
 /* Back Button */
