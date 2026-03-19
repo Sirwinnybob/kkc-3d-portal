@@ -9,9 +9,10 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
+const gltfPipeline = require('gltf-pipeline');
 
 const app = express();
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.1.0";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -335,6 +336,7 @@ async function buildTextureHashIndex() {
         for (const entry of entries) {
             if (entry.isDirectory() && entry.name !== 'Uncategorized') {
                 const categoryPath = path.join(TEXTURES_DIR, entry.name);
+                const isHidden = entry.name === 'Hidden';
                 const files = await fs.promises.readdir(categoryPath);
                 index[entry.name] = [];
 
@@ -348,7 +350,8 @@ async function buildTextureHashIndex() {
                             index[entry.name].push({
                                 name: path.basename(file, ext),
                                 file: file,
-                                url: `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
+                                url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
+                                hidden: isHidden,
                                 hash: hash.toString()
                             });
                         } catch (e) {
@@ -428,7 +431,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         // Build/load hash index
         const index = await buildTextureHashIndex();
 
-        // Find best match across all categories
+        // Find best match across all categories (excluding hidden)
         let bestMatch = null;
         let bestDistance = Infinity;
         const allMatches = [];
@@ -437,11 +440,11 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
             for (const tex of textures) {
                 const catHash = BigInt(tex.hash);
                 const distance = hammingDistance(inputHash, catHash);
-                if (distance < bestDistance) {
+                if (distance < bestDistance && !tex.hidden) {
                     bestDistance = distance;
                     bestMatch = { ...tex, category };
                 }
-                if (distance <= 20) { // Threshold for "similar enough"
+                if (distance <= 20 && !tex.hidden) { // Threshold for "similar enough"
                     allMatches.push({ ...tex, category, distance });
                 }
             }
@@ -473,6 +476,131 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
     } catch (e) {
         console.error(`[Texture] Match error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Failed to match texture' });
+    }
+});
+
+// POST /api/textures/scan-jobs - Extract textures from all jobs and save unmatched to Uncategorized
+app.post('/api/textures/scan-jobs', async (req, res) => {
+    try {
+        const index = await buildTextureHashIndex();
+        const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
+        if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+
+        let extracted = 0;
+        let matched = 0;
+        let saved = 0;
+        const errors = [];
+
+        // Find all GLB files in jobs directory
+        const findGlbs = async (dir) => {
+            const glbs = [];
+            try {
+                const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        glbs.push(...(await findGlbs(fullPath)));
+                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                        glbs.push(fullPath);
+                    }
+                }
+            } catch { /* ignore */ }
+            return glbs;
+        };
+
+        const glbFiles = await findGlbs(JOBS_DIR);
+
+        for (const glbPath of glbFiles) {
+            try {
+                const glbBuffer = await fs.promises.readFile(glbPath);
+
+                // Parse GLB using gltf-pipeline
+                const result = await gltfPipeline.glbToGltf(glbBuffer);
+                const gltf = result.gltf;
+
+                // Extract embedded images from buffers
+                if (gltf.images && gltf.buffers && gltf.bufferViews) {
+                    for (const image of gltf.images) {
+                        if (image.bufferView === undefined) continue;
+                        const bufferView = gltf.bufferViews[image.bufferView];
+                        const buffer = gltf.buffers[bufferView.buffer];
+
+                        // Get the image data from the binary buffer
+                        let imageData;
+                        if (buffer.uri) {
+                            // Data URI
+                            const base64 = buffer.uri.split(',')[1];
+                            imageData = Buffer.from(base64, 'base64');
+                        } else {
+                            // Binary chunk
+                            const byteOffset = bufferView.byteOffset || 0;
+                            const byteLength = bufferView.byteLength;
+                            imageData = glbBuffer.subarray(
+                                12 + 8 + byteOffset, // Skip GLB header + chunk header
+                                12 + 8 + byteOffset + byteLength
+                            );
+                        }
+
+                        extracted++;
+
+                        // Hash the extracted image
+                        const hash = averageHash(imageData);
+                        let bestDistance = Infinity;
+                        let isMatched = false;
+
+                        // Compare against catalog
+                        for (const [category, textures] of Object.entries(index)) {
+                            for (const tex of textures) {
+                                const catHash = BigInt(tex.hash);
+                                const distance = hammingDistance(hash, catHash);
+                                if (distance < bestDistance) {
+                                    bestDistance = distance;
+                                }
+                                if (distance <= 15) {
+                                    isMatched = true;
+                                    matched++;
+                                    break;
+                                }
+                            }
+                            if (isMatched) break;
+                        }
+
+                        // Save unmatched textures to Uncategorized
+                        if (!isMatched) {
+                            const jobName = path.basename(path.dirname(glbPath));
+                            const ext = image.mimeType === 'image/png' ? '.png' : '.jpg';
+                            const safeName = `${jobName}_texture_${extracted}${ext}`;
+                            const destPath = path.join(uncategorizedDir, safeName);
+
+                            // Avoid duplicates
+                            if (!fs.existsSync(destPath)) {
+                                await fs.promises.writeFile(destPath, imageData);
+                                saved++;
+                                console.log(`[Texture Scan] Saved: ${safeName}`);
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                errors.push({ file: glbPath, error: e.message });
+                console.error(`[Texture Scan] Error processing ${glbPath}: ${e.message}`);
+            }
+        }
+
+        // Invalidate hash cache since new textures may have been added
+        textureHashCache = null;
+
+        res.json({
+            success: true,
+            scanned: glbFiles.length,
+            extracted,
+            matched,
+            saved,
+            errors: errors.length > 0 ? errors : undefined
+        });
+    } catch (e) {
+        console.error(`[Texture Scan] Error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to scan jobs' });
     }
 });
 
