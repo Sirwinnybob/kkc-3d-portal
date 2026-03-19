@@ -16,7 +16,7 @@ const APP_VERSION = "1.0.4";
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
 const JOBS_DIR = process.env.JOBS_DIR ? path.resolve(process.env.JOBS_DIR) : path.join(__dirname, 'jobs');
-const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURES_DIR) : path.join(__dirname, 'textures');
+const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURES_DIR) : path.join(path.dirname(JOBS_DIR), 'textures');
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 
@@ -451,7 +451,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         allMatches.sort((a, b) => a.distance - b.distance);
 
         // If no good match found, copy to Uncategorized
-        const MATCH_THRESHOLD = 30;
+        const MATCH_THRESHOLD = 15; // Stricter threshold to avoid false matches
         if (bestDistance > MATCH_THRESHOLD) {
             const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
             if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });

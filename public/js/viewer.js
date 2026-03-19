@@ -401,6 +401,9 @@ async function init() {
             loadedModel = model;
             detectedMaterials = [];
 
+            // Track unique materials to avoid listing every face
+            const materialMap = new Map(); // key -> { material, meshes[], name, hasTexture, originalMap }
+
             model.traverse((child) => {
                 if (child.isMesh) {
                     const prevMat = child.material;
@@ -420,18 +423,30 @@ async function init() {
                         child.material.map.magFilter  = THREE.LinearFilter;
                     }
 
-                    // Detect materials with textures
-                    const matName = child.material.name || child.name || `Material_${detectedMaterials.length}`;
-                    const hasTexture = !!child.material.map;
-                    detectedMaterials.push({
-                        name: matName,
-                        mesh: child,
-                        material: child.material,
-                        hasTexture: hasTexture,
-                        originalMap: child.material.map
-                    });
+                    // Deduplicate: group meshes sharing the same material
+                    // Use material identity or texture source as key
+                    const mat = child.material;
+                    const texSrc = mat.map?.image?.src || mat.map?.uuid || '';
+                    const colorKey = mat.color ? mat.color.getHexString() : 'none';
+                    const key = prevMat.uuid || `${colorKey}_${texSrc}`;
+
+                    if (materialMap.has(key)) {
+                        materialMap.get(key).meshes.push(child);
+                    } else {
+                        const matName = prevMat.name || child.name || `Material_${materialMap.size}`;
+                        materialMap.set(key, {
+                            name: matName,
+                            material: mat,
+                            meshes: [child],
+                            hasTexture: !!mat.map,
+                            originalMap: mat.map
+                        });
+                    }
                 }
             });
+
+            // Convert map to array
+            detectedMaterials = Array.from(materialMap.values());
             scene.add(model);
             const box    = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
@@ -633,10 +648,10 @@ async function init() {
                 });
             }
 
-            // Preview texture on selected material
+            // Preview texture on selected material (applies to all meshes in group)
             function previewTexture(url) {
                 if (selectedMaterialIndex < 0) return;
-                const mat = detectedMaterials[selectedMaterialIndex];
+                const matGroup = detectedMaterials[selectedMaterialIndex];
                 const texLoader = new THREE.TextureLoader();
                 texLoader.load(url, (newTex) => {
                     newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -644,8 +659,11 @@ async function init() {
                     newTex.magFilter = THREE.LinearFilter;
                     newTex.wrapS = THREE.RepeatWrapping;
                     newTex.wrapT = THREE.RepeatWrapping;
-                    mat.material.map = newTex;
-                    mat.material.needsUpdate = true;
+                    // Apply to all meshes sharing this material
+                    matGroup.meshes.forEach(mesh => {
+                        mesh.material.map = newTex;
+                        mesh.material.needsUpdate = true;
+                    });
                 });
             }
 
