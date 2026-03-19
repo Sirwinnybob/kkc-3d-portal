@@ -199,7 +199,6 @@ async function processQueue() {
     const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
-    const inputFilename = path.basename(filePath);
 
     await cleanDae(filePath);
 
