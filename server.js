@@ -196,10 +196,17 @@ async function processQueue() {
     const { filePath } = conversionQueue.shift();
     const dir = path.dirname(filePath);
     const roomName = path.basename(dir);
+    const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
     await cleanDae(filePath);
-    execFile(ASSIMP_PATH, ['export', path.basename(filePath), outputGlb, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, async (err, stdout, stderr) => {
+
+    // Security: Prepend ./ (or .\) to ensure arguments are treated as paths, not command flags
+    const pathPrefix = process.platform === 'win32' ? '.\\' : './';
+    const safeInputPath = `${pathPrefix}${inputFilename}`;
+    const safeOutputPath = `${pathPrefix}${outputGlb}`;
+
+    execFile(ASSIMP_PATH, ['export', safeInputPath, safeOutputPath, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, async (err, stdout, stderr) => {
         if (err) console.error(`!!! [FAILED] ${roomName}: ${stderr || err.message}`);
         else {
             const genGlb = path.join(dir, outputGlb);
