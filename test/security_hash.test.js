@@ -17,7 +17,6 @@ test('POST /api/textures/match security tests', async (t) => {
             .post('/api/textures/match')
             .send({ imageData: 'not-base64-at-all!!!' });
 
-        // Should return 200 matched=false because it fails hash computation and saves to Uncategorized
         assert.strictEqual(response.status, 200);
         assert.strictEqual(response.body.matched, false);
     });
@@ -28,7 +27,6 @@ test('POST /api/textures/match security tests', async (t) => {
             .post('/api/textures/match')
             .send({ imageData: `data:image/png;base64,${base64Txt}` });
 
-        // Should return 200 matched=false as computePhash catches the error and returns 0n
         assert.strictEqual(response.status, 200);
         assert.strictEqual(response.body.matched, false);
     });
