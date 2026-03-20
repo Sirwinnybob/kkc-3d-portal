@@ -479,11 +479,23 @@ body {
     border: 2px solid #ddd;
     transition: border-color 0.2s, transform 0.15s;
     background: #f8f8f8;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    display: block;
+    text-align: left;
+    font-family: inherit;
 }
 
 .texture-thumb:hover {
     border-color: #007bff;
     transform: scale(1.03);
+}
+
+.texture-thumb:focus-visible {
+    outline: 3px solid #007bff;
+    outline-offset: 2px;
+    z-index: 10;
 }
 
 .texture-thumb img {

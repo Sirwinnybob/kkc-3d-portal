@@ -652,11 +652,12 @@ async function init() {
                 if (!textureGrid) return;
                 textureGrid.innerHTML = '';
                 currentCategoryTextures.forEach(tex => {
-                    const div = document.createElement('div');
-                    div.className = 'texture-thumb';
-                    div.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
-                    div.onclick = () => previewTexture(tex.url);
-                    textureGrid.appendChild(div);
+                    const btn = document.createElement('button');
+                    btn.className = 'texture-thumb';
+                    btn.setAttribute('aria-label', `Select texture ${tex.name}`);
+                    btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
+                    btn.onclick = () => previewTexture(tex.url);
+                    textureGrid.appendChild(btn);
                 });
             }
 
