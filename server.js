@@ -651,6 +651,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
     const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
     if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
 
+    const index = await buildTextureHashIndex();
     const files = await fs.promises.readdir(imagesDir);
     let extracted = 0;
 
@@ -661,14 +662,34 @@ async function extractTexturesFromDaeImages(daeFilePath) {
             const destPath = path.join(uncategorizedDir, file);
 
             // Avoid duplicates
-            if (!fs.existsSync(destPath)) {
-                try {
+            if (fs.existsSync(destPath)) continue;
+
+            try {
+                const buffer = await fs.promises.readFile(srcPath);
+                const hash = averageHash(buffer);
+                let isMatched = false;
+
+                for (const [category, textures] of Object.entries(index)) {
+                    for (const tex of textures) {
+                        const catHash = BigInt(tex.hash);
+                        const distance = hammingDistance(hash, catHash);
+                        if (distance <= 15) {
+                            isMatched = true;
+                            break;
+                        }
+                    }
+                    if (isMatched) break;
+                }
+
+                if (!isMatched) {
                     await fs.promises.copyFile(srcPath, destPath);
                     extracted++;
-                    console.log(`[DAE Texture] Extracted: ${file}`);
-                } catch (e) {
-                    console.error(`[DAE Texture] Error copying ${file}: ${e.message}`);
+                    console.log(`[DAE Texture] Extracted (unmatched): ${file}`);
+                } else {
+                    console.log(`[DAE Texture] Skipped (matched in library): ${file}`);
                 }
+            } catch (e) {
+                console.error(`[DAE Texture] Error processing ${file}: ${e.message}`);
             }
         }
     }
@@ -893,3 +914,4 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.cleanDae = cleanDae;
+module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
