@@ -492,118 +492,63 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
     }
 });
 
-// POST /api/textures/scan-jobs - Extract textures from all jobs and save unmatched to Uncategorized
+// POST /api/textures/scan-jobs - Extract textures from DAE images folders and save to Uncategorized
 app.post('/api/textures/scan-jobs', async (req, res) => {
     try {
-        const index = await buildTextureHashIndex();
         const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
         if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
 
         let extracted = 0;
-        let matched = 0;
-        let saved = 0;
         const errors = [];
 
-        // Find all GLB files in jobs directory
-        const findGlbs = async (dir) => {
-            const glbs = [];
+        // Find all DAE files in jobs directory
+        const findDaes = async (dir) => {
+            const daes = [];
             try {
                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
                 for (const entry of entries) {
                     const fullPath = path.join(dir, entry.name);
                     if (entry.isDirectory()) {
-                        glbs.push(...(await findGlbs(fullPath)));
-                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                        glbs.push(fullPath);
+                        daes.push(...(await findDaes(fullPath)));
+                    } else if (entry.name.toLowerCase().endsWith('.dae')) {
+                        daes.push(fullPath);
                     }
                 }
             } catch { /* ignore */ }
-            return glbs;
+            return daes;
         };
 
-        const glbFiles = await findGlbs(JOBS_DIR);
+        const daeFiles = await findDaes(JOBS_DIR);
 
-        for (const glbPath of glbFiles) {
+        for (const daePath of daeFiles) {
             try {
-                const glbBuffer = await fs.promises.readFile(glbPath);
+                const imagesDir = path.join(path.dirname(daePath), 'images');
 
-                // Parse GLB using gltf-pipeline
-                const resourceDirectory = path.dirname(glbPath);
-                const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
-                const gltf = result.gltf;
+                // Check if images folder exists
+                try {
+                    await fs.promises.access(imagesDir);
+                } catch {
+                    continue; // No images folder, skip
+                }
 
-                // Parse GLB header to find BIN chunk offset
-                const jsonChunkLength = glbBuffer.readUInt32LE(12);
-                const binChunkOffset = 12 + 8 + jsonChunkLength + 8;
+                const files = await fs.promises.readdir(imagesDir);
+                for (const file of files) {
+                    const ext = path.extname(file).toLowerCase();
+                    if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
+                        const srcPath = path.join(imagesDir, file);
+                        const destPath = path.join(uncategorizedDir, file);
 
-                // Extract embedded images from buffers
-                if (gltf.images && gltf.bufferViews) {
-                    for (const image of gltf.images) {
-                        if (image.bufferView === undefined) continue;
-                        const bufferView = gltf.bufferViews[image.bufferView];
-
-                        // Get the image data from the binary buffer
-                        let imageData;
-                        if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
-                            // Data URI
-                            const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
-                            imageData = Buffer.from(base64, 'base64');
-                            const byteOffset = bufferView.byteOffset || 0;
-                            const byteLength = bufferView.byteLength;
-                            imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
-                        } else {
-                            // Binary chunk
-                            const byteOffset = bufferView.byteOffset || 0;
-                            const byteLength = bufferView.byteLength;
-                            imageData = glbBuffer.subarray(
-                                binChunkOffset + byteOffset,
-                                binChunkOffset + byteOffset + byteLength
-                            );
-                        }
-
-                        extracted++;
-
-                        // Hash the extracted image
-                        const hash = averageHash(imageData);
-                        let bestDistance = Infinity;
-                        let isMatched = false;
-
-                        // Compare against catalog
-                        for (const [category, textures] of Object.entries(index)) {
-                            for (const tex of textures) {
-                                const catHash = BigInt(tex.hash);
-                                const distance = hammingDistance(hash, catHash);
-                                if (distance < bestDistance) {
-                                    bestDistance = distance;
-                                }
-                                if (distance <= 15) {
-                                    isMatched = true;
-                                    matched++;
-                                    break;
-                                }
-                            }
-                            if (isMatched) break;
-                        }
-
-                        // Save unmatched textures to Uncategorized
-                        if (!isMatched) {
-                            const jobName = path.basename(path.dirname(glbPath));
-                            const ext = image.mimeType === 'image/png' ? '.png' : '.jpg';
-                            const safeName = `${jobName}_texture_${extracted}${ext}`;
-                            const destPath = path.join(uncategorizedDir, safeName);
-
-                            // Avoid duplicates
-                            if (!fs.existsSync(destPath)) {
-                                await fs.promises.writeFile(destPath, imageData);
-                                saved++;
-                                console.log(`[Texture Scan] Saved: ${safeName}`);
-                            }
+                        // Avoid duplicates
+                        if (!fs.existsSync(destPath)) {
+                            await fs.promises.copyFile(srcPath, destPath);
+                            extracted++;
+                            console.log(`[Texture Scan] Extracted: ${file}`);
                         }
                     }
                 }
             } catch (e) {
-                errors.push({ file: glbPath, error: e.message });
-                console.error(`[Texture Scan] Error processing ${glbPath}: ${e.message}`);
+                errors.push({ file: daePath, error: e.message });
+                console.error(`[Texture Scan] Error processing ${daePath}: ${e.message}`);
             }
         }
 
@@ -612,10 +557,8 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
 
         res.json({
             success: true,
-            scanned: glbFiles.length,
+            scanned: daeFiles.length,
             extracted,
-            matched,
-            saved,
             errors: errors.length > 0 ? errors : undefined
         });
     } catch (e) {
@@ -693,6 +636,49 @@ async function extractTexturesFromGlb(glbPath) {
     textureHashCache = null; // Invalidate cache
 }
 
+// Extract textures from a DAE file's images folder (pre-GLB conversion)
+async function extractTexturesFromDaeImages(daeFilePath) {
+    const dir = path.dirname(daeFilePath);
+    const imagesDir = path.join(dir, 'images');
+
+    // Check if images folder exists
+    try {
+        await fs.promises.access(imagesDir);
+    } catch {
+        return; // No images folder, nothing to extract
+    }
+
+    const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
+    if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+
+    const files = await fs.promises.readdir(imagesDir);
+    let extracted = 0;
+
+    for (const file of files) {
+        const ext = path.extname(file).toLowerCase();
+        if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
+            const srcPath = path.join(imagesDir, file);
+            const destPath = path.join(uncategorizedDir, file);
+
+            // Avoid duplicates
+            if (!fs.existsSync(destPath)) {
+                try {
+                    await fs.promises.copyFile(srcPath, destPath);
+                    extracted++;
+                    console.log(`[DAE Texture] Extracted: ${file}`);
+                } catch (e) {
+                    console.error(`[DAE Texture] Error copying ${file}: ${e.message}`);
+                }
+            }
+        }
+    }
+
+    if (extracted > 0) {
+        textureHashCache = null; // Invalidate cache since new textures were added
+        console.log(`[DAE Texture] Extracted ${extracted} texture(s) from ${path.basename(daeFilePath)}`);
+    }
+}
+
 // --- CONVERSION ENGINE ---
 const conversionQueue = [];
 let isConverting = false;
@@ -744,6 +730,8 @@ async function processQueue() {
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
 
+    // Extract textures from DAE images folder before GLB conversion
+    await extractTexturesFromDaeImages(filePath);
     await cleanDae(filePath);
 
     // Security: Prepend ./ (or .\) to ensure arguments are treated as paths, not command flags
@@ -764,19 +752,7 @@ async function processQueue() {
                 }
             }
             console.log(`SUCCESS: ${roomName} is live.`);
-
-            // Auto-extract textures from newly created GLB (only if not already extracted)
-            try {
-                const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
-                const existingFiles = fs.existsSync(uncategorizedDir) ? await fs.promises.readdir(uncategorizedDir) : [];
-                const hasExtracted = existingFiles.some(f => f.startsWith(`${roomName}_texture_`));
-                
-                if (!hasExtracted) {
-                    await extractTexturesFromGlb(finalGlb);
-                }
-            } catch(e) {
-                console.error(`[Texture Extract] Error for ${roomName}: ${e.message}`);
-            }
+            // Textures are already extracted from DAE images folder before conversion
         }
         isConverting = false;
         processQueue();
@@ -881,27 +857,27 @@ if (require.main === module) {
                     console.log(`[Texture] Auto re-scanning job ${jobName} after texture organization...`);
                     try {
                         const jobDir = path.join(JOBS_DIR, jobName);
-                        const findGlbs = async (dir) => {
-                            const glbs = [];
+                        const findDaes = async (dir) => {
+                            const daes = [];
                             try {
                                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
                                 for (const entry of entries) {
                                     const fullPath = path.join(dir, entry.name);
                                     if (entry.isDirectory()) {
-                                        glbs.push(...(await findGlbs(fullPath)));
-                                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                                        glbs.push(fullPath);
+                                        daes.push(...(await findDaes(fullPath)));
+                                    } else if (entry.name.toLowerCase().endsWith('.dae')) {
+                                        daes.push(fullPath);
                                     }
                                 }
                             } catch { /* ignore */ }
-                            return glbs;
+                            return daes;
                         };
-                        const glbFiles = await findGlbs(jobDir);
-                        for (const glbPath of glbFiles) {
+                        const daeFiles = await findDaes(jobDir);
+                        for (const daePath of daeFiles) {
                             try {
-                                await extractTexturesFromGlb(glbPath);
+                                await extractTexturesFromDaeImages(daePath);
                             } catch (e) {
-                                console.error(`[Texture Rescan] Error for ${glbPath}: ${e.message}`);
+                                console.error(`[Texture Rescan] Error for ${daePath}: ${e.message}`);
                             }
                         }
                         console.log(`[Texture] Auto re-scan complete for job ${jobName}.`);
