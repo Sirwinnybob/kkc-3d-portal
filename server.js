@@ -915,7 +915,7 @@ if (require.main === module) {
                             } catch { /* ignore */ }
                             return daes;
                         };
-ython                        const daeFiles = await findDaes(jobDir);
+                        const daeFiles = await findDaes(jobDir);
                         for (const daePath of daeFiles) {
                             try {
                                 await extractTexturesFromDaeImages(daePath);
