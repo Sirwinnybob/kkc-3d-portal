@@ -264,7 +264,9 @@ function decodeJpegPixels(buffer) {
 }
 
 // Average Hash (aHash) - perceptual fingerprint with proper image decoding
-function averageHash(imageBuffer, hashSize = 8) {
+// Normalizes brightness to handle tinted images
+// Uses larger hash size for better compression artifact tolerance
+function averageHash(imageBuffer, hashSize = 16) {
     let decoded = null;
 
     // Try PNG first (most common for catalog textures)
@@ -300,13 +302,20 @@ function averageHash(imageBuffer, hashSize = 8) {
         sampled.push(srcPixels[Math.min(srcIdx, srcLen - 1)]);
     }
 
-    // Calculate average
-    const avg = sampled.reduce((a, b) => a + b, 0) / sampled.length;
+    // Normalize brightness: scale pixel values to 0-255 range
+    // This makes the hash robust to brightness/tint variations
+    const minVal = Math.min(...sampled);
+    const maxVal = Math.max(...sampled);
+    const range = maxVal - minVal || 1; // Avoid division by zero
+    const normalized = sampled.map(v => ((v - minVal) / range) * 255);
 
-    // Generate hash bits
+    // Calculate average
+    const avg = normalized.reduce((a, b) => a + b, 0) / normalized.length;
+
+    // Generate hash bits (using BigInt for larger hash sizes)
     let hash = 0n;
     for (let i = 0; i < hashSize * hashSize; i++) {
-        if (sampled[i] >= avg) hash |= (1n << BigInt(i));
+        if (normalized[i] >= avg) hash |= (1n << BigInt(i));
     }
     return hash;
 }
@@ -906,7 +915,7 @@ if (require.main === module) {
                             } catch { /* ignore */ }
                             return daes;
                         };
-                        const daeFiles = await findDaes(jobDir);
+ython                        const daeFiles = await findDaes(jobDir);
                         for (const daePath of daeFiles) {
                             try {
                                 await extractTexturesFromDaeImages(daePath);
