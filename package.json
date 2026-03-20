@@ -1,6 +1,6 @@
 {
   "name": "kkc-cabinet-portal",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Production portal for viewing 3D cabinet models",
   "main": "server.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "express-rate-limit": "^8.3.1",
     "gltf-pipeline": "^4.3.0",
     "helmet": "^8.1.0",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
