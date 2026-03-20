@@ -370,7 +370,12 @@ app.get('/api/textures/:category', async (req, res) => {
 
 // POST /api/textures/match - Match an image against the catalog
 app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res) => {
-    const { imageData, jobCode, room, materialName } = req.body;
+    let { imageData, jobCode, room, materialName } = req.body;
+
+    // Security: Strict input validation for metadata
+    if (jobCode && (typeof jobCode !== 'string' || jobCode.length > 50)) jobCode = jobCode.toString().slice(0, 50);
+    if (room && (typeof room !== 'string' || room.length > 50)) room = room.toString().slice(0, 50);
+    if (materialName && (typeof materialName !== 'string' || materialName.length > 50)) materialName = materialName.toString().slice(0, 50);
 
     if (!imageData) {
         return res.status(400).json({ success: false, error: 'No image data provided' });
