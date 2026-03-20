@@ -440,7 +440,8 @@ async function init() {
                                 material: mat,
                                 meshes: [child],
                                 hasTexture: true,
-                                originalMap: mat.map
+                                originalMap: mat.map,
+                                originalColor: mat.color.clone() // Preserve original color tint
                             });
                         }
                     }
@@ -581,6 +582,8 @@ async function init() {
                         // Update material name in UI to show matched texture name
                         if (data.bestMatch) {
                             mat.matchedName = data.bestMatch.name;
+                            // Update catalog title to show matched texture name
+                            catalogTitle.innerText = `Replace: ${mat.name} → ${data.bestMatch.name}`;
                         }
                         
                         // Show matched category textures first, then similar
@@ -671,7 +674,10 @@ async function init() {
                     // Apply to all meshes sharing this material, preserving color tint
                     matGroup.meshes.forEach(mesh => {
                         mesh.material.map = newTex;
-                        // Preserve original color tint for color-corrected textures
+                        // Explicitly restore original color tint for color-corrected textures
+                        if (matGroup.originalColor) {
+                            mesh.material.color.copy(matGroup.originalColor);
+                        }
                         mesh.material.needsUpdate = true;
                     });
                 });

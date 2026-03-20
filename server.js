@@ -375,7 +375,7 @@ app.get('/api/textures', async (req, res) => {
     try {
         const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
         const categories = entries
-            .filter(e => e.isDirectory() && e.name !== 'Uncategorized')
+            .filter(e => e.isDirectory() && e.name !== 'Uncategorized' && e.name !== 'Hidden')
             .map(e => e.name);
         res.json({ success: true, categories });
     } catch (e) {
