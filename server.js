@@ -453,11 +453,15 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
             for (const tex of textures) {
                 const catHash = BigInt(tex.hash);
                 const distance = hammingDistance(inputHash, catHash);
-                if (distance < bestDistance && !tex.hidden) {
+
+                // Track absolute best match including hidden ones
+                if (distance < bestDistance) {
                     bestDistance = distance;
                     bestMatch = { ...tex, category };
                 }
-                if (distance <= 20 && !tex.hidden) { // Threshold for "similar enough"
+
+                // Track similar non-hidden matches for the catalog view
+                if (distance <= 20 && !tex.hidden) {
                     allMatches.push({ ...tex, category, distance });
                 }
             }
@@ -468,7 +472,9 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         // If no good match found, copy to Uncategorized
         const MATCH_THRESHOLD = 15; // Stricter threshold to avoid false matches
-        if (bestDistance > MATCH_THRESHOLD) {
+        const isMatched = bestDistance <= MATCH_THRESHOLD;
+
+        if (!isMatched) {
             const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
             if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
 
@@ -480,9 +486,10 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         res.json({
             success: true,
-            matched: bestDistance <= MATCH_THRESHOLD,
-            bestMatch: bestDistance <= MATCH_THRESHOLD ? bestMatch : null,
-            bestCategory: bestMatch ? bestMatch.category : null,
+            matched: isMatched,
+            bestMatch: isMatched ? bestMatch : null,
+            bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
+            isHidden: isMatched && bestMatch && bestMatch.hidden,
             distance: bestDistance,
             similarTextures: allMatches.slice(0, 12)
         });

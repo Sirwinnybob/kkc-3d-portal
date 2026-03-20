@@ -462,8 +462,11 @@ async function init() {
             controls.update();
             updateStatus("");
 
-            // Setup texture panel after model loads
-            setupTexturePanel(jobCode, initialRoom);
+            // Setup texture panel and start matching
+            setupTexturePanel(jobCode, initialRoom).then(() => {
+                // Kick off initial matching scan
+                if (window.matchAllTextures) window.matchAllTextures();
+            });
         }, (xhr) => {
             if (xhr.lengthComputable) {
                 const p = Math.round((xhr.loaded / xhr.total) * 100);
@@ -472,7 +475,7 @@ async function init() {
         });
 
         // --- TEXTURE CATALOG PANEL ---
-        function setupTexturePanel(jobCode, room) {
+        async function setupTexturePanel(jobCode, room) {
             const textureBtn = document.getElementById('texture-btn');
             const texturePanel = document.getElementById('texture-panel');
             const closeTextureBtn = document.getElementById('close-texture-btn');
@@ -484,6 +487,7 @@ async function init() {
 
             let textureCategories = [];
             let currentCategoryTextures = [];
+            let isMatchingAll = false;
 
             // Toggle texture panel
             if (textureBtn) {
@@ -498,11 +502,50 @@ async function init() {
                 closeTextureBtn.onclick = () => texturePanel.classList.remove('show');
             }
 
+            // Internal function to match all textures on load
+            window.matchAllTextures = async () => {
+                if (isMatchingAll) return;
+                isMatchingAll = true;
+
+                const texturedMaterials = detectedMaterials.filter(m => m.hasTexture);
+                if (texturedMaterials.length === 0) {
+                    isMatchingAll = false;
+                    return;
+                }
+
+                updateStatus(`Matching ${texturedMaterials.length} textures...`);
+
+                // Match in sequence to avoid overwhelming the server
+                for (let i = 0; i < texturedMaterials.length; i++) {
+                    const mat = texturedMaterials[i];
+                    try {
+                        await matchTexture(mat, jobCode, room);
+                    } catch (e) {
+                        console.error("Match error:", e);
+                    }
+                    if (texturePanel.classList.contains('show')) renderMaterialList();
+                }
+
+                isMatchingAll = false;
+                updateStatus("");
+                if (texturePanel.classList.contains('show')) renderMaterialList();
+            };
+
             // Render material list
             function renderMaterialList() {
                 if (!materialList) return;
                 materialList.innerHTML = '';
-                detectedMaterials.forEach((mat, i) => {
+
+                // Filter: only show real textures (mat.hasTexture)
+                // and hide ones marked as hidden by the matching engine
+                const visibleMaterials = detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
+
+                if (visibleMaterials.length === 0) {
+                    materialList.innerHTML = `<div style="padding:20px; text-align:center; color:#888;">${isMatchingAll ? 'Matching textures...' : 'No customizable textures found.'}</div>`;
+                    return;
+                }
+
+                visibleMaterials.forEach((mat) => {
                     const btn = document.createElement('button');
                     btn.className = 'material-item';
 
@@ -530,12 +573,14 @@ async function init() {
                             ${previewHtml}
                             <div class="material-info">
                                 <span class="material-name">${displayName}</span>
-                                <span class="material-status">${mat.hasTexture ? 'Customizable' : 'Color Only'}</span>
+                                <span class="material-status">Customizable</span>
                             </div>
                         </div>
-                        <span class="material-badge">${mat.hasTexture ? 'Has Texture' : 'No Texture'}</span>
+                        <span class="material-badge">Has Texture</span>
                     `;
-                    btn.onclick = () => selectMaterial(i);
+                    // Find actual index in detectedMaterials for selectMaterial
+                    const originalIndex = detectedMaterials.indexOf(mat);
+                    btn.onclick = () => selectMaterial(originalIndex);
                     materialList.appendChild(btn);
                 });
                 document.getElementById('materials-view').style.display = 'block';
@@ -558,32 +603,50 @@ async function init() {
                 }
             }
 
+            // Core match function
+            async function matchTexture(mat, jobCode, room) {
+                if (!mat.hasTexture || !mat.originalMap) return null;
+
+                // Extract texture image data
+                const img = mat.originalMap.image;
+                if (!img) return null;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.min(img.width || 256, 256);
+                canvas.height = Math.min(img.height || 256, 256);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                const resp = await fetch('/api/textures/match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageData, jobCode, room, materialName: mat.name })
+                });
+                const data = await resp.json();
+
+                if (data.success && data.matched) {
+                    mat.matchedName = data.bestMatch ? data.bestMatch.name : null;
+                    mat.bestCategory = data.bestCategory;
+                    mat.similarTextures = data.similarTextures;
+                    mat.isHidden = !!data.isHidden;
+                } else {
+                    mat.matchedName = null;
+                    mat.isHidden = false;
+                }
+                return data;
+            }
+
             // Match texture and show catalog
             async function matchAndShowCatalog(mat, jobCode, room) {
                 updateStatus("Matching texture...");
                 try {
-                    // Extract texture image data
-                    const img = mat.originalMap.image;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = Math.min(img.width || 256, 256);
-                    canvas.height = Math.min(img.height || 256, 256);
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                    const data = await matchTexture(mat, jobCode, room);
 
-                    const resp = await fetch('/api/textures/match', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ imageData, jobCode, room, materialName: mat.name })
-                    });
-                    const data = await resp.json();
-
-                    if (data.success && data.matched && data.bestCategory) {
-                        // Update material name in UI to show matched texture name
-                        if (data.bestMatch) {
-                            mat.matchedName = data.bestMatch.name;
-                            // Update catalog title to show matched texture name
-                            catalogTitle.innerText = `Replace: ${mat.name} → ${data.bestMatch.name}`;
+                    if (data && data.success && data.matched && data.bestCategory) {
+                        // Update catalog title to show matched texture name
+                        if (mat.matchedName) {
+                            catalogTitle.innerText = `Replace: ${mat.name} → ${mat.matchedName}`;
                         }
                         
                         // Show matched category textures first, then similar
