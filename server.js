@@ -292,11 +292,13 @@ async function buildTextureHashIndex() {
             if (entry.isDirectory() && entry.name !== 'Uncategorized') {
                 const categoryPath = path.join(TEXTURES_DIR, entry.name);
                 const isHidden = entry.name === 'Hidden';
-                const files = await fs.promises.readdir(categoryPath);
+                const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
                 index[entry.name] = [];
 
-                for (const file of files) {
-                    // Skip Thumbs.db and system files
+                // 1. Process main textures first
+                for (const item of items) {
+                    if (item.isDirectory()) continue;
+                    const file = item.name;
                     if (file === 'Thumbs.db' || file.startsWith('.')) continue;
                     const ext = path.extname(file).toLowerCase();
                     if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
@@ -313,6 +315,45 @@ async function buildTextureHashIndex() {
                             });
                         } catch (e) {
                             console.error(`[Texture] Hash error for ${file}: ${e.message}`);
+                        }
+                    }
+                }
+
+                // 2. Process variant hashes in the 'hashes/' sub-folder
+                const hashFolderPath = path.join(categoryPath, 'hashes');
+                if (fs.existsSync(hashFolderPath)) {
+                    const variantFiles = await fs.promises.readdir(hashFolderPath);
+                    for (const file of variantFiles) {
+                        if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+                        const ext = path.extname(file).toLowerCase();
+                        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+                            try {
+                                const filePath = path.join(hashFolderPath, file);
+                                const buffer = await fs.promises.readFile(filePath);
+                                const hash = await computePhash(buffer);
+
+                                // Identify canonical texture by stripping "_N" suffix (e.g., "Wild Cherry_1.jpg" -> "Wild Cherry")
+                                let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
+
+                                // Find the canonical entry in the index (must match name exactly)
+                                const canonical = index[entry.name].find(t => t.name === canonicalName);
+
+                                if (canonical) {
+                                    index[entry.name].push({
+                                        name: canonical.name, // Return canonical name
+                                        file: canonical.file, // Return canonical file
+                                        url: canonical.url,   // Return canonical URL
+                                        hidden: canonical.hidden,
+                                        hash: hash.toString(),
+                                        isVariant: true,
+                                        variantFile: file
+                                    });
+                                } else {
+                                    console.warn(`[Texture] Variant ${file} found but no canonical texture '${canonicalName}' exists in ${entry.name}.`);
+                                }
+                            } catch (e) {
+                                console.error(`[Texture] Variant hash error for ${file}: ${e.message}`);
+                            }
                         }
                     }
                 }
@@ -435,7 +476,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         res.json({
             success: true,
-            matched: isMatched,
+            matched: !!isMatched,
             bestMatch: isMatched ? bestMatch : null,
             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
             isHidden: isMatched && bestMatch && bestMatch.hidden,
