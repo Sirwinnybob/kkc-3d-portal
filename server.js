@@ -540,7 +540,8 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
 
                         // Avoid duplicates
                         if (!fs.existsSync(destPath)) {
-                            await fs.promises.copyFile(srcPath, destPath);
+                            const buffer = await fs.promises.readFile(srcPath);
+                            await fs.promises.writeFile(destPath, buffer);
                             extracted++;
                             console.log(`[Texture Scan] Extracted: ${file}`);
                         }
@@ -682,7 +683,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
                 }
 
                 if (!isMatched) {
-                    await fs.promises.copyFile(srcPath, destPath);
+                    await fs.promises.writeFile(destPath, buffer);
                     extracted++;
                     console.log(`[DAE Texture] Extracted (unmatched): ${file}`);
                 } else {
