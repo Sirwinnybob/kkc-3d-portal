@@ -354,6 +354,8 @@ async function buildTextureHashIndex() {
                 index[entry.name] = [];
 
                 for (const file of files) {
+                    // Skip Thumbs.db and system files
+                    if (file === 'Thumbs.db' || file.startsWith('.')) continue;
                     const ext = path.extname(file).toLowerCase();
                     if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
                         try {
@@ -533,6 +535,8 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
 
                 const files = await fs.promises.readdir(imagesDir);
                 for (const file of files) {
+                    // Skip Thumbs.db and system files
+                    if (file === 'Thumbs.db' || file.startsWith('.')) continue;
                     const ext = path.extname(file).toLowerCase();
                     if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
                         const srcPath = path.join(imagesDir, file);
@@ -540,8 +544,7 @@ app.post('/api/textures/scan-jobs', async (req, res) => {
 
                         // Avoid duplicates
                         if (!fs.existsSync(destPath)) {
-                            const buffer = await fs.promises.readFile(srcPath);
-                            await fs.promises.writeFile(destPath, buffer);
+                            await fs.promises.copyFile(srcPath, destPath);
                             extracted++;
                             console.log(`[Texture Scan] Extracted: ${file}`);
                         }
@@ -657,6 +660,8 @@ async function extractTexturesFromDaeImages(daeFilePath) {
     let extracted = 0;
 
     for (const file of files) {
+        // Skip Thumbs.db and system files
+        if (file === 'Thumbs.db' || file.startsWith('.')) continue;
         const ext = path.extname(file).toLowerCase();
         if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
             const srcPath = path.join(imagesDir, file);
