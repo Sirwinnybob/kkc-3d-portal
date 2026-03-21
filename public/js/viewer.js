@@ -17,7 +17,7 @@ let loadedModel = null;
 const SETTINGS = {
     exposure:      1.75,
     saturation:    0.65,
-    contrast:      1.55,
+    contrast:      1.25,
     lightIntensity: 1.0,
     gloss:         0.10,
     colorTemp:     0.5
@@ -52,6 +52,8 @@ const KKCShader = {
             float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
             color = mix(vec3(luma), color, uSaturation);
             
+            // Shadow lift: prevents dark textures from crushing to black at steep angles
+            color = color * 0.92 + 0.08;
             // Smooth Contrast Curve
             color = smoothstep(0.5 - (0.5 / uContrast), 0.5 + (0.5 / uContrast), color);
             
@@ -191,16 +193,18 @@ async function init() {
         makeCamLight(li * 0.5,  1,  1,  1);
 
         // World-space fill lights — fixed in scene so all angles stay lit
+        // Lights are angled more horizontally (2:1 ratio) to reduce over-brightening
+        // of upward-facing horizontal surfaces vs vertical surfaces
         const makeSceneLight = (intensity, px, py, pz) => {
             const light = new THREE.DirectionalLight(0xffffff, intensity);
             light.position.set(px, py, pz);
             scene.add(light);
         };
-        makeSceneLight(li * 0.3,  1,  1,  0);
-        makeSceneLight(li * 0.3, -1,  1,  0);
-        makeSceneLight(li * 0.3,  0,  1,  1);
-        makeSceneLight(li * 0.3,  0,  1, -1);
-        makeSceneLight(li * 0.2,  0, -1,  0); // under-fill
+        makeSceneLight(li * 0.22,  2,  1,  0);
+        makeSceneLight(li * 0.22, -2,  1,  0);
+        makeSceneLight(li * 0.22,  0,  1,  2);
+        makeSceneLight(li * 0.22,  0,  1, -2);
+        makeSceneLight(li * 0.2,   0, -1,  0); // under-fill
 
         // --- POST-PROCESSING ---
         composer = new EffectComposer(renderer);
@@ -495,6 +499,15 @@ async function init() {
             let currentCategoryTextures = [];
             let isMatchingAll = false;
 
+            // Insert a "Browse All Categories" button at the top of the texture grid
+            function insertBrowseButton() {
+                const browseBtn = document.createElement('button');
+                browseBtn.className = 'browse-all-categories-btn';
+                browseBtn.innerText = '\u2190 Browse All Categories';
+                browseBtn.onclick = () => showAllCategories();
+                textureGrid.insertBefore(browseBtn, textureGrid.firstChild);
+            }
+
             // Toggle texture panel
             if (textureBtn) {
                 textureBtn.onclick = () => {
@@ -629,10 +642,18 @@ async function init() {
                 const mat = detectedMaterials[index];
                 document.getElementById('materials-view').style.display = 'none';
                 document.getElementById('catalog-view').style.display = 'block';
-                catalogTitle.innerText = `Replace: ${mat.name}`;
+                catalogTitle.innerText = `Replace: ${mat.matchedName || mat.name}`;
 
-                // Try to match texture
-                if (mat.hasTexture && mat.originalMap) {
+                // If manifest already gave us a category, use it directly (no API call)
+                if (mat.bestCategory) {
+                    await loadCategoryTextures(mat.bestCategory);
+                    if (mat.similarTextures && mat.similarTextures.length > 0) {
+                        const uniqueSimilar = mat.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
+                        currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
+                        renderTextureGrid();
+                        insertBrowseButton();
+                    }
+                } else if (mat.hasTexture && mat.originalMap) {
                     await matchAndShowCatalog(mat, jobCode, room);
                 } else {
                     await showAllCategories();
@@ -682,21 +703,18 @@ async function init() {
                     if (data && data.success && data.matched && data.bestCategory) {
                         // Update catalog title to show matched texture name
                         if (mat.matchedName) {
-                            catalogTitle.innerText = `Replace: ${mat.name} → ${mat.matchedName}`;
+                            catalogTitle.innerText = `Replace: ${mat.matchedName}`;
                         }
-                        
+
                         // Show matched category textures first, then similar
                         await loadCategoryTextures(data.bestCategory);
                         if (data.similarTextures && data.similarTextures.length > 0) {
-                            // Prepend similar matches at top
-                            const similarUrls = data.similarTextures.map(t => t.url);
-                            const uniqueSimilar = similarUrls.filter(u => !currentCategoryTextures.some(ct => ct.url === u));
-                            currentCategoryTextures = [
-                                ...uniqueSimilar.map(u => ({ name: 'Similar Match', url: u })),
-                                ...currentCategoryTextures
-                            ];
+                            // Prepend similar matches at top (preserve their real names)
+                            const uniqueSimilar = data.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
+                            currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
                         }
                         renderTextureGrid();
+                        insertBrowseButton();
                     } else {
                         // No match — show all categories
                         await showAllCategories();
@@ -740,12 +758,7 @@ async function init() {
                         currentCategoryTextures = data.textures;
                         catalogTitle.innerText = category;
                         renderTextureGrid();
-                        // Insert "Browse All Categories" button at top of grid
-                        const browseBtn = document.createElement('button');
-                        browseBtn.className = 'browse-all-categories-btn';
-                        browseBtn.innerText = '\u2190 Browse All Categories';
-                        browseBtn.onclick = () => showAllCategories();
-                        textureGrid.insertBefore(browseBtn, textureGrid.firstChild);
+                        insertBrowseButton();
                     }
                 } catch (e) {
                     console.error("Failed to load textures:", e);
@@ -761,13 +774,13 @@ async function init() {
                     btn.className = 'texture-thumb';
                     btn.setAttribute('aria-label', `Select texture ${tex.name}`);
                     btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
-                    btn.onclick = () => previewTexture(tex.url);
+                    btn.onclick = () => previewTexture(tex.url, tex.name);
                     textureGrid.appendChild(btn);
                 });
             }
 
             // Preview texture on selected material (applies to all meshes in group)
-            function previewTexture(url) {
+            function previewTexture(url, name) {
                 if (selectedMaterialIndex < 0) return;
                 const matGroup = detectedMaterials[selectedMaterialIndex];
                 const texLoader = new THREE.TextureLoader();
@@ -784,6 +797,8 @@ async function init() {
                         mesh.material.color.set(0xffffff);
                         mesh.material.needsUpdate = true;
                     });
+                    // Update the displayed name so the material list reflects the new texture
+                    if (name) matGroup.matchedName = name;
                 });
             }
 

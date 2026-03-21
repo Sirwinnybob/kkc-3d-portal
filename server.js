@@ -13,7 +13,7 @@ const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.1.0";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -1001,26 +1001,22 @@ if (require.main === module) {
         };
         scan(JOBS_DIR);
 
-        // Generate texture manifests for existing GLBs that don't have one
-        const generateMissingManifests = async (dir) => {
+        // Regenerate all texture manifests on startup to ensure hidden/matched data is current
+        const generateAllManifests = async (dir) => {
             try {
                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
                 for (const entry of entries) {
                     const fullPath = path.join(dir, entry.name);
                     if (entry.isDirectory()) {
-                        await generateMissingManifests(fullPath);
+                        await generateAllManifests(fullPath);
                     } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                        const manifestPath = fullPath.replace(/\.glb$/i, '.textures.json');
-                        const hasManifest = await fs.promises.access(manifestPath).then(() => true).catch(() => false);
-                        if (!hasManifest) {
-                            await generateTextureManifest(fullPath);
-                        }
+                        await generateTextureManifest(fullPath);
                     }
                 }
             } catch { /* ignore */ }
         };
         // Run after a short delay so DAE conversions start first
-        setTimeout(() => generateMissingManifests(JOBS_DIR), 5000);
+        setTimeout(() => generateAllManifests(JOBS_DIR), 5000);
     });
 
     chokidar.watch(JOBS_DIR, {
