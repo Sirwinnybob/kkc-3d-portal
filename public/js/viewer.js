@@ -15,7 +15,7 @@ let selectedMaterialIndex = -1;
 let loadedModel = null;
 
 // Bridge populated by setupTexturePanel so handleSingleTap (init scope) can open the picker
-const quickPicker = { open: null, close: null };
+const quickPicker = { open: null, close: null, paintTap: null };
 
 const SETTINGS = {
     exposure:      1.15,
@@ -294,6 +294,12 @@ async function init() {
 
         // --- SINGLE TAP: open texture picker for the tapped surface ---
         function handleSingleTap(clientX, clientY) {
+            // If in paint mode, apply last texture to newly tapped surface
+            if (quickPicker.paintTap) {
+                quickPicker.paintTap(clientX, clientY);
+                return;
+            }
+
             // Don't open picker if any overlay is already visible
             if (document.getElementById('quick-picker').classList.contains('show')) return;
             if (document.getElementById('tap-replace-sheet').classList.contains('show')) return;
@@ -314,6 +320,28 @@ async function init() {
             if (!detectedMaterials[matGroupIndex].hasTexture) return;
 
             if (quickPicker.open) quickPicker.open(matGroupIndex, tappedMesh);
+        }
+
+        // --- SURFACE HIGHLIGHT ---
+        let highlightedMesh = null;
+        let highlightOriginalEmissive = null;
+
+        function highlightMesh(mesh) {
+            clearMeshHighlight();
+            if (!mesh || !mesh.material) return;
+            highlightedMesh = mesh;
+            highlightOriginalEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : null;
+            mesh.material.emissive = new THREE.Color(0x3b82f6);
+            mesh.material.emissiveIntensity = 0.15;
+        }
+
+        function clearMeshHighlight() {
+            if (highlightedMesh && highlightedMesh.material) {
+                highlightedMesh.material.emissive = highlightOriginalEmissive || new THREE.Color(0x000000);
+                highlightedMesh.material.emissiveIntensity = 0;
+            }
+            highlightedMesh = null;
+            highlightOriginalEmissive = null;
         }
 
         // --- ZOOM JOYSTICK ---
@@ -901,15 +929,19 @@ async function init() {
             const qpTexturesView   = document.getElementById('qp-textures-view');
             const qpTextureStrip   = document.getElementById('qp-texture-strip');
 
-            let qpMatGroupIndex  = -1;
-            let qpTappedMesh     = null;
-            let qpReplaceAll     = true;
-            let qpCurrentTextures = [];
+            let qpMatGroupIndex    = -1;
+            let qpTappedMesh       = null;
+            let qpReplaceAll       = true;
+            let qpCurrentTextures  = [];
+            let qpPaintMode        = false;
+            let qpLastTextureUrl   = null;
+            let qpLastTextureName  = null;
 
             // ---- Replace-mode sheet ----
             function openReplaceSheet(matGroupIndex, mesh) {
                 qpMatGroupIndex = matGroupIndex;
                 qpTappedMesh    = mesh;
+                highlightMesh(mesh);
                 const mat   = detectedMaterials[matGroupIndex];
                 const label = mat.matchedName || mat.name;
 
@@ -934,6 +966,7 @@ async function init() {
             });
             tapReplaceOneBtn.addEventListener('click', () => {
                 qpReplaceAll = false;
+                qpPaintMode  = true;
                 closeReplaceSheet();
                 openQuickPicker();
             });
@@ -945,16 +978,28 @@ async function init() {
                 if (qpMatGroupIndex < 0) return;
                 const mat = detectedMaterials[qpMatGroupIndex];
                 qpTitle.textContent = mat.matchedName || mat.name;
-                showQpCategoriesView();
-                await loadQpCategories(mat);
+
+                if (mat.bestCategory) {
+                    // Go directly to matched category's texture strip
+                    showQpTexturesView();
+                    await loadQpCategoryTextures(mat.bestCategory, mat);
+                } else {
+                    showQpCategoriesView();
+                    await loadQpCategories(mat);
+                }
                 qpEl.classList.add('show');
             }
 
             function closeQuickPicker() {
                 qpEl.classList.remove('show');
-                qpMatGroupIndex  = -1;
-                qpTappedMesh     = null;
-                qpCurrentTextures = [];
+                qpMatGroupIndex    = -1;
+                qpTappedMesh       = null;
+                qpCurrentTextures  = [];
+                qpPaintMode        = false;
+                qpLastTextureUrl   = null;
+                qpLastTextureName  = null;
+                quickPicker.paintTap = null;
+                clearMeshHighlight();
             }
 
             qpClose.addEventListener('click', closeQuickPicker);
@@ -1076,6 +1121,48 @@ async function init() {
                     qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(btn => {
                         btn.classList.toggle('active', btn.querySelector('span')?.textContent === name);
                     });
+
+                    // Store for paint mode
+                    qpLastTextureUrl  = url;
+                    qpLastTextureName = name;
+
+                    // Enable paint mode bridge after first texture is selected
+                    if (qpPaintMode) quickPicker.paintTap = paintTap;
+                });
+            }
+
+            // ---- Paint mode: apply last texture to newly tapped surfaces ----
+            function paintTap(clientX, clientY) {
+                if (!qpPaintMode || !qpLastTextureUrl) return;
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2(
+                    (clientX / window.innerWidth) * 2 - 1,
+                    -(clientY / window.innerHeight) * 2 + 1
+                );
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                if (!intersects.length) return;
+
+                const mesh = intersects[0].object;
+                const idx = detectedMaterials.findIndex(g => g.meshes.includes(mesh));
+                if (idx < 0 || !detectedMaterials[idx].hasTexture) return;
+
+                // Update highlight to new surface
+                clearMeshHighlight();
+                qpTappedMesh = mesh;
+                highlightMesh(mesh);
+
+                // Apply last selected texture
+                const texLoader = new THREE.TextureLoader();
+                texLoader.load(qpLastTextureUrl, (tex) => {
+                    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                    tex.minFilter  = THREE.LinearMipmapLinearFilter;
+                    tex.magFilter  = THREE.LinearFilter;
+                    tex.wrapS      = THREE.RepeatWrapping;
+                    tex.wrapT      = THREE.RepeatWrapping;
+                    mesh.material.map = tex;
+                    mesh.material.color.set(0xffffff);
+                    mesh.material.needsUpdate = true;
                 });
             }
 

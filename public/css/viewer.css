@@ -612,9 +612,9 @@ body {
     position: relative;
     width: 100%;
     max-width: 540px;
-    background: rgba(12,12,18,0.93);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(12,12,18,0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid rgba(255,255,255,0.08);
     border-radius: 20px 20px 0 0;
     padding: 24px 20px 40px;
@@ -703,9 +703,9 @@ body {
     left: 0;
     right: 0;
     z-index: 1800;
-    background: rgba(12,12,18,0.93);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(12,12,18,0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid rgba(255,255,255,0.08);
     border-radius: 20px 20px 0 0;
     transform: translateY(100%);
@@ -724,6 +724,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px 10px;
+    background: rgba(0,0,0,0.25);
     border-bottom: 1px solid rgba(255,255,255,0.07);
     flex-shrink: 0;
     gap: 8px;
@@ -880,8 +881,9 @@ body {
 }
 
 .qp-tex-item span {
-    color: rgba(255,255,255,0.65);
+    color: rgba(255,255,255,0.75);
     font-size: 0.67em;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
     text-align: center;
     max-width: 80px;
     overflow: hidden;
