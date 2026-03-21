@@ -287,29 +287,54 @@ async function computePhash(imageBuffer) {
     }
 }
 
+// Cache for DCT coefficients to avoid re-calculating Math.cos and Math.sqrt
+const dctCache = new Map();
+
 /**
  * 2D Discrete Cosine Transform (DCT-II)
- * Optimized for small N (e.g., 32)
+ * Optimized using separability and pre-calculated coefficients.
+ * Complexity: O(N^3) instead of O(N^4)
  */
 function performDCT(pixels, N) {
-    const dct = new Float64Array(N * N);
-    const c = new Float64Array(N);
-    for (let i = 1; i < N; i++) c[i] = Math.sqrt(2.0 / N);
-    c[0] = Math.sqrt(1.0 / N);
+    if (!dctCache.has(N)) {
+        const cosMatrix = new Float64Array(N * N);
+        for (let u = 0; u < N; u++) {
+            for (let x = 0; x < N; x++) {
+                cosMatrix[u * N + x] = Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N));
+            }
+        }
+        const c = new Float64Array(N);
+        for (let i = 1; i < N; i++) c[i] = Math.sqrt(2.0 / N);
+        c[0] = Math.sqrt(1.0 / N);
+        dctCache.set(N, { cosMatrix, c });
+    }
 
-    for (let u = 0; u < N; u++) {
+    const { cosMatrix, c } = dctCache.get(N);
+    const dct = new Float64Array(N * N);
+    const temp = new Float64Array(N * N);
+
+    // Row DCT: temp[x][v] = sum_y (pixels[x][y] * cos(v, y)) * c[v]
+    for (let x = 0; x < N; x++) {
         for (let v = 0; v < N; v++) {
             let sum = 0;
-            for (let x = 0; x < N; x++) {
-                for (let y = 0; y < N; y++) {
-                    sum += pixels[x * N + y] *
-                           Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N)) *
-                           Math.cos(((2 * y + 1) * v * Math.PI) / (2 * N));
-                }
+            for (let y = 0; y < N; y++) {
+                sum += pixels[x * N + y] * cosMatrix[v * N + y];
             }
-            dct[u * N + v] = c[u] * c[v] * sum;
+            temp[x * N + v] = sum * c[v];
         }
     }
+
+    // Column DCT: dct[u][v] = sum_x (temp[x][v] * cos(u, x)) * c[u]
+    for (let v = 0; v < N; v++) {
+        for (let u = 0; u < N; u++) {
+            let sum = 0;
+            for (let x = 0; x < N; x++) {
+                sum += temp[x * N + v] * cosMatrix[u * N + x];
+            }
+            dct[u * N + v] = sum * c[u];
+        }
+    }
+
     return dct;
 }
 
