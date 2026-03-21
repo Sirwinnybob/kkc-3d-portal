@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
 const gltfPipeline = require('gltf-pipeline');
+const sharp = require('sharp');
 
 const app = express();
 const APP_VERSION = "2.0.0";
@@ -236,148 +237,80 @@ let textureHashCache = null;
 let textureHashCacheTime = 0;
 const HASH_CACHE_TTL = 60000; // 1 minute
 
-// Simple PNG decoder for hash computation (handles most catalog textures)
-function decodePngPixels(buffer) {
-    // Check PNG signature
-    if (buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4E || buffer[3] !== 0x47) {
-        return null; // Not a PNG
-    }
-
-    let offset = 8; // Skip signature
-    let width = 0, height = 0, bitDepth = 0, colorType = 0;
-    let compressedData = Buffer.alloc(0);
-
-    while (offset < buffer.length) {
-        const length = buffer.readUInt32BE(offset);
-        const type = buffer.toString('ascii', offset + 4, offset + 8);
-
-        if (type === 'IHDR') {
-            width = buffer.readUInt32BE(offset + 8);
-            height = buffer.readUInt32BE(offset + 12);
-            bitDepth = buffer[offset + 16];
-            colorType = buffer[offset + 17];
-        } else if (type === 'IDAT') {
-            compressedData = Buffer.concat([compressedData, buffer.subarray(offset + 8, offset + 8 + length)]);
-        } else if (type === 'IEND') {
-            break;
-        }
-        offset += 12 + length;
-    }
-
-    if (width === 0 || height === 0) return null;
-
-    // Decompress using Node.js zlib
+/**
+ * Perceptual Hash (pHash) using Discrete Cosine Transform (DCT)
+ * Implementation matches logic common in imagehash libraries (32x32 -> 8x8)
+ * Using 'sharp' for robust image decoding and normalization.
+ */
+async function computePhash(imageBuffer) {
     try {
-        const zlib = require('zlib');
-        const rawData = zlib.inflateSync(compressedData);
+        // Resize to 32x32, grayscale, and normalize (auto-level) to handle 'washed out' images
+        const { data, info } = await sharp(imageBuffer)
+            .resize(32, 32, { fit: 'fill' })
+            .grayscale()
+            .normalize()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
 
-        const pixels = [];
-        const bpp = colorType === 2 ? 3 : colorType === 6 ? 4 : 1; // RGB or RGBA or grayscale
-        const stride = width * bpp + 1; // +1 for filter byte
+        const pixels = new Float64Array(32 * 32);
+        for (let i = 0; i < 32 * 32; i++) pixels[i] = data[i];
 
-        for (let y = 0; y < height; y++) {
-            const filterType = rawData[y * stride];
-            for (let x = 0; x < width; x++) {
-                const idx = y * stride + 1 + x * bpp;
-                let r = rawData[idx] || 0;
-                let g = bpp > 1 ? rawData[idx + 1] || 0 : r;
-                let b = bpp > 2 ? rawData[idx + 2] || 0 : r;
+        // 2D Discrete Cosine Transform (DCT)
+        const dct = performDCT(pixels, 32);
 
-                // Simple filter reversal (sub filter)
-                if (filterType === 1 && x > 0) {
-                    const prevIdx = y * stride + 1 + (x - 1) * bpp;
-                    r = (r + rawData[prevIdx]) & 0xFF;
-                    g = bpp > 1 ? (g + rawData[prevIdx + 1]) & 0xFF : r;
-                    b = bpp > 2 ? (b + rawData[prevIdx + 2]) & 0xFF : r;
+        // Extract the top-left 8x8 coefficients (excluding DC at [0,0])
+        const subMatrix = [];
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                if (x === 0 && y === 0) continue;
+                subMatrix.push(dct[y * 32 + x]);
+            }
+        }
+
+        // Calculate median of coefficients
+        const sorted = [...subMatrix].sort((a, b) => a - b);
+        const median = sorted.length % 2 === 0
+            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+            : sorted[Math.floor(sorted.length / 2)];
+
+        // Generate 64-bit BigInt hash
+        let hash = 0n;
+        for (let i = 0; i < subMatrix.length; i++) {
+            if (subMatrix[i] > median) {
+                hash |= (1n << BigInt(i));
+            }
+        }
+        return hash;
+    } catch (e) {
+        console.error(`[pHash] Computation error: ${e.message}`);
+        return 0n;
+    }
+}
+
+/**
+ * 2D Discrete Cosine Transform (DCT-II)
+ * Optimized for small N (e.g., 32)
+ */
+function performDCT(pixels, N) {
+    const dct = new Float64Array(N * N);
+    const c = new Float64Array(N);
+    for (let i = 1; i < N; i++) c[i] = Math.sqrt(2.0 / N);
+    c[0] = Math.sqrt(1.0 / N);
+
+    for (let u = 0; u < N; u++) {
+        for (let v = 0; v < N; v++) {
+            let sum = 0;
+            for (let x = 0; x < N; x++) {
+                for (let y = 0; y < N; y++) {
+                    sum += pixels[x * N + y] *
+                           Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N)) *
+                           Math.cos(((2 * y + 1) * v * Math.PI) / (2 * N));
                 }
-
-                pixels.push(0.299 * r + 0.587 * g + 0.114 * b);
             }
+            dct[u * N + v] = c[u] * c[v] * sum;
         }
-        return { pixels, width, height };
-    } catch {
-        return null;
     }
-}
-
-// Simple JPEG decoder fallback - extract approximate pixels from JPEG
-function decodeJpegPixels(buffer) {
-    // Very basic JPEG: scan for SOS marker and extract approximate pixel data
-    // This is a simplified approach - finds pixel-like data in the compressed stream
-    const pixels = [];
-    // Skip JPEG header bytes and sample data regions
-    const startOffset = Math.min(20, buffer.length); // Skip header
-    const dataRegion = buffer.length - startOffset - 2; // Skip end marker
-    const sampleCount = 64; // 8x8 hash
-    const step = Math.max(1, Math.floor(dataRegion / sampleCount));
-
-    for (let i = 0; i < sampleCount && (startOffset + i * step) < buffer.length - 2; i++) {
-        const pos = startOffset + i * step;
-        const r = buffer[pos] || 0;
-        const g = buffer[pos + 1] || r;
-        const b = buffer[pos + 2] || r;
-        pixels.push(0.299 * r + 0.587 * g + 0.114 * b);
-    }
-
-    while (pixels.length < sampleCount) pixels.push(0);
-    return { pixels, width: 8, height: 8 };
-}
-
-// Average Hash (aHash) - perceptual fingerprint with proper image decoding
-// Normalizes brightness to handle tinted images
-// Uses larger hash size for better compression artifact tolerance
-function averageHash(imageBuffer, hashSize = 16) {
-    let decoded = null;
-
-    // Try PNG first (most common for catalog textures)
-    if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
-        decoded = decodePngPixels(imageBuffer);
-    }
-
-    // Fallback to JPEG approximation
-    if (!decoded && imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
-        decoded = decodeJpegPixels(imageBuffer);
-    }
-
-    // Final fallback: raw byte sampling
-    if (!decoded) {
-        const pixels = [];
-        const len = imageBuffer.length;
-        const step = Math.max(1, Math.floor(len / (hashSize * hashSize * 3)));
-        for (let i = 0; i < len && pixels.length < hashSize * hashSize; i += step) {
-            if (i + 2 < len) {
-                pixels.push(0.299 * (imageBuffer[i] || 0) + 0.587 * (imageBuffer[i + 1] || 0) + 0.114 * (imageBuffer[i + 2] || 0));
-            }
-        }
-        while (pixels.length < hashSize * hashSize) pixels.push(0);
-        decoded = { pixels };
-    }
-
-    // Resize to hashSize x hashSize using nearest neighbor
-    const srcPixels = decoded.pixels;
-    const srcLen = srcPixels.length;
-    const sampled = [];
-    for (let i = 0; i < hashSize * hashSize; i++) {
-        const srcIdx = Math.floor((i / (hashSize * hashSize)) * srcLen);
-        sampled.push(srcPixels[Math.min(srcIdx, srcLen - 1)]);
-    }
-
-    // Normalize brightness: scale pixel values to 0-255 range
-    // This makes the hash robust to brightness/tint variations
-    const minVal = Math.min(...sampled);
-    const maxVal = Math.max(...sampled);
-    const range = maxVal - minVal || 1; // Avoid division by zero
-    const normalized = sampled.map(v => ((v - minVal) / range) * 255);
-
-    // Calculate average
-    const avg = normalized.reduce((a, b) => a + b, 0) / normalized.length;
-
-    // Generate hash bits (using BigInt for larger hash sizes)
-    let hash = 0n;
-    for (let i = 0; i < hashSize * hashSize; i++) {
-        if (normalized[i] >= avg) hash |= (1n << BigInt(i));
-    }
-    return hash;
+    return dct;
 }
 
 // Hamming distance between two hashes
@@ -419,18 +352,20 @@ async function buildTextureHashIndex() {
             if (entry.isDirectory() && entry.name !== 'Uncategorized') {
                 const categoryPath = path.join(TEXTURES_DIR, entry.name);
                 const isHidden = entry.name === 'Hidden';
-                const files = await fs.promises.readdir(categoryPath);
+                const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
                 index[entry.name] = [];
 
-                for (const file of files) {
-                    // Skip Thumbs.db and system files
+                // 1. Process main textures first
+                for (const item of items) {
+                    if (item.isDirectory()) continue;
+                    const file = item.name;
                     if (file === 'Thumbs.db' || file.startsWith('.')) continue;
                     const ext = path.extname(file).toLowerCase();
                     if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
                         try {
                             const filePath = path.join(categoryPath, file);
                             const buffer = await fs.promises.readFile(filePath);
-                            const hash = averageHash(buffer);
+                            const hash = await computePhash(buffer);
                             index[entry.name].push({
                                 name: path.basename(file, ext),
                                 file: file,
@@ -440,6 +375,45 @@ async function buildTextureHashIndex() {
                             });
                         } catch (e) {
                             console.error(`[Texture] Hash error for ${file}: ${e.message}`);
+                        }
+                    }
+                }
+
+                // 2. Process variant hashes in the 'hashes/' sub-folder
+                const hashFolderPath = path.join(categoryPath, 'hashes');
+                if (fs.existsSync(hashFolderPath)) {
+                    const variantFiles = await fs.promises.readdir(hashFolderPath);
+                    for (const file of variantFiles) {
+                        if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+                        const ext = path.extname(file).toLowerCase();
+                        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+                            try {
+                                const filePath = path.join(hashFolderPath, file);
+                                const buffer = await fs.promises.readFile(filePath);
+                                const hash = await computePhash(buffer);
+
+                                // Identify canonical texture by stripping "_N" suffix (e.g., "Wild Cherry_1.jpg" -> "Wild Cherry")
+                                let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
+
+                                // Find the canonical entry in the index (must match name exactly)
+                                const canonical = index[entry.name].find(t => t.name === canonicalName);
+
+                                if (canonical) {
+                                    index[entry.name].push({
+                                        name: canonical.name, // Return canonical name
+                                        file: canonical.file, // Return canonical file
+                                        url: canonical.url,   // Return canonical URL
+                                        hidden: canonical.hidden,
+                                        hash: hash.toString(),
+                                        isVariant: true,
+                                        variantFile: file
+                                    });
+                                } else {
+                                    console.warn(`[Texture] Variant ${file} found but no canonical texture '${canonicalName}' exists in ${entry.name}.`);
+                                }
+                            } catch (e) {
+                                console.error(`[Texture] Variant hash error for ${file}: ${e.message}`);
+                            }
                         }
                     }
                 }
@@ -497,7 +471,12 @@ app.get('/api/textures/:category', async (req, res) => {
 
 // POST /api/textures/match - Match an image against the catalog
 app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res) => {
-    const { imageData, jobCode, room, materialName } = req.body;
+    let { imageData, jobCode, room, materialName } = req.body;
+
+    // Security: Strict input validation for metadata
+    if (jobCode && (typeof jobCode !== 'string' || jobCode.length > 50)) jobCode = jobCode.toString().slice(0, 50);
+    if (room && (typeof room !== 'string' || room.length > 50)) room = room.toString().slice(0, 50);
+    if (materialName && (typeof materialName !== 'string' || materialName.length > 50)) materialName = materialName.toString().slice(0, 50);
 
     if (!imageData) {
         return res.status(400).json({ success: false, error: 'No image data provided' });
@@ -509,7 +488,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         const imageBuffer = Buffer.from(base64Data, 'base64');
 
         // Compute hash for the input image
-        const inputHash = averageHash(imageBuffer);
+        const inputHash = await computePhash(imageBuffer);
         const inputHashStr = inputHash.toString();
 
         // Build/load hash index
@@ -557,7 +536,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         res.json({
             success: true,
-            matched: isMatched,
+            matched: !!isMatched,
             bestMatch: isMatched ? bestMatch : null,
             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
             isHidden: isMatched && bestMatch && bestMatch.hidden,
@@ -686,7 +665,7 @@ async function extractTexturesFromGlb(glbPath) {
 
         if (imageData.length === 0) continue;
 
-        const hash = averageHash(imageData);
+        const hash = await computePhash(imageData);
         let isMatched = false;
 
         for (const [category, textures] of Object.entries(index)) {
@@ -748,7 +727,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
 
             try {
                 const buffer = await fs.promises.readFile(srcPath);
-                const hash = averageHash(buffer);
+                const hash = await computePhash(buffer);
                 let isMatched = false;
 
                 for (const [category, textures] of Object.entries(index)) {
@@ -801,26 +780,27 @@ async function generateTextureManifest(glbPath) {
         const binChunkOffset = 12 + 8 + jsonChunkLength + 8;
 
         for (let i = 0; i < gltf.images.length; i++) {
-            const image = gltf.images[i];
-            if (image.bufferView === undefined) continue;
-            const bufferView = gltf.bufferViews[image.bufferView];
+            try {
+                const image = gltf.images[i];
+                if (image.bufferView === undefined) continue;
+                const bufferView = gltf.bufferViews[image.bufferView];
 
-            let imageData;
-            if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
-                const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
-                imageData = Buffer.from(base64, 'base64');
-                const byteOffset = bufferView.byteOffset || 0;
-                const byteLength = bufferView.byteLength;
-                imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
-            } else {
-                const byteOffset = bufferView.byteOffset || 0;
-                const byteLength = bufferView.byteLength;
-                imageData = glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + byteLength);
-            }
+                let imageData;
+                if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
+                    const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
+                    imageData = Buffer.from(base64, 'base64');
+                    const byteOffset = bufferView.byteOffset || 0;
+                    const byteLength = bufferView.byteLength;
+                    imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
+                } else {
+                    const byteOffset = bufferView.byteOffset || 0;
+                    const byteLength = bufferView.byteLength;
+                    imageData = glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + byteLength);
+                }
 
-            if (imageData.length === 0) continue;
+                if (imageData.length === 0) continue;
 
-            const inputHash = averageHash(imageData);
+                const inputHash = await computePhash(imageData);
             let bestMatch = null;
             let bestDistance = Infinity;
             const allMatches = [];
@@ -841,18 +821,21 @@ async function generateTextureManifest(glbPath) {
                 }
             }
 
-            allMatches.sort((a, b) => a.distance - b.distance);
-            const isMatched = bestDistance <= 15;
+                allMatches.sort((a, b) => a.distance - b.distance);
+                const isMatched = bestDistance <= 15;
 
-            // Use image index as key (matches client-side texture ordering)
-            manifest.materials[i] = {
-                matched: isMatched,
-                bestMatch: isMatched ? { name: bestMatch.name, url: bestMatch.url, category: bestMatch.category } : null,
-                bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
-                isHidden: isMatched && bestMatch && !!bestMatch.hidden,
-                distance: bestDistance,
-                similarTextures: allMatches.slice(0, 12).map(t => ({ name: t.name, url: t.url, category: t.category, distance: t.distance }))
-            };
+                // Use image index as key (matches client-side texture ordering)
+                manifest.materials[i] = {
+                    matched: isMatched,
+                    bestMatch: isMatched ? { name: bestMatch.name, url: bestMatch.url, category: bestMatch.category } : null,
+                    bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
+                    isHidden: isMatched && bestMatch && !!bestMatch.hidden,
+                    distance: bestDistance,
+                    similarTextures: allMatches.slice(0, 12).map(t => ({ name: t.name, url: t.url, category: t.category, distance: t.distance }))
+                };
+            } catch (e) {
+                console.error(`[Texture Manifest] Error processing image ${i}: ${e.message}`);
+            }
         }
 
         // Write sidecar JSON
