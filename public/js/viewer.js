@@ -457,32 +457,58 @@ async function init() {
                     const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
                     const padding = 60 * logoScale;
                     const logoX = padding;
-                    const logoY = targetHeight - logoHeight - padding;
-                    ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+
+                    // Build texture change lines
+                    const changeLines = [];
+                    for (const mat of detectedMaterials) {
+                        if (!mat.hasTexture || mat.isHidden) continue;
+                        const orig = mat.originalMatchedName;
+                        const curr = mat.matchedName;
+                        if (!orig || !curr || orig === curr) continue;
+                        const prefix = mat.hasPartialChange ? 'PARTIAL ' : '';
+                        changeLines.push(`${prefix}${orig} \u21c4 ${curr}`);
+                    }
 
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
                     ctx.lineWidth = Math.max(2, 4 * logoScale);
-                    
-                    // Adjust font size based on scale
-                    const fontSize = Math.round(80 * logoScale);
-                    ctx.font = `bold ${fontSize}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
                     ctx.textBaseline = 'bottom';
 
-                    const textX = logoX + logoWidth + (20 * logoScale);
-                    const textY = targetHeight - padding;
-                    const textContent = `Job: ${jobCode} | Room: ${initialRoom}`;
+                    const fontSize = Math.round(80 * logoScale);
+                    const changeFontSize = Math.round(55 * logoScale);
+                    const changeLineHeight = Math.round(68 * logoScale);
 
-                    // Safety check: if text is too wide, shrink it
+                    // Shift main text up to make room for change lines
+                    const textX = logoX + logoWidth + (20 * logoScale);
+                    const textY = targetHeight - padding - (changeLines.length * changeLineHeight);
+
+                    const logoY = targetHeight - logoHeight - padding;
+                    ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+
+                    // Draw main job/room line
+                    ctx.font = `bold ${fontSize}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
+                    const textContent = `Job: ${jobCode} | Room: ${initialRoom}`;
                     const metrics = ctx.measureText(textContent);
                     if (textX + metrics.width > targetWidth - padding) {
                         const maxTextWidth = targetWidth - textX - padding;
                         const scaleFactor = maxTextWidth / metrics.width;
                         ctx.font = `bold ${Math.floor(fontSize * scaleFactor)}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
                     }
-
                     ctx.strokeText(textContent, textX, textY);
                     ctx.fillText(textContent, textX, textY);
+
+                    // Draw texture change lines below
+                    if (changeLines.length > 0) {
+                        ctx.font = `${changeFontSize}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
+                        ctx.lineWidth = Math.max(1, 3 * logoScale);
+                        changeLines.forEach((line, i) => {
+                            const lineY = textY + (i + 1) * changeLineHeight;
+                            ctx.strokeText(line, textX, lineY);
+                            ctx.fillStyle = 'rgba(220,230,255,0.95)';
+                            ctx.fillText(line, textX, lineY);
+                            ctx.fillStyle = 'white';
+                        });
+                    }
                 }
 
                 const dataUrl = canvas2d.toDataURL('image/jpeg', 0.92);
@@ -642,6 +668,7 @@ async function init() {
                                     mat.matchedName = null;
                                     mat.isHidden = false;
                                 }
+                                if (mat.originalMatchedName === undefined) mat.originalMatchedName = mat.matchedName;
                             }
                             manifestLoaded = true;
                         }
@@ -780,6 +807,7 @@ async function init() {
                     mat.matchedName = null;
                     mat.isHidden = false;
                 }
+                if (mat.originalMatchedName === undefined) mat.originalMatchedName = mat.matchedName;
                 return data;
             }
 
@@ -1113,6 +1141,7 @@ async function init() {
                         qpTappedMesh.material.map = newTex;
                         qpTappedMesh.material.color.set(0xffffff);
                         qpTappedMesh.material.needsUpdate = true;
+                        matGroup.hasPartialChange = true;
                     }
 
                     if (name) matGroup.matchedName = name;
@@ -1151,6 +1180,11 @@ async function init() {
                 clearMeshHighlight();
                 qpTappedMesh = mesh;
                 highlightMesh(mesh);
+
+                // Track change on the painted group
+                const paintedGroup = detectedMaterials[idx];
+                paintedGroup.hasPartialChange = true;
+                if (qpLastTextureName) paintedGroup.matchedName = qpLastTextureName;
 
                 // Apply last selected texture
                 const texLoader = new THREE.TextureLoader();
