@@ -176,8 +176,10 @@ async function init() {
 
         // --- LIGHTING ---
         const li = SETTINGS.lightIntensity;
-        scene.add(new THREE.AmbientLight(0xffffff, li * 0.8));
+        // Higher ambient so no angle goes dark
+        scene.add(new THREE.AmbientLight(0xffffff, li * 1.2));
 
+        // Camera-attached key light (follows view)
         const makeCamLight = (intensity, px, py, pz) => {
             const light  = new THREE.DirectionalLight(0xffffff, intensity);
             const target = new THREE.Object3D();
@@ -186,10 +188,19 @@ async function init() {
             camera.add(target);
             light.target = target;
         };
+        makeCamLight(li * 0.5,  1,  1,  1);
 
-        makeCamLight(li * 0.5,  1,   1,    1);
-        makeCamLight(li * 0.4, -1,   0.2,  0.5);
-        makeCamLight(li * 0.4,  0,   1,   -1);
+        // World-space fill lights — fixed in scene so all angles stay lit
+        const makeSceneLight = (intensity, px, py, pz) => {
+            const light = new THREE.DirectionalLight(0xffffff, intensity);
+            light.position.set(px, py, pz);
+            scene.add(light);
+        };
+        makeSceneLight(li * 0.3,  1,  1,  0);
+        makeSceneLight(li * 0.3, -1,  1,  0);
+        makeSceneLight(li * 0.3,  0,  1,  1);
+        makeSceneLight(li * 0.3,  0,  1, -1);
+        makeSceneLight(li * 0.2,  0, -1,  0); // under-fill
 
         // --- POST-PROCESSING ---
         composer = new EffectComposer(renderer);
@@ -402,8 +413,7 @@ async function init() {
             detectedMaterials = [];
 
             // Track unique materials to avoid listing every face
-            const materialMap = new Map(); // key -> { material, meshes[], name, hasTexture, originalMap }
-            const textureImageSet = new Map(); // image object -> index (for manifest matching)
+            const materialMap = new Map(); // texSrc -> { material, meshes[], name, hasTexture, originalMap }
 
             model.traverse((child) => {
                 if (child.isMesh) {
@@ -424,36 +434,24 @@ async function init() {
                         child.material.map.magFilter  = THREE.LinearFilter;
                     }
 
-                    // Deduplicate: group meshes sharing the same texture
-                    // Use texture source as primary key (not material UUID)
                     const mat = child.material;
                     const hasTexture = !!mat.map;
 
                     if (hasTexture) {
-                        // Track unique texture images for manifest index mapping
-                        const texImage = mat.map.image;
-                        if (texImage && !textureImageSet.has(texImage)) {
-                            textureImageSet.set(texImage, textureImageSet.size);
-                        }
-
-                        // For textured materials, use texture source as key
                         const texSrc = mat.map.image?.src || mat.map.uuid;
                         if (materialMap.has(texSrc)) {
                             materialMap.get(texSrc).meshes.push(child);
                         } else {
-                            const matName = prevMat.name || child.name || `Material_${materialMap.size}`;
                             materialMap.set(texSrc, {
-                                name: matName,
+                                name: prevMat.name || child.name || `Material_${materialMap.size}`,
                                 material: mat,
                                 meshes: [child],
                                 hasTexture: true,
                                 originalMap: mat.map,
-                                originalColor: mat.color.clone(), // Preserve original color tint
-                                textureIndex: texImage ? textureImageSet.get(texImage) : -1
+                                originalColor: mat.color.clone()
                             });
                         }
                     }
-                    // Skip color-only materials (no texture to swap)
                 }
             });
 
@@ -532,7 +530,7 @@ async function init() {
                         const manifest = await resp.json();
                         if (manifest.materials) {
                             for (const mat of texturedMaterials) {
-                                const entry = manifest.materials[mat.textureIndex];
+                                const entry = manifest.materials[mat.name];
                                 if (entry && entry.matched) {
                                     mat.matchedName = entry.bestMatch ? entry.bestMatch.name : null;
                                     mat.bestCategory = entry.bestCategory;

@@ -65,7 +65,7 @@ app.use(helmet({
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
 app.use('/textures', express.static(TEXTURES_DIR, {
     etag: true,
@@ -762,7 +762,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
 }
 
 // Generate a texture manifest (sidecar JSON) for a GLB file
-// This pre-matches all embedded textures server-side so the client doesn't have to
+// Keyed by GLTF material name so the client can look up by mat.name reliably
 async function generateTextureManifest(glbPath) {
     try {
         const glbBuffer = await fs.promises.readFile(glbPath);
@@ -770,62 +770,76 @@ async function generateTextureManifest(glbPath) {
         const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
         const gltf = result.gltf;
 
-        if (!gltf.images || !gltf.bufferViews) return;
+        if (!gltf.materials || !gltf.images || !gltf.bufferViews) return;
 
-        const index = await buildTextureHashIndex();
+        const libraryIndex = await buildTextureHashIndex();
         const manifest = { materials: {} };
 
         // Parse GLB header to find BIN chunk offset
         const jsonChunkLength = glbBuffer.readUInt32LE(12);
         const binChunkOffset = 12 + 8 + jsonChunkLength + 8;
 
-        for (let i = 0; i < gltf.images.length; i++) {
-            try {
-                const image = gltf.images[i];
-                if (image.bufferView === undefined) continue;
-                const bufferView = gltf.bufferViews[image.bufferView];
+        // Cache image hashes to avoid re-computing when multiple materials share a texture
+        const imageHashCache = new Map();
 
-                let imageData;
-                if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
-                    const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
-                    imageData = Buffer.from(base64, 'base64');
-                    const byteOffset = bufferView.byteOffset || 0;
-                    const byteLength = bufferView.byteLength;
-                    imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
-                } else {
-                    const byteOffset = bufferView.byteOffset || 0;
-                    const byteLength = bufferView.byteLength;
-                    imageData = glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + byteLength);
-                }
-
-                if (imageData.length === 0) continue;
-
-                const inputHash = await computePhash(imageData);
-            let bestMatch = null;
-            let bestDistance = Infinity;
-            const allMatches = [];
-
-            for (const [category, textures] of Object.entries(index)) {
-                for (const tex of textures) {
-                    const catHash = BigInt(tex.hash);
-                    const distance = hammingDistance(inputHash, catHash);
-
-                    if (distance < bestDistance) {
-                        bestDistance = distance;
-                        bestMatch = { ...tex, category };
-                    }
-
-                    if (distance <= 20 && !tex.hidden) {
-                        allMatches.push({ ...tex, category, distance });
-                    }
-                }
+        const getImageData = (imageIdx) => {
+            const image = gltf.images[imageIdx];
+            if (!image || image.bufferView === undefined) return null;
+            const bufferView = gltf.bufferViews[image.bufferView];
+            if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
+                const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
+                let data = Buffer.from(base64, 'base64');
+                const byteOffset = bufferView.byteOffset || 0;
+                return data.subarray(byteOffset, byteOffset + bufferView.byteLength);
             }
+            const byteOffset = bufferView.byteOffset || 0;
+            return Buffer.from(glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + bufferView.byteLength));
+        };
+
+        for (const gltfMat of gltf.materials) {
+            try {
+                const matName = gltfMat.name || '';
+                const pbr = gltfMat.pbrMetallicRoughness;
+                if (!pbr || !pbr.baseColorTexture) continue;
+
+                const textureIdx = pbr.baseColorTexture.index;
+                const imageIdx = gltf.textures && gltf.textures[textureIdx] ? gltf.textures[textureIdx].source : undefined;
+                if (imageIdx === undefined) continue;
+
+                // Reuse cached hash for this image index
+                let inputHash;
+                if (imageHashCache.has(imageIdx)) {
+                    inputHash = imageHashCache.get(imageIdx);
+                } else {
+                    const imageData = getImageData(imageIdx);
+                    if (!imageData || imageData.length === 0) continue;
+                    inputHash = await computePhash(imageData);
+                    imageHashCache.set(imageIdx, inputHash);
+                }
+
+                let bestMatch = null;
+                let bestDistance = Infinity;
+                const allMatches = [];
+
+                for (const [category, textures] of Object.entries(libraryIndex)) {
+                    for (const tex of textures) {
+                        const catHash = BigInt(tex.hash);
+                        const distance = hammingDistance(inputHash, catHash);
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            bestMatch = { ...tex, category };
+                        }
+                        if (distance <= 20 && !tex.hidden) {
+                            allMatches.push({ ...tex, category, distance });
+                        }
+                    }
+                }
 
                 allMatches.sort((a, b) => a.distance - b.distance);
                 const isMatched = bestDistance <= 15;
 
-                // Use image index as key (matches client-side texture ordering)
-                manifest.materials[i] = {
+                // Key by material name — client matches via prevMat.name
+                manifest.materials[matName] = {
                     matched: isMatched,
                     bestMatch: isMatched ? { name: bestMatch.name, url: bestMatch.url, category: bestMatch.category } : null,
                     bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
@@ -834,14 +848,14 @@ async function generateTextureManifest(glbPath) {
                     similarTextures: allMatches.slice(0, 12).map(t => ({ name: t.name, url: t.url, category: t.category, distance: t.distance }))
                 };
             } catch (e) {
-                console.error(`[Texture Manifest] Error processing image ${i}: ${e.message}`);
+                console.error(`[Texture Manifest] Error processing material "${gltfMat.name}": ${e.message}`);
             }
         }
 
         // Write sidecar JSON
         const manifestPath = glbPath.replace(/\.glb$/i, '.textures.json');
         await fs.promises.writeFile(manifestPath, JSON.stringify(manifest), 'utf8');
-        console.log(`[Texture Manifest] Generated: ${path.basename(manifestPath)}`);
+        console.log(`[Texture Manifest] Generated: ${path.basename(manifestPath)} (${Object.keys(manifest.materials).length} materials)`);
     } catch (e) {
         console.error(`[Texture Manifest] Error: ${e.message}`);
     }
