@@ -403,13 +403,14 @@ async function init() {
 
             // Track unique materials to avoid listing every face
             const materialMap = new Map(); // key -> { material, meshes[], name, hasTexture, originalMap }
+            const textureImageSet = new Map(); // image object -> index (for manifest matching)
 
             model.traverse((child) => {
                 if (child.isMesh) {
                     const prevMat = child.material;
                     child.material = new THREE.MeshLambertMaterial({
                         map: prevMat.map,
-                        color: prevMat.color,
+                        color: prevMat.map ? 0xffffff : prevMat.color,
                         transparent: prevMat.transparent,
                         opacity: prevMat.opacity,
                         side: THREE.DoubleSide,
@@ -427,8 +428,14 @@ async function init() {
                     // Use texture source as primary key (not material UUID)
                     const mat = child.material;
                     const hasTexture = !!mat.map;
-                    
+
                     if (hasTexture) {
+                        // Track unique texture images for manifest index mapping
+                        const texImage = mat.map.image;
+                        if (texImage && !textureImageSet.has(texImage)) {
+                            textureImageSet.set(texImage, textureImageSet.size);
+                        }
+
                         // For textured materials, use texture source as key
                         const texSrc = mat.map.image?.src || mat.map.uuid;
                         if (materialMap.has(texSrc)) {
@@ -441,7 +448,8 @@ async function init() {
                                 meshes: [child],
                                 hasTexture: true,
                                 originalMap: mat.map,
-                                originalColor: mat.color.clone() // Preserve original color tint
+                                originalColor: mat.color.clone(), // Preserve original color tint
+                                textureIndex: texImage ? textureImageSet.get(texImage) : -1
                             });
                         }
                     }
@@ -503,6 +511,7 @@ async function init() {
             }
 
             // Internal function to match all textures on load
+            // Tries server-side manifest first, falls back to client-side matching
             window.matchAllTextures = async () => {
                 if (isMatchingAll) return;
                 isMatchingAll = true;
@@ -513,17 +522,46 @@ async function init() {
                     return;
                 }
 
-                updateStatus(`Matching ${texturedMaterials.length} textures...`);
+                updateStatus(`Loading texture data...`);
 
-                // Match in sequence to avoid overwhelming the server
-                for (let i = 0; i < texturedMaterials.length; i++) {
-                    const mat = texturedMaterials[i];
-                    try {
-                        await matchTexture(mat, jobCode, room);
-                    } catch (e) {
-                        console.error("Match error:", e);
+                // Try server-side manifest first
+                let manifestLoaded = false;
+                try {
+                    const resp = await fetch(`/api/job/${encodeURIComponent(jobCode)}/${encodeURIComponent(room)}/textures`);
+                    if (resp.ok) {
+                        const manifest = await resp.json();
+                        if (manifest.materials) {
+                            for (const mat of texturedMaterials) {
+                                const entry = manifest.materials[mat.textureIndex];
+                                if (entry && entry.matched) {
+                                    mat.matchedName = entry.bestMatch ? entry.bestMatch.name : null;
+                                    mat.bestCategory = entry.bestCategory;
+                                    mat.similarTextures = entry.similarTextures;
+                                    mat.isHidden = !!entry.isHidden;
+                                } else {
+                                    mat.matchedName = null;
+                                    mat.isHidden = false;
+                                }
+                            }
+                            manifestLoaded = true;
+                        }
                     }
-                    if (texturePanel.classList.contains('show')) renderMaterialList();
+                } catch (e) {
+                    console.log("Manifest not available, falling back to client-side matching");
+                }
+
+                // Fallback: client-side matching if manifest unavailable
+                if (!manifestLoaded) {
+                    updateStatus(`Matching ${texturedMaterials.length} textures...`);
+                    for (let i = 0; i < texturedMaterials.length; i++) {
+                        const mat = texturedMaterials[i];
+                        try {
+                            await matchTexture(mat, jobCode, room);
+                        } catch (e) {
+                            console.error("Match error:", e);
+                        }
+                        if (texturePanel.classList.contains('show')) renderMaterialList();
+                    }
                 }
 
                 isMatchingAll = false;
@@ -704,6 +742,12 @@ async function init() {
                         currentCategoryTextures = data.textures;
                         catalogTitle.innerText = category;
                         renderTextureGrid();
+                        // Insert "Browse All Categories" button at top of grid
+                        const browseBtn = document.createElement('button');
+                        browseBtn.className = 'browse-all-categories-btn';
+                        browseBtn.innerText = '\u2190 Browse All Categories';
+                        browseBtn.onclick = () => showAllCategories();
+                        textureGrid.insertBefore(browseBtn, textureGrid.firstChild);
                     }
                 } catch (e) {
                     console.error("Failed to load textures:", e);
@@ -735,13 +779,11 @@ async function init() {
                     newTex.magFilter = THREE.LinearFilter;
                     newTex.wrapS = THREE.RepeatWrapping;
                     newTex.wrapT = THREE.RepeatWrapping;
-                    // Apply to all meshes sharing this material, preserving color tint
+                    // Apply to all meshes sharing this material
                     matGroup.meshes.forEach(mesh => {
                         mesh.material.map = newTex;
-                        // Explicitly restore original color tint for color-corrected textures
-                        if (matGroup.originalColor) {
-                            mesh.material.color.copy(matGroup.originalColor);
-                        }
+                        // Use white color so texture renders at true brightness
+                        mesh.material.color.set(0xffffff);
                         mesh.material.needsUpdate = true;
                     });
                 });

@@ -226,13 +226,13 @@ body {
     border: 2px solid white;
 }
 
-/* Texture Button - matches camera button */
+/* Texture Button - matches camera button exactly */
 #texture-btn {
     position: absolute;
     bottom: 90px;
     right: 20px;
-    width: 50px;
-    height: 50px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
     background: #ffffff;
     border: 3px solid #ccc;
@@ -254,10 +254,6 @@ body {
 #texture-btn:active {
     transform: scale(0.95);
     background: #e0e0e0;
-}
-
-#texture-btn svg {
-    color: #333;
 }
 
 /* Texture Panel - light theme matching dropdown */
@@ -464,6 +460,26 @@ body {
     color: #007bff;
 }
 
+.browse-all-categories-btn {
+    display: block;
+    width: 100%;
+    grid-column: 1 / -1;
+    padding: 10px 15px;
+    background: #f0f4ff;
+    border: 1px solid #007bff;
+    border-radius: 8px;
+    color: #007bff;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.2s;
+}
+
+.browse-all-categories-btn:hover {
+    background: #dbe6ff;
+}
+
 /* Texture Grid */
 #texture-grid {
     display: grid;
@@ -524,8 +540,7 @@ body {
     #camera-btn { bottom: 10px; right: 10px; width: 50px; height: 50px; }
     .camera-inner { width: 38px; height: 38px; }
     .camera-inner svg { width: 20px; height: 20px; }
-    #texture-btn { bottom: 70px; right: 10px; width: 44px; height: 44px; }
-    #texture-btn svg { width: 18px; height: 18px; }
+    #texture-btn { bottom: 70px; right: 10px; width: 50px; height: 50px; }
     
     /* Full width panel on mobile */
     #texture-panel { 

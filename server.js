@@ -12,7 +12,7 @@ const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = r
 const gltfPipeline = require('gltf-pipeline');
 
 const app = express();
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "2.0.0";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -66,7 +66,12 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms'))
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
-app.use('/textures', express.static(TEXTURES_DIR));
+app.use('/textures', express.static(TEXTURES_DIR, {
+    etag: true,
+    lastModified: true,
+    maxAge: 0,
+    cacheControl: true
+}));
 
 // --- API ---
 const apiLimiter = rateLimit({
@@ -167,6 +172,61 @@ app.get('/api/job/:code/:room', (req, res) => {
         if (absPath) return res.json({ success: true, url: `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}` });
         res.status(404).json({ success: false });
     });
+});
+
+// GET /api/job/:code/:room/textures - Serve pre-computed texture manifest
+app.get('/api/job/:code/:room/textures', async (req, res) => {
+    const { code, room } = req.params;
+
+    if (typeof code !== 'string' || code.length > 50 || !/^[a-zA-Z0-9\-_]+$/.test(code)) {
+        return res.status(400).json({ success: false, error: 'Bad Request: Invalid job code format' });
+    }
+    if (typeof room !== 'string' || room.length > 100 || !/^[a-zA-Z0-9\-_ ]+$/.test(room)) {
+        return res.status(400).json({ success: false, error: 'Bad Request: Invalid room format' });
+    }
+
+    const safeBase = path.resolve(JOBS_DIR);
+    const jobPath = path.resolve(safeBase, path.join('.', code));
+    const safeRoom = path.basename(room);
+    const roomPath = path.resolve(jobPath, safeRoom);
+
+    const relCode = path.relative(safeBase, jobPath);
+    const relRoom = path.relative(jobPath, roomPath);
+    if (!relCode || relCode.startsWith('..') || path.isAbsolute(relCode) || !relRoom || relRoom.startsWith('..') || path.isAbsolute(relRoom)) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    // Find the textures.json manifest alongside the GLB
+    const findManifest = async (dir) => {
+        try {
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            const dirs = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    dirs.push(path.join(dir, dirent.name));
+                } else if (dirent.name.toLowerCase() === `${safeRoom.toLowerCase()}.textures.json`) {
+                    return path.join(dir, dirent.name);
+                }
+            }
+            for (const d of dirs) {
+                const result = await findManifest(d);
+                if (result) return result;
+            }
+        } catch { /* ignore */ }
+        return null;
+    };
+
+    const manifestPath = await findManifest(jobPath);
+    if (!manifestPath) {
+        return res.status(404).json({ success: false, error: 'No texture manifest found' });
+    }
+
+    try {
+        const content = await fs.promises.readFile(manifestPath, 'utf8');
+        res.json(JSON.parse(content));
+    } catch (e) {
+        res.status(500).json({ success: false, error: 'Failed to read manifest' });
+    }
 });
 
 // --- TEXTURE CATALOG API ---
@@ -722,6 +782,88 @@ async function extractTexturesFromDaeImages(daeFilePath) {
     }
 }
 
+// Generate a texture manifest (sidecar JSON) for a GLB file
+// This pre-matches all embedded textures server-side so the client doesn't have to
+async function generateTextureManifest(glbPath) {
+    try {
+        const glbBuffer = await fs.promises.readFile(glbPath);
+        const resourceDirectory = path.dirname(glbPath);
+        const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory });
+        const gltf = result.gltf;
+
+        if (!gltf.images || !gltf.bufferViews) return;
+
+        const index = await buildTextureHashIndex();
+        const manifest = { materials: {} };
+
+        // Parse GLB header to find BIN chunk offset
+        const jsonChunkLength = glbBuffer.readUInt32LE(12);
+        const binChunkOffset = 12 + 8 + jsonChunkLength + 8;
+
+        for (let i = 0; i < gltf.images.length; i++) {
+            const image = gltf.images[i];
+            if (image.bufferView === undefined) continue;
+            const bufferView = gltf.bufferViews[image.bufferView];
+
+            let imageData;
+            if (gltf.buffers && gltf.buffers[bufferView.buffer] && gltf.buffers[bufferView.buffer].uri) {
+                const base64 = gltf.buffers[bufferView.buffer].uri.split(',')[1];
+                imageData = Buffer.from(base64, 'base64');
+                const byteOffset = bufferView.byteOffset || 0;
+                const byteLength = bufferView.byteLength;
+                imageData = imageData.subarray(byteOffset, byteOffset + byteLength);
+            } else {
+                const byteOffset = bufferView.byteOffset || 0;
+                const byteLength = bufferView.byteLength;
+                imageData = glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + byteLength);
+            }
+
+            if (imageData.length === 0) continue;
+
+            const inputHash = averageHash(imageData);
+            let bestMatch = null;
+            let bestDistance = Infinity;
+            const allMatches = [];
+
+            for (const [category, textures] of Object.entries(index)) {
+                for (const tex of textures) {
+                    const catHash = BigInt(tex.hash);
+                    const distance = hammingDistance(inputHash, catHash);
+
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestMatch = { ...tex, category };
+                    }
+
+                    if (distance <= 20 && !tex.hidden) {
+                        allMatches.push({ ...tex, category, distance });
+                    }
+                }
+            }
+
+            allMatches.sort((a, b) => a.distance - b.distance);
+            const isMatched = bestDistance <= 15;
+
+            // Use image index as key (matches client-side texture ordering)
+            manifest.materials[i] = {
+                matched: isMatched,
+                bestMatch: isMatched ? { name: bestMatch.name, url: bestMatch.url, category: bestMatch.category } : null,
+                bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
+                isHidden: isMatched && bestMatch && !!bestMatch.hidden,
+                distance: bestDistance,
+                similarTextures: allMatches.slice(0, 12).map(t => ({ name: t.name, url: t.url, category: t.category, distance: t.distance }))
+            };
+        }
+
+        // Write sidecar JSON
+        const manifestPath = glbPath.replace(/\.glb$/i, '.textures.json');
+        await fs.promises.writeFile(manifestPath, JSON.stringify(manifest), 'utf8');
+        console.log(`[Texture Manifest] Generated: ${path.basename(manifestPath)}`);
+    } catch (e) {
+        console.error(`[Texture Manifest] Error: ${e.message}`);
+    }
+}
+
 // --- CONVERSION ENGINE ---
 const conversionQueue = [];
 let isConverting = false;
@@ -795,7 +937,8 @@ async function processQueue() {
                 }
             }
             console.log(`SUCCESS: ${roomName} is live.`);
-            // Textures are already extracted from DAE images folder before conversion
+            // Generate texture manifest for client-side consumption
+            await generateTextureManifest(finalGlb);
         }
         isConverting = false;
         processQueue();
@@ -860,6 +1003,27 @@ if (require.main === module) {
             }
         };
         scan(JOBS_DIR);
+
+        // Generate texture manifests for existing GLBs that don't have one
+        const generateMissingManifests = async (dir) => {
+            try {
+                const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        await generateMissingManifests(fullPath);
+                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                        const manifestPath = fullPath.replace(/\.glb$/i, '.textures.json');
+                        const hasManifest = await fs.promises.access(manifestPath).then(() => true).catch(() => false);
+                        if (!hasManifest) {
+                            await generateTextureManifest(fullPath);
+                        }
+                    }
+                }
+            } catch { /* ignore */ }
+        };
+        // Run after a short delay so DAE conversions start first
+        setTimeout(() => generateMissingManifests(JOBS_DIR), 5000);
     });
 
     chokidar.watch(JOBS_DIR, {
@@ -928,7 +1092,25 @@ if (require.main === module) {
                         console.error(`[Texture] Auto re-scan error: ${e.message}`);
                     }
                 }
-                // If not a job texture (manually added), cache was already invalidated above
+                // If not a job texture (manually added to the library), regenerate all manifests
+                if (!jobMatch) {
+                    console.log('[Texture] Library changed — regenerating all texture manifests...');
+                    const regenerateManifests = async (dir) => {
+                        try {
+                            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+                            for (const entry of entries) {
+                                const fullPath = path.join(dir, entry.name);
+                                if (entry.isDirectory()) {
+                                    await regenerateManifests(fullPath);
+                                } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                                    await generateTextureManifest(fullPath);
+                                }
+                            }
+                        } catch { /* ignore */ }
+                    };
+                    await regenerateManifests(JOBS_DIR);
+                    console.log('[Texture] All manifests regenerated.');
+                }
             }, 60000); // Wait 1 minute after last change before re-scanning
         }
     });
