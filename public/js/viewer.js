@@ -233,6 +233,24 @@ async function init() {
             };
         }
 
+        // --- TEMP: Shader tuning sliders ---
+        const dbgExposure = document.getElementById('dbg-exposure');
+        const dbgSaturation = document.getElementById('dbg-saturation');
+        const dbgContrast = document.getElementById('dbg-contrast');
+        if (dbgExposure) dbgExposure.oninput = () => {
+            document.getElementById('dbg-exp-val').innerText = dbgExposure.value;
+            if (kkcShader) kkcShader.uniforms.uExposure.value = parseFloat(dbgExposure.value);
+        };
+        if (dbgSaturation) dbgSaturation.oninput = () => {
+            document.getElementById('dbg-sat-val').innerText = dbgSaturation.value;
+            if (kkcShader) kkcShader.uniforms.uSaturation.value = parseFloat(dbgSaturation.value);
+        };
+        if (dbgContrast) dbgContrast.oninput = () => {
+            document.getElementById('dbg-con-val').innerText = dbgContrast.value;
+            if (kkcShader) kkcShader.uniforms.uContrast.value = parseFloat(dbgContrast.value);
+        };
+        // --- END TEMP ---
+
         // --- DOUBLE TAP / CLICK PIVOT ---
         let lastTap = 0;
         let tapPos = new THREE.Vector2();
