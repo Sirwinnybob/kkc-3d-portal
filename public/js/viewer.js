@@ -99,6 +99,8 @@ async function init() {
     const helpModal = document.getElementById('help-modal');
     const closeHelpX = document.getElementById('close-help-x');
     const closeHelpBtn = document.getElementById('close-help-btn');
+    const textureBtn = document.getElementById('texture-btn');
+    const texturePanel = document.getElementById('texture-panel');
 
     if (menuBtn && dropdown) {
         menuBtn.onclick = (e) => {
@@ -108,7 +110,7 @@ async function init() {
             menuBtn.setAttribute('aria-expanded', isExpanded.toString());
         };
         window.addEventListener('pointerdown', (e) => {
-            if (!document.getElementById('menu-container').contains(e.target)) {
+            if (dropdown.classList.contains('show') && !document.getElementById('menu-container').contains(e.target)) {
                 dropdown.classList.remove('show');
                 menuBtn.setAttribute('aria-expanded', 'false');
             }
@@ -118,6 +120,7 @@ async function init() {
     const toggleHelp = (show) => {
         if (helpModal) {
             helpModal.classList.toggle('show', show);
+            if (helpBtn) helpBtn.setAttribute('aria-expanded', show.toString());
             if (show) {
                 if (closeHelpBtn) closeHelpBtn.focus();
             } else {
@@ -128,6 +131,24 @@ async function init() {
     if (helpBtn) helpBtn.onclick = () => toggleHelp(true);
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
+
+    // Global Escape Key Listener
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            // Close overlays in priority order
+            if (helpModal && helpModal.classList.contains('show')) {
+                toggleHelp(false);
+            } else if (texturePanel && texturePanel.classList.contains('show')) {
+                texturePanel.classList.remove('show');
+                textureBtn.setAttribute('aria-expanded', 'false');
+                textureBtn.focus();
+            } else if (dropdown && dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+                menuBtn.setAttribute('aria-expanded', 'false');
+                menuBtn.focus();
+            }
+        }
+    });
 
     // AUTO-SHOW HELP: If it's their first time in the viewer on this device, show the controls modal
     if (localStorage.getItem('kkc_help_shown') !== 'true') {
@@ -486,8 +507,6 @@ async function init() {
 
         // --- TEXTURE CATALOG PANEL ---
         async function setupTexturePanel(jobCode, room) {
-            const textureBtn = document.getElementById('texture-btn');
-            const texturePanel = document.getElementById('texture-panel');
             const closeTextureBtn = document.getElementById('close-texture-btn');
             const materialList = document.getElementById('material-list');
             const textureGrid = document.getElementById('texture-grid');
@@ -511,14 +530,24 @@ async function init() {
             // Toggle texture panel
             if (textureBtn) {
                 textureBtn.onclick = () => {
+                    const isOpening = !texturePanel.classList.contains('show');
                     texturePanel.classList.toggle('show');
-                    if (texturePanel.classList.contains('show')) {
+                    textureBtn.setAttribute('aria-expanded', isOpening.toString());
+
+                    if (isOpening) {
                         renderMaterialList();
+                        if (closeTextureBtn) closeTextureBtn.focus();
+                    } else {
+                        textureBtn.focus();
                     }
                 };
             }
             if (closeTextureBtn) {
-                closeTextureBtn.onclick = () => texturePanel.classList.remove('show');
+                closeTextureBtn.onclick = () => {
+                    texturePanel.classList.remove('show');
+                    textureBtn.setAttribute('aria-expanded', 'false');
+                    textureBtn.focus();
+                };
             }
 
             // Internal function to match all textures on load
@@ -658,6 +687,9 @@ async function init() {
                 } else {
                     await showAllCategories();
                 }
+
+                // For accessibility/speed: focus the search input so user can start typing immediately
+                if (textureSearch) textureSearch.focus();
             }
 
             // Core match function

@@ -34,10 +34,10 @@
             </div>
         </div>
 
-        <button id="help-btn" class="ui-panel" aria-label="Help">?</button>
+        <button id="help-btn" class="ui-panel" aria-label="Help" aria-expanded="false">?</button>
     </div>
 
-    <div id="status">Initializing 3D...</div>
+    <div id="status" aria-live="polite" role="status">Initializing 3D...</div>
 
     <div id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <div class="modal-content">
@@ -69,7 +69,7 @@
         </div>
     </button>
 
-    <button id="texture-btn" title="Texture Catalog" aria-label="Texture Catalog">
+    <button id="texture-btn" title="Texture Catalog" aria-label="Texture Catalog" aria-expanded="false">
         <div class="camera-inner">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
@@ -95,7 +95,7 @@
             <!-- Catalog View -->
             <div id="catalog-view" style="display:none">
                 <button id="back-to-materials" class="back-btn">&larr; Back to Materials</button>
-                <input type="text" id="texture-search" placeholder="Search textures..." autocomplete="off">
+                <input type="text" id="texture-search" placeholder="Search textures..." aria-label="Search textures" autocomplete="off">
                 <div id="texture-grid"></div>
             </div>
         </div>

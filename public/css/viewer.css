@@ -54,6 +54,11 @@ body {
 
 #menu-btn:hover { background: #f0f0f0; }
 
+button:focus-visible, input:focus-visible {
+    outline: 3px solid #007bff;
+    outline-offset: 2px;
+}
+
 #dropdown-menu {
     position: absolute;
     top: 45px;
