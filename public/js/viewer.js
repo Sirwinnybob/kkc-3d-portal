@@ -14,6 +14,9 @@ let detectedMaterials = [];
 let selectedMaterialIndex = -1;
 let loadedModel = null;
 
+// Bridge populated by setupTexturePanel so handleSingleTap (init scope) can open the picker
+const quickPicker = { open: null, close: null };
+
 const SETTINGS = {
     exposure:      1.15,
     saturation:    0.65,
@@ -233,27 +236,85 @@ async function init() {
             };
         }
 
-// --- DOUBLE TAP / CLICK PIVOT ---
+        // --- TAP DETECTION: single tap → texture picker, double tap → pivot ---
         let lastTap = 0;
         let tapPos = new THREE.Vector2();
-        const handleDoubleInteraction = (e) => {
-            if (e.pointerType === 'touch' && !e.isPrimary) return; 
+        let singleTapTimer = null;
+        let pointerDownPos = new THREE.Vector2();
+        let pointerHasMoved = false;
+        const DRAG_THRESHOLD = 8; // px — more than this = orbit drag, not a tap
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'touch' && !e.isPrimary) return;
+            pointerDownPos.set(e.clientX, e.clientY);
+            pointerHasMoved = false;
+        });
+
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'touch' && !e.isPrimary) return;
+            if (pointerDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > DRAG_THRESHOLD) {
+                pointerHasMoved = true;
+            }
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            if (e.pointerType === 'touch' && !e.isPrimary) return;
+            if (pointerHasMoved) return; // was a drag/orbit — ignore
+
             const now = Date.now();
             const dist = tapPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY));
-            if (now - lastTap < 300 && dist < 10) {
+            const isDoubleTap = (now - lastTap < 300) && (dist < 10);
+
+            if (isDoubleTap) {
+                // Cancel any pending single-tap and run pivot logic
+                if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
                 const raycaster = new THREE.Raycaster();
-                const mouse = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+                const mouse = new THREE.Vector2(
+                    (e.clientX / window.innerWidth) * 2 - 1,
+                    -(e.clientY / window.innerHeight) * 2 + 1
+                );
                 raycaster.setFromCamera(mouse, camera);
                 const intersects = raycaster.intersectObjects(scene.children, true);
                 if (intersects.length > 0) {
                     controls.target.copy(intersects[0].point);
                     controls.update();
                 }
+            } else {
+                // Defer single-tap 310ms so a second tap can cancel it
+                const cx = e.clientX, cy = e.clientY;
+                singleTapTimer = setTimeout(() => {
+                    singleTapTimer = null;
+                    handleSingleTap(cx, cy);
+                }, 310);
             }
+
             lastTap = now;
             tapPos.set(e.clientX, e.clientY);
-        };
-        renderer.domElement.addEventListener('pointerdown', (e) => handleDoubleInteraction(e));
+        });
+
+        // --- SINGLE TAP: open texture picker for the tapped surface ---
+        function handleSingleTap(clientX, clientY) {
+            // Don't open picker if any overlay is already visible
+            if (document.getElementById('quick-picker').classList.contains('show')) return;
+            if (document.getElementById('tap-replace-sheet').classList.contains('show')) return;
+            if (document.getElementById('texture-panel').classList.contains('show')) return;
+
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2(
+                (clientX / window.innerWidth) * 2 - 1,
+                -(clientY / window.innerHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            if (!intersects.length) return;
+
+            const tappedMesh = intersects[0].object;
+            const matGroupIndex = detectedMaterials.findIndex(g => g.meshes.includes(tappedMesh));
+            if (matGroupIndex < 0) return;
+            if (!detectedMaterials[matGroupIndex].hasTexture) return;
+
+            if (quickPicker.open) quickPicker.open(matGroupIndex, tappedMesh);
+        }
 
         // --- ZOOM JOYSTICK ---
         const joystickHandle    = document.getElementById('joystick-handle');
@@ -820,6 +881,207 @@ async function init() {
                     });
                 };
             }
+
+            // ================================================================
+            // QUICK PICKER — tap-to-select texture (bottom sheet UI)
+            // ================================================================
+            const tapReplaceSheet    = document.getElementById('tap-replace-sheet');
+            const tapReplaceLabel    = document.getElementById('tap-replace-label');
+            const tapReplaceAllBtn   = document.getElementById('tap-replace-all-btn');
+            const tapReplaceOneBtn   = document.getElementById('tap-replace-one-btn');
+            const tapReplaceCancel   = document.getElementById('tap-replace-cancel');
+            const tapReplaceBackdrop = document.getElementById('tap-replace-backdrop');
+
+            const qpEl             = document.getElementById('quick-picker');
+            const qpTitle          = document.getElementById('qp-title');
+            const qpCategoriesBack = document.getElementById('qp-categories-back');
+            const qpClose          = document.getElementById('qp-close');
+            const qpCategoriesView = document.getElementById('qp-categories-view');
+            const qpCategoryGrid   = document.getElementById('qp-category-grid');
+            const qpTexturesView   = document.getElementById('qp-textures-view');
+            const qpTextureStrip   = document.getElementById('qp-texture-strip');
+
+            let qpMatGroupIndex  = -1;
+            let qpTappedMesh     = null;
+            let qpReplaceAll     = true;
+            let qpCurrentTextures = [];
+
+            // ---- Replace-mode sheet ----
+            function openReplaceSheet(matGroupIndex, mesh) {
+                qpMatGroupIndex = matGroupIndex;
+                qpTappedMesh    = mesh;
+                const mat   = detectedMaterials[matGroupIndex];
+                const label = mat.matchedName || mat.name;
+
+                if (mat.meshes.length > 1) {
+                    tapReplaceLabel.textContent = `Replace ALL "${label}" surfaces?`;
+                    tapReplaceSheet.classList.add('show');
+                } else {
+                    // Only one mesh — skip the dialog
+                    qpReplaceAll = true;
+                    openQuickPicker();
+                }
+            }
+
+            function closeReplaceSheet() {
+                tapReplaceSheet.classList.remove('show');
+            }
+
+            tapReplaceAllBtn.addEventListener('click', () => {
+                qpReplaceAll = true;
+                closeReplaceSheet();
+                openQuickPicker();
+            });
+            tapReplaceOneBtn.addEventListener('click', () => {
+                qpReplaceAll = false;
+                closeReplaceSheet();
+                openQuickPicker();
+            });
+            tapReplaceCancel.addEventListener('click', closeReplaceSheet);
+            tapReplaceBackdrop.addEventListener('click', closeReplaceSheet);
+
+            // ---- Quick Picker panel ----
+            async function openQuickPicker() {
+                if (qpMatGroupIndex < 0) return;
+                const mat = detectedMaterials[qpMatGroupIndex];
+                qpTitle.textContent = mat.matchedName || mat.name;
+                showQpCategoriesView();
+                await loadQpCategories(mat);
+                qpEl.classList.add('show');
+            }
+
+            function closeQuickPicker() {
+                qpEl.classList.remove('show');
+                qpMatGroupIndex  = -1;
+                qpTappedMesh     = null;
+                qpCurrentTextures = [];
+            }
+
+            qpClose.addEventListener('click', closeQuickPicker);
+
+            // ---- View switching ----
+            function showQpCategoriesView() {
+                qpCategoriesView.style.display = '';
+                qpTexturesView.style.display   = 'none';
+                qpCategoriesBack.classList.add('hidden');
+            }
+
+            function showQpTexturesView() {
+                qpCategoriesView.style.display = 'none';
+                qpTexturesView.style.display   = '';
+                qpCategoriesBack.classList.remove('hidden');
+            }
+
+            qpCategoriesBack.addEventListener('click', () => {
+                const mat = qpMatGroupIndex >= 0 ? detectedMaterials[qpMatGroupIndex] : null;
+                showQpCategoriesView();
+                if (mat) loadQpCategories(mat);
+            });
+
+            // ---- Category loading ----
+            async function loadQpCategories(mat) {
+                qpCategoryGrid.innerHTML = '<div style="color:rgba(255,255,255,0.4);padding:20px;text-align:center;grid-column:1/-1;font-size:0.9em;">Loading…</div>';
+                try {
+                    const resp = await fetch('/api/textures');
+                    const data = await resp.json();
+                    if (!data.success) throw new Error();
+                    qpCategoryGrid.innerHTML = '';
+                    data.categories.forEach(cat => {
+                        const btn = document.createElement('button');
+                        btn.className = 'qp-category-btn';
+                        if (mat && mat.bestCategory && cat === mat.bestCategory) {
+                            btn.classList.add('current-cat');
+                        }
+                        btn.textContent = cat;
+                        btn.addEventListener('click', () => loadQpCategoryTextures(cat, mat));
+                        qpCategoryGrid.appendChild(btn);
+                    });
+                } catch {
+                    qpCategoryGrid.innerHTML = '<div style="color:#f87171;padding:20px;text-align:center;grid-column:1/-1;">Failed to load categories</div>';
+                }
+            }
+
+            async function loadQpCategoryTextures(category, mat) {
+                qpTitle.textContent = category;
+                showQpTexturesView();
+                qpTextureStrip.innerHTML = '<div style="color:rgba(255,255,255,0.4);padding:20px;display:flex;align-items:center;">Loading…</div>';
+                try {
+                    const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
+                    const data = await resp.json();
+                    if (!data.success) throw new Error();
+                    qpCurrentTextures = data.textures;
+                    // Prepend similar textures for this material (deduped)
+                    if (mat && mat.similarTextures && mat.similarTextures.length > 0) {
+                        const unique = mat.similarTextures.filter(t => !qpCurrentTextures.some(ct => ct.url === t.url));
+                        qpCurrentTextures = [...unique, ...qpCurrentTextures];
+                    }
+                    renderQpStrip(mat);
+                } catch {
+                    qpTextureStrip.innerHTML = '<div style="color:#f87171;padding:20px;">Failed to load textures</div>';
+                }
+            }
+
+            // ---- Render horizontal strip ----
+            function renderQpStrip(mat) {
+                qpTextureStrip.innerHTML = '';
+                const currentName = mat ? (mat.matchedName || null) : null;
+                let activeEl = null;
+
+                qpCurrentTextures.forEach(tex => {
+                    const btn = document.createElement('button');
+                    btn.className = 'qp-tex-item';
+                    if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
+                    btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
+                    btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name));
+                    qpTextureStrip.appendChild(btn);
+                });
+
+                // Scroll the active (current) texture to center
+                if (activeEl) {
+                    requestAnimationFrame(() => {
+                        const stripW = qpTextureStrip.offsetWidth;
+                        qpTextureStrip.scrollLeft = activeEl.offsetLeft - (stripW / 2) + (activeEl.offsetWidth / 2);
+                    });
+                }
+            }
+
+            // ---- Apply texture ----
+            function applyQpTexture(url, name) {
+                if (qpMatGroupIndex < 0) return;
+                const matGroup  = detectedMaterials[qpMatGroupIndex];
+                const texLoader = new THREE.TextureLoader();
+                texLoader.load(url, (newTex) => {
+                    newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                    newTex.minFilter  = THREE.LinearMipmapLinearFilter;
+                    newTex.magFilter  = THREE.LinearFilter;
+                    newTex.wrapS      = THREE.RepeatWrapping;
+                    newTex.wrapT      = THREE.RepeatWrapping;
+
+                    if (qpReplaceAll) {
+                        matGroup.meshes.forEach(mesh => {
+                            mesh.material.map = newTex;
+                            mesh.material.color.set(0xffffff);
+                            mesh.material.needsUpdate = true;
+                        });
+                    } else {
+                        // Each mesh has its own material instance — safe to update individually
+                        qpTappedMesh.material.map = newTex;
+                        qpTappedMesh.material.color.set(0xffffff);
+                        qpTappedMesh.material.needsUpdate = true;
+                    }
+
+                    if (name) matGroup.matchedName = name;
+
+                    // Update active highlight in the strip
+                    qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(btn => {
+                        btn.classList.toggle('active', btn.querySelector('span')?.textContent === name);
+                    });
+                });
+            }
+
+            // Wire bridge so handleSingleTap (init scope) can open the picker
+            quickPicker.open  = openReplaceSheet;
+            quickPicker.close = closeQuickPicker;
         }
 
     } catch (e) {

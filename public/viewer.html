@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KKC 3D Portal</title>
     <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
-    <link rel="stylesheet" href="/css/viewer.css?v=100">
+    <link rel="stylesheet" href="/css/viewer.css?v=104">
 </head>
 <body>
     <div id="top-ui">
@@ -101,6 +101,34 @@
         </div>
     </div>
 
+    <!-- Replace Mode Dialog (tap-to-select) -->
+    <div id="tap-replace-sheet" role="dialog" aria-modal="true" aria-label="Replace texture options">
+        <div id="tap-replace-backdrop"></div>
+        <div id="tap-replace-inner">
+            <div id="tap-replace-label">Replace texture on this surface?</div>
+            <div id="tap-replace-buttons">
+                <button id="tap-replace-all-btn">Replace ALL surfaces</button>
+                <button id="tap-replace-one-btn">Just THIS surface</button>
+            </div>
+            <button id="tap-replace-cancel">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Quick Texture Picker (tap-to-select) -->
+    <div id="quick-picker" role="dialog" aria-modal="true" aria-label="Quick texture picker">
+        <div id="quick-picker-header">
+            <button id="qp-categories-back">&#8592; Categories</button>
+            <span id="qp-title">Select Texture</span>
+            <button id="qp-close">&#xD7;</button>
+        </div>
+        <div id="qp-categories-view">
+            <div id="qp-category-grid"></div>
+        </div>
+        <div id="qp-textures-view" style="display:none">
+            <div id="qp-texture-strip"></div>
+        </div>
+    </div>
+
     <div id="canvas-container"></div>
 
     <script type="importmap">
@@ -111,6 +139,6 @@
         }
     }
     </script>
-<script type="module" src="/js/viewer.js?v=103"></script>
+<script type="module" src="/js/viewer.js?v=104"></script>
 </body>
 </html>
