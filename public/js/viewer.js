@@ -15,7 +15,7 @@ let selectedMaterialIndex = -1;
 let loadedModel = null;
 
 const SETTINGS = {
-    exposure:      1.45,
+    exposure:      1.30,
     saturation:    0.65,
     contrast:      1.25,
     lightIntensity: 1.0,
