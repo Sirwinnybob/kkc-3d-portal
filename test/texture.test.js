@@ -54,7 +54,8 @@ test('Texture API', async (t) => {
 
         // Check if file was saved in Uncategorized
         const uncategorizedPath = path.join(TEXTURES_DIR, 'Uncategorized');
-        const expectedFile = `TEST_ROOM_${materialName}.jpg`;
+        // Sanitized name used in server.js
+        const expectedFile = `TEST_ROOM_${materialName}`.replace(/[^a-zA-Z0-9\-_]/g, '_') + '.jpg';
         const exists = fs.existsSync(path.join(uncategorizedPath, expectedFile));
         assert.ok(exists, 'Unmatched texture should be saved to Uncategorized');
     });

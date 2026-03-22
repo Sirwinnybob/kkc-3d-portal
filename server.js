@@ -287,11 +287,53 @@ async function computePhash(imageBuffer) {
     }
 }
 
+// Pre-computed coefficients for 32x32 DCT (standard size for pHash)
+const DCT_N = 32;
+const cosTable32 = new Float64Array(DCT_N * DCT_N);
+for (let n = 0; n < DCT_N; n++) {
+    for (let k = 0; k < DCT_N; k++) {
+        cosTable32[n * DCT_N + k] = Math.cos(((2 * n + 1) * k * Math.PI) / (2 * DCT_N));
+    }
+}
+const cTable32 = new Float64Array(DCT_N);
+for (let i = 1; i < DCT_N; i++) cTable32[i] = Math.sqrt(2.0 / DCT_N);
+cTable32[0] = Math.sqrt(1.0 / DCT_N);
+
 /**
  * 2D Discrete Cosine Transform (DCT-II)
- * Optimized for small N (e.g., 32)
+ * Optimized for standard N=32 size (O(N³) complexity via separable property).
  */
 function performDCT(pixels, N) {
+    // Optimized separable DCT for N=32
+    if (N === 32) {
+        const temp = new Float64Array(32 * 32);
+        const dct = new Float64Array(32 * 32);
+
+        // Pass 1: 1D DCT on rows (temp[i, u] = sum_j pixels[i, j] * cosTable[j, u])
+        for (let i = 0; i < 32; i++) {
+            for (let u = 0; u < 32; u++) {
+                let sum = 0;
+                for (let j = 0; j < 32; j++) {
+                    sum += pixels[i * 32 + j] * cosTable32[j * 32 + u];
+                }
+                temp[i * 32 + u] = sum;
+            }
+        }
+
+        // Pass 2: 1D DCT on columns (dct[v, u] = sum_i temp[i, u] * cosTable[i, v])
+        for (let u = 0; u < 32; u++) {
+            for (let v = 0; v < 32; v++) {
+                let sum = 0;
+                for (let i = 0; i < 32; i++) {
+                    sum += temp[i * 32 + u] * cosTable32[i * 32 + v];
+                }
+                dct[v * 32 + u] = sum * cTable32[u] * cTable32[v];
+            }
+        }
+        return dct;
+    }
+
+    // Fallback to O(N⁴) implementation for non-standard sizes
     const dct = new Float64Array(N * N);
     const c = new Float64Array(N);
     for (let i = 1; i < N; i++) c[i] = Math.sqrt(2.0 / N);
