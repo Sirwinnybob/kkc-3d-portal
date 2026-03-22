@@ -132,6 +132,38 @@ async function init() {
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
 
+    // GLOBAL ESCAPE KEY: prioritized dismissal of overlays
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (helpModal && helpModal.classList.contains('show')) { toggleHelp(false); return; }
+
+            const qpEl = document.getElementById('quick-picker');
+            if (qpEl && qpEl.classList.contains('show')) { if (quickPicker.close) quickPicker.close(); return; }
+
+            const tapReplaceSheet = document.getElementById('tap-replace-sheet');
+            if (tapReplaceSheet && tapReplaceSheet.classList.contains('show')) {
+                tapReplaceSheet.classList.remove('show');
+                clearMeshHighlight();
+                return;
+            }
+
+            const texturePanel = document.getElementById('texture-panel');
+            if (texturePanel && texturePanel.classList.contains('show')) {
+                texturePanel.classList.remove('show');
+                const textureBtn = document.getElementById('texture-btn');
+                if (textureBtn) textureBtn.focus();
+                return;
+            }
+
+            if (dropdown && dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+                menuBtn.setAttribute('aria-expanded', 'false');
+                menuBtn.focus();
+                return;
+            }
+        }
+    });
+
     // AUTO-SHOW HELP: If it's their first time in the viewer on this device, show the controls modal
     if (localStorage.getItem('kkc_help_shown') !== 'true') {
         toggleHelp(true);
@@ -629,11 +661,15 @@ async function init() {
                     texturePanel.classList.toggle('show');
                     if (texturePanel.classList.contains('show')) {
                         renderMaterialList();
+                        if (closeTextureBtn) closeTextureBtn.focus();
                     }
                 };
             }
             if (closeTextureBtn) {
-                closeTextureBtn.onclick = () => texturePanel.classList.remove('show');
+                closeTextureBtn.onclick = () => {
+                    texturePanel.classList.remove('show');
+                    if (textureBtn) textureBtn.focus();
+                };
             }
 
             // Internal function to match all textures on load
