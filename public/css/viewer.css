@@ -646,14 +646,48 @@ body {
 #tap-replace-all-btn,
 #tap-replace-one-btn {
     width: 100%;
-    padding: 16px;
-    border-radius: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.12);
-    font-size: 1em;
-    font-weight: 600;
     cursor: pointer;
-    transition: background 0.18s, border-color 0.18s;
+    transition: background 0.18s, border-color 0.18s, transform 0.1s;
     font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-align: left;
+}
+
+#tap-replace-all-btn:active,
+#tap-replace-one-btn:active {
+    transform: scale(0.98);
+}
+
+.replace-btn-icon {
+    font-size: 1.6em;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.replace-btn-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.replace-btn-title {
+    font-size: 1em;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.replace-btn-sub {
+    font-size: 0.78em;
+    font-weight: 400;
+    line-height: 1.3;
+    opacity: 0.75;
 }
 
 #tap-replace-all-btn {
@@ -669,12 +703,18 @@ body {
 #tap-replace-one-btn {
     background: rgba(255,255,255,0.08);
     color: rgba(255,255,255,0.9);
+    border-color: rgba(255,255,255,0.18);
 }
 
 #tap-replace-one-btn:hover,
 #tap-replace-one-btn:active {
-    background: rgba(255,255,255,0.15);
-    border-color: rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.28);
+}
+
+#tap-replace-one-btn .replace-btn-sub {
+    color: rgba(180,210,255,0.85);
+    opacity: 1;
 }
 
 #tap-replace-cancel {

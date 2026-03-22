@@ -974,7 +974,7 @@ async function init() {
                 const label = mat.matchedName || mat.name;
 
                 if (mat.meshes.length > 1) {
-                    tapReplaceLabel.textContent = `Replace ALL "${label}" surfaces?`;
+                    tapReplaceLabel.textContent = `How do you want to change "${label}"?`;
                     tapReplaceSheet.classList.add('show');
                 } else {
                     // Only one mesh — skip the dialog
