@@ -60,14 +60,25 @@ body {
     left: 0;
     width: 240px;
     padding: 15px;
-    display: none;
+    display: flex;
     flex-direction: column;
     gap: 12px;
     max-height: calc(100vh - 80px);
     overflow-y: auto;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-8px) scale(0.97);
+    transform-origin: top left;
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4,0,0.2,1), visibility 0.2s;
 }
 
-#dropdown-menu.show { display: flex; }
+#dropdown-menu.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
 
 .slider-label { font-size: 0.8em; font-weight: bold; display: block; margin-bottom: 5px; color: #333; }
 #sens-slider { width: 100%; cursor: pointer; }
@@ -109,40 +120,97 @@ body {
 /* Help Modal */
 #help-modal {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.8);
+    inset: 0;
+    background: rgba(0,0,0,0.75);
     z-index: 2000;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s;
 }
 
-#help-modal.show { display: flex; }
+#help-modal.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
 
 .modal-content {
     background: white;
     padding: 25px;
     border-radius: 15px;
-    max-width: 300px;
-    width: 80%;
+    max-width: 340px;
+    width: 88%;
     text-align: center;
     position: relative;
+    transform: scale(0.88) translateY(10px);
+    transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1);
+}
+
+#help-modal.show .modal-content {
+    transform: scale(1) translateY(0);
+}
+
+.help-section-label {
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #007bff;
+    margin: 6px 0 3px;
 }
 
 .close-help { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; background: none; border: none; padding: 0; }
 
 #status {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    color: #007bff;
-    font-size: 0.8em;
-    font-weight: bold;
-    z-index: 50;
-    text-shadow: 0 0 5px black;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.88);
+    background: rgba(10, 10, 16, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 40px;
+    padding: 13px 22px;
+    color: rgba(255,255,255,0.9);
+    font-size: 0.88em;
+    font-weight: 600;
+    z-index: 3000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.34,1.4,0.64,1);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+}
+
+#status.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+#status.error { color: #ff6b6b; }
+
+.status-spin {
+    width: 13px;
+    height: 13px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #60a5fa;
+    border-radius: 50%;
+    animation: statusSpin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+#status.error .status-spin { display: none; }
+
+@keyframes statusSpin {
+    to { transform: rotate(360deg); }
 }
 
 /* Camera Button */
@@ -267,9 +335,19 @@ body {
     z-index: 1500;
     display: flex;
     flex-direction: column;
-    transition: right 0.3s ease;
+    transition: right 0.35s cubic-bezier(0.4,0,0.2,1);
     box-shadow: -5px 0 20px rgba(0,0,0,0.3);
     border-left: 1px solid #ddd;
+}
+
+/* Texture panel internal view fade-in on display:block */
+#materials-view, #catalog-view {
+    animation: panelSlideIn 0.22s ease;
+}
+
+@keyframes panelSlideIn {
+    from { opacity: 0; transform: translateX(10px); }
+    to   { opacity: 1; transform: translateX(0); }
 }
 
 #texture-panel.show {
@@ -828,12 +906,51 @@ body {
     color: #fff;
 }
 
+/* Views container — clips the horizontal slide animation */
+#qp-views-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+}
+
 /* Categories grid view */
 #qp-categories-view {
-    flex: 1;
+    position: absolute;
+    inset: 0;
     overflow-y: auto;
     padding: 12px 14px 24px;
     overscroll-behavior: contain;
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
+    will-change: transform;
+}
+
+/* Textures view — starts offscreen right */
+#qp-textures-view {
+    position: absolute;
+    inset: 0;
+    padding: 10px 0 24px;
+    overflow: hidden;
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
+    will-change: transform;
+}
+
+/* Active: textures slide in, categories slide out */
+#qp-views-container.show-textures #qp-categories-view {
+    transform: translateX(-28%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+#qp-views-container.show-textures #qp-textures-view {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
 }
 
 #qp-category-grid {
@@ -865,14 +982,6 @@ body {
 .qp-category-btn.current-cat {
     border-color: #3b82f6;
     color: #93c5fd;
-}
-
-/* Horizontal texture strip view */
-#qp-textures-view {
-    flex: 1;
-    padding: 10px 0 24px;
-    overflow: hidden;
-    min-height: 0;
 }
 
 #qp-texture-strip {
@@ -948,3 +1057,131 @@ body {
     #qp-category-grid { gap: 8px; }
     .qp-category-btn { padding: 14px 8px; font-size: 0.85em; }
 }
+
+/* ─── Product Tour ─── */
+#product-tour {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+
+#product-tour.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#tour-mask {
+    position: absolute;
+    border-radius: 12px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.72);
+    transition: top 0.35s cubic-bezier(0.4,0,0.2,1),
+                left 0.35s cubic-bezier(0.4,0,0.2,1),
+                width 0.35s cubic-bezier(0.4,0,0.2,1),
+                height 0.35s cubic-bezier(0.4,0,0.2,1),
+                border-radius 0.35s,
+                box-shadow 0.25s ease;
+    pointer-events: none;
+}
+
+#product-tour.no-target #tour-mask {
+    box-shadow: none;
+}
+
+#tour-tooltip {
+    position: absolute;
+    background: rgba(15,15,22,0.93);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 16px;
+    padding: 18px 20px 16px;
+    width: 260px;
+    color: white;
+    transform: scale(0.92);
+    opacity: 0;
+    transition: top 0.35s cubic-bezier(0.4,0,0.2,1),
+                left 0.35s cubic-bezier(0.4,0,0.2,1),
+                opacity 0.22s ease,
+                transform 0.28s cubic-bezier(0.34,1.4,0.64,1);
+    pointer-events: none;
+}
+
+#product-tour.show #tour-tooltip {
+    transform: scale(1);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#tour-step-dots {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.tour-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.22);
+    transition: background 0.2s, transform 0.2s;
+}
+
+.tour-dot.active {
+    background: #3b82f6;
+    transform: scale(1.3);
+}
+
+#tour-title {
+    font-size: 1em;
+    font-weight: 700;
+    margin: 0 0 6px;
+    color: #fff;
+}
+
+#tour-desc {
+    font-size: 0.82em;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.55;
+    margin: 0 0 14px;
+}
+
+#tour-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#tour-skip {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.38);
+    font-size: 0.8em;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    transition: color 0.15s;
+}
+
+#tour-skip:hover { color: rgba(255,255,255,0.65); }
+
+#tour-next {
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, transform 0.1s;
+    margin-left: auto;
+}
+
+#tour-next:hover { background: #2563eb; }
+#tour-next:active { transform: scale(0.96); }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KKC 3D Portal</title>
     <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
-    <link rel="stylesheet" href="/css/viewer.css?v=107">
+    <link rel="stylesheet" href="/css/viewer.css?v=108">
 </head>
 <body>
     <div id="top-ui">
@@ -37,19 +37,31 @@
         <button id="help-btn" class="ui-panel" aria-label="Help">?</button>
     </div>
 
-    <div id="status">Initializing 3D...</div>
+    <div id="status">
+        <span class="status-spin"></span>
+        <span id="status-text">Initializing 3D...</span>
+    </div>
 
     <div id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <div class="modal-content">
             <button id="close-help-x" class="close-help" aria-label="Close help">&times;</button>
             <h3 id="help-title" class="controls-title">Controls</h3>
             <div class="controls-body">
+                <div class="help-section-label">Navigation</div>
                 <b>Rotate:</b> Left Click / 1 Finger Drag<br>
                 <b>Pan:</b> Right Click / 2 Finger Drag<br>
-                <b>Zoom:</b> Scroll / Use Right Joystick<br>
-                <b>Pivot:</b> Double Click to center rotation<br>
-                <b>Change Texture:</b> Tap any surface to swap its texture<br>
-                <b>Paint Mode:</b> Choose "Just THIS surface" to paint multiple surfaces
+                <b>Zoom:</b> Scroll / Right Joystick<br>
+                <b>Pivot:</b> Double-tap to re-center rotation<br>
+                <br>
+                <div class="help-section-label">Textures</div>
+                <b>Change Texture:</b> Tap any surface<br>
+                <b>Paint Mode:</b> Pick "Paint Mode" — keep tapping surfaces, press × when done<br>
+                <br>
+                <div class="help-section-label">Buttons</div>
+                <b>☰ Menu:</b> Switch rooms, sensitivity, log out<br>
+                <b>🎨 Textures:</b> Browse the full material library<br>
+                <b>📷 Camera:</b> Save a hi-res photo with texture notes<br>
+                <b>? Help:</b> Show this guide
             </div>
             <button id="close-help-btn" class="close-help-btn-style">Got it</button>
         </div>
@@ -135,11 +147,27 @@
             <span id="qp-title">Select Texture</span>
             <button id="qp-close">&#xD7;</button>
         </div>
-        <div id="qp-categories-view">
-            <div id="qp-category-grid"></div>
+        <div id="qp-views-container">
+            <div id="qp-categories-view">
+                <div id="qp-category-grid"></div>
+            </div>
+            <div id="qp-textures-view">
+                <div id="qp-texture-strip"></div>
+            </div>
         </div>
-        <div id="qp-textures-view" style="display:none">
-            <div id="qp-texture-strip"></div>
+    </div>
+
+    <!-- First-Login Product Tour -->
+    <div id="product-tour" role="dialog" aria-modal="true" aria-label="Quick tour">
+        <div id="tour-mask"></div>
+        <div id="tour-tooltip">
+            <div id="tour-step-dots"></div>
+            <h3 id="tour-title"></h3>
+            <p id="tour-desc"></p>
+            <div id="tour-actions">
+                <button id="tour-skip">Skip tour</button>
+                <button id="tour-next">Next →</button>
+            </div>
         </div>
     </div>
 
@@ -153,6 +181,6 @@
         }
     }
     </script>
-<script type="module" src="/js/viewer.js?v=107"></script>
+<script type="module" src="/js/viewer.js?v=108"></script>
 </body>
 </html>

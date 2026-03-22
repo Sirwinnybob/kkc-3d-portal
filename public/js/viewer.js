@@ -75,15 +75,20 @@ const KKCShader = {
     `
 };
 
-const statusEl = document.getElementById('status');
+const statusEl   = document.getElementById('status');
+const statusText = document.getElementById('status-text');
 const updateStatus = (msg, isError = false) => {
     if (statusEl) {
-        statusEl.innerText = msg;
-        statusEl.style.color = isError ? "#ff4d4d" : "#007bff";
+        if (statusText) statusText.innerText = msg;
+        else statusEl.innerText = msg;
+        statusEl.classList.toggle('error', isError);
+        statusEl.classList.toggle('visible', msg.length > 0);
     }
 };
 
 async function init() {
+    updateStatus("Initializing 3D...");
+
     const urlParams = new URLSearchParams(window.location.search);
     const jobCode    = urlParams.get('job');
     const initialRoom = urlParams.get('room');
@@ -132,11 +137,107 @@ async function init() {
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
 
-    // AUTO-SHOW HELP: If it's their first time in the viewer on this device, show the controls modal
-    if (localStorage.getItem('kkc_help_shown') !== 'true') {
+    // AUTO-SHOW HELP: only if tour also not shown (legacy users who skipped the tour)
+    if (localStorage.getItem('kkc_help_shown') !== 'true' && localStorage.getItem('kkc_tutorial_v1') === 'true') {
         toggleHelp(true);
         localStorage.setItem('kkc_help_shown', 'true');
     }
+
+    // --- PRODUCT TOUR ---
+    (function () {
+        const tourEl   = document.getElementById('product-tour');
+        const tourMask = document.getElementById('tour-mask');
+        const tourTip  = document.getElementById('tour-tooltip');
+        const tourDots = document.getElementById('tour-step-dots');
+        const tourHead = document.getElementById('tour-title');
+        const tourBody = document.getElementById('tour-desc');
+        const tourNext = document.getElementById('tour-next');
+        const tourSkip = document.getElementById('tour-skip');
+        if (!tourEl) return;
+
+        const STEPS = [
+            { target: '#menu-btn',           title: 'Project Menu',           desc: 'Switch rooms, adjust sensitivity, or log out.',                               tip: 'bottom-right' },
+            { target: '#help-btn',           title: 'Help & Controls',        desc: 'Tap here anytime to see the full controls reference.',                        tip: 'bottom-left'  },
+            { target: '#texture-btn',        title: 'Texture Library',        desc: 'Browse and swap materials from the KKC catalog.',                             tip: 'left'         },
+            { target: '#camera-btn',         title: 'Render Photo',           desc: 'Save a high-res photo. Texture changes are logged in the watermark.',         tip: 'left'         },
+            { target: '#joystick-container', title: 'Zoom Joystick',          desc: 'Drag up to zoom in, drag down to zoom out.',                                  tip: 'left'         },
+            { target: null,                  title: 'Tap to Change Textures', desc: 'Tap any surface on the model to swap its texture. Choose <b>Paint Mode</b> to quickly paint multiple surfaces one by one.', tip: 'center' },
+        ];
+
+        let step = 0;
+
+        function buildDots() {
+            tourDots.innerHTML = '';
+            STEPS.forEach((_, i) => {
+                const d = document.createElement('div');
+                d.className = 'tour-dot' + (i === step ? ' active' : '');
+                tourDots.appendChild(d);
+            });
+        }
+
+        function positionTooltip(rect, pos) {
+            const pad = 14, tw = 268, th = 170;
+            const vw = window.innerWidth, vh = window.innerHeight;
+            let top, left;
+            if (!rect || pos === 'center') {
+                top  = vh / 2 - th / 2;
+                left = vw / 2 - tw / 2;
+            } else if (pos === 'bottom-right') {
+                top  = rect.bottom + pad;
+                left = rect.left;
+            } else if (pos === 'bottom-left') {
+                top  = rect.bottom + pad;
+                left = Math.max(pad, rect.right - tw);
+            } else if (pos === 'left') {
+                top  = rect.top + rect.height / 2 - th / 2;
+                left = rect.left - tw - pad;
+            }
+            top  = Math.max(pad, Math.min(vh - th - pad, top));
+            left = Math.max(pad, Math.min(vw - tw - pad, left));
+            tourTip.style.top  = top  + 'px';
+            tourTip.style.left = left + 'px';
+        }
+
+        function goToStep(i) {
+            step = i;
+            buildDots();
+            const s = STEPS[i];
+            tourHead.textContent = s.title;
+            tourBody.innerHTML   = s.desc;
+            tourNext.textContent = i === STEPS.length - 1 ? 'Done ✓' : 'Next →';
+            tourEl.classList.toggle('no-target', !s.target);
+
+            if (s.target) {
+                const el = document.querySelector(s.target);
+                const r  = el ? el.getBoundingClientRect() : null;
+                if (r) {
+                    const p = 8;
+                    tourMask.style.top    = (r.top    - p) + 'px';
+                    tourMask.style.left   = (r.left   - p) + 'px';
+                    tourMask.style.width  = (r.width  + p * 2) + 'px';
+                    tourMask.style.height = (r.height + p * 2) + 'px';
+                    positionTooltip(r, s.tip);
+                }
+            } else {
+                positionTooltip(null, 'center');
+            }
+        }
+
+        function closeTour() {
+            tourEl.classList.remove('show');
+            localStorage.setItem('kkc_tutorial_v1', 'true');
+        }
+
+        tourNext.addEventListener('click', () => {
+            if (step < STEPS.length - 1) goToStep(step + 1);
+            else closeTour();
+        });
+        tourSkip.addEventListener('click', closeTour);
+
+        if (localStorage.getItem('kkc_tutorial_v1') !== 'true') {
+            setTimeout(() => { goToStep(0); tourEl.classList.add('show'); }, 700);
+        }
+    })();
 
     try {
         const response = await fetch(`/api/job/${encodeURIComponent(jobCode)}`);
@@ -952,6 +1053,7 @@ async function init() {
             const qpTitle          = document.getElementById('qp-title');
             const qpCategoriesBack = document.getElementById('qp-categories-back');
             const qpClose          = document.getElementById('qp-close');
+            const qpViewsContainer = document.getElementById('qp-views-container');
             const qpCategoriesView = document.getElementById('qp-categories-view');
             const qpCategoryGrid   = document.getElementById('qp-category-grid');
             const qpTexturesView   = document.getElementById('qp-textures-view');
@@ -1034,14 +1136,12 @@ async function init() {
 
             // ---- View switching ----
             function showQpCategoriesView() {
-                qpCategoriesView.style.display = '';
-                qpTexturesView.style.display   = 'none';
+                qpViewsContainer.classList.remove('show-textures');
                 qpCategoriesBack.classList.add('hidden');
             }
 
             function showQpTexturesView() {
-                qpCategoriesView.style.display = 'none';
-                qpTexturesView.style.display   = '';
+                qpViewsContainer.classList.add('show-textures');
                 qpCategoriesBack.classList.remove('hidden');
             }
 
