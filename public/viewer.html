@@ -171,6 +171,104 @@
         </div>
     </div>
 
+    <!-- Showroom Part Selector Panel -->
+    <div id="showroom-panel" style="display:none">
+        <div class="showroom-panel-header">
+            <h3>Virtual Showroom</h3>
+            <button id="showroom-panel-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="showroom-panel-body">
+            <!-- Kitchen Style Selector -->
+            <div class="showroom-section">
+                <div class="showroom-section-title">Kitchen Style</div>
+                <div class="style-toggle" id="kitchen-style-toggle">
+                    <button data-style="face_frame" class="style-btn active">Face Frame</button>
+                    <button data-style="full_inset" class="style-btn">Full Inset</button>
+                    <button data-style="frameless" class="style-btn">Frameless</button>
+                </div>
+            </div>
+
+            <!-- Kitchen Part Categories -->
+            <div id="kitchen-parts" class="showroom-parts">
+                <div class="part-category" data-category="base">
+                    <div class="part-category-label">Base / Case</div>
+                    <div class="part-options" data-category="base"></div>
+                </div>
+                <div class="part-category" data-category="doors">
+                    <div class="part-category-label">Doors</div>
+                    <div class="part-options" data-category="doors"></div>
+                </div>
+                <div class="part-category" data-category="drawers">
+                    <div class="part-category-label">Drawers</div>
+                    <div class="part-options" data-category="drawers"></div>
+                </div>
+                <div class="part-category" data-category="crown">
+                    <div class="part-category-label">Crown</div>
+                    <div class="part-options" data-category="crown"></div>
+                </div>
+                <div class="part-category" data-category="finished_ends">
+                    <div class="part-category-label">Finished Ends</div>
+                    <div class="part-options" data-category="finished_ends"></div>
+                </div>
+                <div class="part-category" data-category="case_parts">
+                    <div class="part-category-label">Case Parts</div>
+                    <div class="part-options" data-category="case_parts"></div>
+                </div>
+            </div>
+
+            <hr class="showroom-hr">
+
+            <!-- Island Style Selector (independent) -->
+            <div class="showroom-section">
+                <div class="showroom-section-title">Island Style</div>
+                <div class="style-toggle" id="island-style-toggle">
+                    <button data-style="face_frame" class="style-btn active">Face Frame</button>
+                    <button data-style="full_inset" class="style-btn">Full Inset</button>
+                    <button data-style="frameless" class="style-btn">Frameless</button>
+                </div>
+            </div>
+
+            <div id="island-parts" class="showroom-parts">
+                <div class="part-category" data-category="island">
+                    <div class="part-category-label">Island</div>
+                    <div class="part-options" data-category="island"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Showroom Toggle Button -->
+    <button id="showroom-btn" title="Showroom Parts" aria-label="Showroom Parts" style="display:none">
+        <div class="camera-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                <polyline points="17 2 12 7 7 2"/>
+            </svg>
+        </div>
+    </button>
+
+    <!-- Save Config Button (Showroom only) -->
+    <button id="save-config-btn" title="Save Configuration" aria-label="Save Configuration" style="display:none">
+        <div class="camera-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+            </svg>
+        </div>
+    </button>
+
+    <!-- PIN Display Modal -->
+    <div id="pin-modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="pin-modal-content">
+            <h3>Configuration Saved!</h3>
+            <p>Your unique PIN:</p>
+            <div id="pin-display" class="pin-code">-----</div>
+            <p class="pin-hint">Share this PIN to let others view your exact configuration. It will also appear in screenshots.</p>
+            <button id="pin-modal-close" class="pin-modal-btn">Got it</button>
+        </div>
+    </div>
+
     <div id="canvas-container"></div>
 
     <script type="importmap">

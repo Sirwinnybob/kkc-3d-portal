@@ -19,6 +19,15 @@
         <input type="text" id="jobCode" aria-label="Job Number" placeholder="123..." autofocus>
         <button id="btnCheckJob">View My Job</button>
         <div id="errorMsg" class="error" role="alert">Job code not found. Please check and try again.</div>
+
+        <div class="showroom-divider"><span>or</span></div>
+        <button id="btnShowroom" class="showroom-btn">Virtual Showroom</button>
+
+        <div id="pin-section" class="pin-section" style="display:none">
+            <input type="text" id="pinInput" aria-label="PIN Code" placeholder="Enter 5-digit PIN" maxlength="5" inputmode="numeric" pattern="[0-9]*">
+            <button id="btnLoadPin" class="pin-load-btn">Load</button>
+        </div>
+        <button id="btnTogglePin" class="pin-toggle-btn">Have a PIN?</button>
     </div>
 
     <!-- Room Selection Dialog -->

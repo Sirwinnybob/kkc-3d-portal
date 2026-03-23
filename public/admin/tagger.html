@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KKC Showroom - Part Tagger</title>
+    <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
+    <link rel="stylesheet" href="/css/tagger.css?v=100">
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Part Tagger</h2>
+        <p class="sidebar-hint">Tag meshes in a showroom GLB to identify which parts belong to each category.</p>
+
+        <div class="sidebar-section">
+            <label>Category:</label>
+            <select id="sel-category"></select>
+        </div>
+        <div class="sidebar-section">
+            <label>Style:</label>
+            <select id="sel-style"></select>
+        </div>
+        <div class="sidebar-section">
+            <label>File:</label>
+            <select id="sel-file">
+                <option value="">-- Select --</option>
+            </select>
+        </div>
+        <button id="btn-load" class="btn-primary">Load GLB</button>
+
+        <hr>
+
+        <div id="mesh-list-section" style="display:none">
+            <h3>Meshes <span id="mesh-count"></span></h3>
+            <div class="tag-actions">
+                <label>Tag selected as:</label>
+                <select id="tag-assign">
+                    <option value="tagged">Tagged (show in this category)</option>
+                    <option value="ignore">Ignore (hide)</option>
+                </select>
+                <button id="btn-tag-selected" class="btn-small">Apply to Selected</button>
+            </div>
+            <div class="tag-legend">
+                <span class="legend-item"><span class="dot tagged"></span> Tagged</span>
+                <span class="legend-item"><span class="dot ignore"></span> Ignore</span>
+                <span class="legend-item"><span class="dot untagged"></span> Untagged</span>
+            </div>
+            <div id="mesh-list"></div>
+
+            <div class="sidebar-footer">
+                <button id="btn-select-all" class="btn-small">Select All</button>
+                <button id="btn-deselect-all" class="btn-small">Deselect All</button>
+                <button id="btn-save" class="btn-primary btn-save">Save Tags</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="status"><span id="status-text">Select a file to begin</span></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="/js/tagger.js?v=100"></script>
+</body>
+</html>

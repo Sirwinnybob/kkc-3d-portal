@@ -21,6 +21,9 @@ const JOBS_DIR = process.env.JOBS_DIR ? path.resolve(process.env.JOBS_DIR) : pat
 const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURES_DIR) : path.join(path.dirname(JOBS_DIR), 'textures');
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
+const SHOWROOM_DIR = process.env.SHOWROOM_DIR ? path.resolve(process.env.SHOWROOM_DIR) : path.join(path.dirname(JOBS_DIR), 'Showroom');
+const SHOWROOM_CATEGORIES = ['base', 'doors', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island'];
+const SHOWROOM_STYLES = ['face_frame', 'full_inset', 'frameless'];
 
 if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
 if (!fs.existsSync(TEXTURES_DIR)) fs.mkdirSync(TEXTURES_DIR, { recursive: true });
@@ -975,6 +978,215 @@ async function convertDesign(filePath, skipTimer = false) {
     }, 15000));
 }
 
+// --- SHOWROOM APIs ---
+
+// Ensure Showroom directory structure exists
+function ensureShowroomDirs() {
+    if (!fs.existsSync(SHOWROOM_DIR)) fs.mkdirSync(SHOWROOM_DIR, { recursive: true });
+    for (const cat of SHOWROOM_CATEGORIES) {
+        for (const style of SHOWROOM_STYLES) {
+            const dir = path.join(SHOWROOM_DIR, cat, style);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        }
+    }
+    const configsDir = path.join(SHOWROOM_DIR, 'configs');
+    if (!fs.existsSync(configsDir)) fs.mkdirSync(configsDir, { recursive: true });
+}
+ensureShowroomDirs();
+
+// Serve showroom GLB files
+app.use('/showroom', express.static(SHOWROOM_DIR, {
+    etag: true,
+    lastModified: true,
+    maxAge: 0,
+    cacheControl: true
+}));
+
+// GET /api/showroom/categories - List categories with available styles and parts
+app.get('/api/showroom/categories', async (req, res) => {
+    try {
+        const result = {};
+        for (const cat of SHOWROOM_CATEGORIES) {
+            result[cat] = {};
+            for (const style of SHOWROOM_STYLES) {
+                const dir = path.join(SHOWROOM_DIR, cat, style);
+                try {
+                    const files = await fs.promises.readdir(dir);
+                    const glbs = files
+                        .filter(f => f.toLowerCase().endsWith('.glb') && !f.toLowerCase().endsWith('.full.glb'))
+                        .map(f => {
+                            const baseName = path.basename(f, '.glb');
+                            const tagsFile = path.join(dir, `${baseName}.tags.json`);
+                            const hasTag = fs.existsSync(tagsFile);
+                            return { file: f, name: baseName.replace(/_/g, ' '), tagged: hasTag };
+                        });
+                    result[cat][style] = glbs;
+                } catch {
+                    result[cat][style] = [];
+                }
+            }
+        }
+        res.json({ success: true, categories: result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: 'Failed to list showroom categories' });
+    }
+});
+
+// GET /api/showroom/part/:category/:style/:file - Serve GLB URL for a showroom part
+app.get('/api/showroom/part/:category/:style/:file', (req, res) => {
+    const { category, style, file } = req.params;
+
+    // Validate inputs
+    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
+    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(file)) return res.status(400).json({ success: false, error: 'Invalid file' });
+
+    const safeFile = path.basename(file);
+    const filePath = path.join(SHOWROOM_DIR, category, style, safeFile);
+    const rel = path.relative(SHOWROOM_DIR, filePath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'Part not found' });
+
+    res.json({ success: true, url: `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(safeFile)}` });
+});
+
+// GET /api/showroom/tags/:category/:style/:file - Get tags for a showroom part
+app.get('/api/showroom/tags/:category/:style/:file', async (req, res) => {
+    const { category, style, file } = req.params;
+
+    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
+    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+
+    const baseName = path.basename(file, '.glb').replace(/\.tags$/, '');
+    const tagsPath = path.join(SHOWROOM_DIR, category, style, `${baseName}.tags.json`);
+    const rel = path.relative(SHOWROOM_DIR, tagsPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    try {
+        const data = await fs.promises.readFile(tagsPath, 'utf8');
+        res.json({ success: true, tags: JSON.parse(data) });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Tags not found' });
+        res.status(500).json({ success: false, error: 'Failed to read tags' });
+    }
+});
+
+// POST /api/showroom/tags/:category/:style/:file - Save tags for a showroom part
+app.post('/api/showroom/tags/:category/:style/:file', express.json(), async (req, res) => {
+    const { category, style, file } = req.params;
+
+    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
+    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+
+    const baseName = path.basename(file, '.glb');
+    if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid file name' });
+
+    const tagsPath = path.join(SHOWROOM_DIR, category, style, `${baseName}.tags.json`);
+    const rel = path.relative(SHOWROOM_DIR, tagsPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    try {
+        const tags = req.body;
+        if (!tags || typeof tags !== 'object') return res.status(400).json({ success: false, error: 'Invalid tags data' });
+        await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: 'Failed to save tags' });
+    }
+});
+
+// POST /api/showroom/config - Save a showroom configuration with a 5-digit PIN
+app.post('/api/showroom/config', express.json({ limit: '1mb' }), async (req, res) => {
+    const configsDir = path.join(SHOWROOM_DIR, 'configs');
+
+    try {
+        const config = req.body;
+        if (!config || typeof config !== 'object') return res.status(400).json({ success: false, error: 'Invalid config' });
+
+        // Generate unique 5-digit PIN (10000-99999)
+        let pin;
+        let attempts = 0;
+        do {
+            pin = String(10000 + Math.floor(Math.random() * 90000));
+            attempts++;
+            if (attempts > 100) return res.status(500).json({ success: false, error: 'Could not generate unique PIN' });
+        } while (fs.existsSync(path.join(configsDir, `${pin}.json`)));
+
+        config.pin = pin;
+        config.createdAt = new Date().toISOString();
+
+        await fs.promises.writeFile(path.join(configsDir, `${pin}.json`), JSON.stringify(config, null, 2), 'utf8');
+        res.json({ success: true, pin });
+    } catch (e) {
+        console.error(`[Showroom] Config save error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to save config' });
+    }
+});
+
+// GET /api/showroom/config/:pin - Load a saved showroom configuration
+app.get('/api/showroom/config/:pin', async (req, res) => {
+    const pin = req.params.pin;
+
+    // Validate PIN format
+    if (!/^\d{5}$/.test(pin)) return res.status(400).json({ success: false, error: 'Invalid PIN format' });
+
+    const configPath = path.join(SHOWROOM_DIR, 'configs', `${pin}.json`);
+    const rel = path.relative(SHOWROOM_DIR, configPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    try {
+        const data = await fs.promises.readFile(configPath, 'utf8');
+        res.json({ success: true, config: JSON.parse(data) });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Config not found' });
+        res.status(500).json({ success: false, error: 'Failed to load config' });
+    }
+});
+
+// GET /api/showroom/meshes/:category/:style/:file - List mesh names in a GLB (for tagger)
+app.get('/api/showroom/meshes/:category/:style/:file', async (req, res) => {
+    const { category, style, file } = req.params;
+
+    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
+    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+
+    const safeFile = path.basename(file);
+    const filePath = path.join(SHOWROOM_DIR, category, style, safeFile);
+    const rel = path.relative(SHOWROOM_DIR, filePath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    try {
+        const glbBuffer = await fs.promises.readFile(filePath);
+        const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: path.dirname(filePath) });
+        const gltf = result.gltf;
+
+        // Extract mesh names from the scene graph
+        const meshNames = [];
+        const extractMeshes = (nodes, allNodes) => {
+            if (!nodes) return;
+            for (const nodeIdx of nodes) {
+                const node = allNodes[nodeIdx];
+                if (node.mesh !== undefined && gltf.meshes && gltf.meshes[node.mesh]) {
+                    meshNames.push(node.name || gltf.meshes[node.mesh].name || `Mesh_${nodeIdx}`);
+                }
+                if (node.children) extractMeshes(node.children, allNodes);
+            }
+        };
+
+        if (gltf.scenes && gltf.nodes) {
+            const sceneNodes = gltf.scenes[gltf.scene || 0]?.nodes || [];
+            extractMeshes(sceneNodes, gltf.nodes);
+        }
+
+        res.json({ success: true, meshes: meshNames });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'File not found' });
+        console.error(`[Showroom] Mesh list error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to read mesh names' });
+    }
+});
+
 // --- ERROR HANDLING ---
 app.use((err, req, res, next) => {
     console.error(`[ERROR] ${err.message}`);
@@ -1112,3 +1324,4 @@ if (require.main === module) {
 module.exports = app;
 module.exports.cleanDae = cleanDae;
 module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
+module.exports.SHOWROOM_DIR = SHOWROOM_DIR;
