@@ -89,8 +89,12 @@ async function init() {
 
     // Tag actions
     document.getElementById('btn-tag-selected').onclick = () => tagSelected();
-    document.getElementById('btn-select-all').onclick = () => { meshEntries.forEach(e => e.selected = true); renderMeshList(); };
-    document.getElementById('btn-deselect-all').onclick = () => { meshEntries.forEach(e => e.selected = false); renderMeshList(); };
+    document.getElementById('btn-select-all').onclick = () => {
+        meshEntries.forEach(e => { e.selected = true; updateEntryUI(e); });
+    };
+    document.getElementById('btn-deselect-all').onclick = () => {
+        meshEntries.forEach(e => { e.selected = false; updateEntryUI(e); });
+    };
     document.getElementById('btn-save').onclick = () => saveTags();
 
     // Click-to-select on 3D view
@@ -196,42 +200,65 @@ async function loadGlb() {
     });
 }
 
+/**
+ * Initial render of the mesh list. This builds the DOM once per GLB load.
+ * We store a reference to the DOM element in each entry for fast updates.
+ */
 function renderMeshList() {
     const list = document.getElementById('mesh-list');
     list.innerHTML = '';
 
-    meshEntries.forEach((entry, i) => {
+    const fragment = document.createDocumentFragment();
+
+    meshEntries.forEach((entry) => {
         const div = document.createElement('div');
-        div.className = 'mesh-item' + (entry.selected ? ' selected' : '');
+        entry.el = div; // Store reference for fast O(1) updates
+        updateEntryUI(entry);
 
-        const dotClass = entry.tag === 'tagged' ? 'tagged' : entry.tag === 'ignore' ? 'ignore' : 'untagged';
-        const tagLabel = entry.tag || 'untagged';
+        div.onclick = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            entry.selected = !entry.selected;
+            updateEntryUI(entry);
+            highlightMesh(entry.mesh, entry.selected);
+        };
 
-        div.innerHTML = `
-            <input type="checkbox" ${entry.selected ? 'checked' : ''}>
+        fragment.appendChild(div);
+    });
+
+    list.appendChild(fragment);
+}
+
+/**
+ * Targeted UI update for a single mesh entry.
+ * Prevents full list re-renders (O(N) -> O(1)).
+ */
+function updateEntryUI(entry) {
+    if (!entry.el) return;
+
+    const dotClass = entry.tag === 'tagged' ? 'tagged' : entry.tag === 'ignore' ? 'ignore' : 'untagged';
+    const tagLabel = entry.tag || 'untagged';
+
+    // We only update the innerHTML if it doesn't exist yet (initial render)
+    // or if the tag changed. For selection, we just toggle classes/checked.
+    if (!entry.el.innerHTML || entry.el.dataset.tag !== (entry.tag || 'null')) {
+        entry.el.innerHTML = `
+            <input type="checkbox">
             <span class="mesh-dot ${dotClass}"></span>
             <span class="mesh-name">${escapeHtml(entry.name)}</span>
             <span class="mesh-tag-label">${escapeHtml(tagLabel)}</span>
         `;
+        entry.el.dataset.tag = entry.tag || 'null';
 
-        div.querySelector('input').onchange = (e) => {
+        // Re-bind checkbox since we just overwrote innerHTML
+        const cb = entry.el.querySelector('input');
+        cb.onchange = (e) => {
             entry.selected = e.target.checked;
-            div.classList.toggle('selected', entry.selected);
+            updateEntryUI(entry);
         };
+    }
 
-        div.onclick = (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            // Toggle selection
-            entry.selected = !entry.selected;
-            div.classList.toggle('selected', entry.selected);
-            div.querySelector('input').checked = entry.selected;
-
-            // Highlight in 3D
-            highlightMesh(entry.mesh, entry.selected);
-        };
-
-        list.appendChild(div);
-    });
+    entry.el.className = 'mesh-item' + (entry.selected ? ' selected' : '');
+    entry.el.querySelector('input').checked = entry.selected;
 }
 
 function highlightMesh(mesh, highlight) {
@@ -259,9 +286,9 @@ function tagSelected() {
     meshEntries.forEach(entry => {
         if (entry.selected) {
             entry.tag = tagValue;
+            updateEntryUI(entry);
         }
     });
-    renderMeshList();
     updateMeshColors();
 }
 
@@ -287,12 +314,15 @@ function onCanvasClick(e) {
     if (e.shiftKey) {
         // Shift-click: add to selection
         entry.selected = !entry.selected;
+        updateEntryUI(entry);
     } else {
         // Regular click: select only this one
-        meshEntries.forEach(e => e.selected = false);
-        entry.selected = true;
+        meshEntries.forEach(e => {
+            const wasSelected = e.selected;
+            e.selected = (e === entry);
+            if (wasSelected || e.selected) updateEntryUI(e);
+        });
     }
-    renderMeshList();
     updateMeshColors();
 
     // Scroll to the item in the list
