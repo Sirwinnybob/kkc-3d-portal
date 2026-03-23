@@ -155,6 +155,30 @@ async function init() {
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
 
+    // --- ESCAPE KEY: Close active overlays ---
+    window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const activeInput = document.activeElement;
+        if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) {
+            activeInput.blur();
+            return;
+        }
+        const tour = document.getElementById('product-tour');
+        if (tour?.classList.contains('show')) return document.getElementById('tour-skip')?.click();
+        if (helpModal?.classList.contains('show')) return toggleHelp(false);
+        if (document.getElementById('quick-picker')?.classList.contains('show')) return quickPicker.close?.();
+        const sheet = document.getElementById('tap-replace-sheet');
+        if (sheet?.classList.contains('show')) {
+            sheet.classList.remove('show');
+            return typeof clearMeshHighlight === 'function' && clearMeshHighlight();
+        }
+        if (document.getElementById('texture-panel')?.classList.contains('show')) return document.getElementById('texture-panel').classList.remove('show');
+        if (dropdown?.classList.contains('show')) {
+            dropdown.classList.remove('show');
+            menuBtn?.setAttribute('aria-expanded', 'false');
+        }
+    });
+
     // AUTO-SHOW HELP: only if tour also not shown (legacy users who skipped the tour)
     if (localStorage.getItem('kkc_help_shown') !== 'true' && localStorage.getItem('kkc_tutorial_v1') === 'true') {
         toggleHelp(true);
