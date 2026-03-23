@@ -2,6 +2,16 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+function escapeHtml(unsafe) {
+    if (!unsafe || typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 let scene, camera, renderer, controls;
 let loadedModel = null;
 let meshEntries = []; // { name, mesh, tag: 'tagged'|'ignore'|null, selected: false }
@@ -34,17 +44,17 @@ async function init() {
     }
 
     const categories = Object.keys(categoriesData);
-    selCategory.innerHTML = categories.map(c => `<option value="${c}">${c.replace(/_/g, ' ')}</option>`).join('');
+    selCategory.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c.replace(/_/g, ' '))}</option>`).join('');
 
     const styles = ['face_frame', 'full_inset', 'frameless'];
-    selStyle.innerHTML = styles.map(s => `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('');
+    selStyle.innerHTML = styles.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s.replace(/_/g, ' '))}</option>`).join('');
 
     function updateFileList() {
         const cat = selCategory.value;
         const style = selStyle.value;
         const files = (categoriesData[cat] && categoriesData[cat][style]) || [];
         selFile.innerHTML = '<option value="">-- Select --</option>' +
-            files.map(f => `<option value="${f.file}">${f.name}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
+            files.map(f => `<option value="${escapeHtml(f.file)}">${escapeHtml(f.name)}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
     }
 
     selCategory.onchange = updateFileList;
@@ -200,8 +210,8 @@ function renderMeshList() {
         div.innerHTML = `
             <input type="checkbox" ${entry.selected ? 'checked' : ''}>
             <span class="mesh-dot ${dotClass}"></span>
-            <span class="mesh-name">${entry.name}</span>
-            <span class="mesh-tag-label">${tagLabel}</span>
+            <span class="mesh-name">${escapeHtml(entry.name)}</span>
+            <span class="mesh-tag-label">${escapeHtml(tagLabel)}</span>
         `;
 
         div.querySelector('input').onchange = (e) => {
