@@ -21,6 +21,8 @@ test.describe('Viewer E2E Tests', () => {
         // Pre-set help shown to prevent modal from blocking interactions
         await page.addInitScript(() => {
             window.localStorage.setItem('kkc_help_shown', 'true');
+            window.localStorage.setItem('kkc_tutorial_v1', 'true');
+            window.localStorage.setItem('kkc_skip_disclaimer', 'true');
         });
     });
 
@@ -66,6 +68,7 @@ test.describe('Viewer E2E Tests', () => {
         // Specifically for this test, clear the storage so it starts open or we test manual toggle
         await page.addInitScript(() => {
             window.localStorage.removeItem('kkc_help_shown');
+            window.localStorage.setItem('kkc_tutorial_v1', 'true');
         });
 
         await page.goto('http://localhost:5021/viewer.html?job=TESTJOB&room=TESTROOM');
@@ -191,7 +194,7 @@ test.describe('Viewer E2E Tests', () => {
 
         // Verify connection error displays
         await expect(statusEl).toHaveText('Connection Error');
-        await expect(statusEl).toHaveCSS('color', 'rgb(255, 77, 77)'); // #ff4d4d
+        await expect(statusEl).toHaveCSS('color', 'rgb(255, 107, 107)'); // #ff6b6b
     });
 
     test('Zoom joystick pointer events manipulate joystick position', async ({ page }) => {
