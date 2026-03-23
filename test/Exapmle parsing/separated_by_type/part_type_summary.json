@@ -1,0 +1,188 @@
+{
+  "original_file": "548.glb",
+  "total_nodes": 15541,
+  "part_types": {
+    "Base_Cabinet_Assembly": {
+      "count": 1808,
+      "sample_names": [
+        "VN_Sh743e83a0_Base_Cabinet_Assembly_62_a",
+        "N_Sh743e83a0_Base_Cabinet_Assembly_62a",
+        "VN_Sh743e83a0_Base_Cabinet_Assembly_62_b",
+        "N_Sh743e83a0_Base_Cabinet_Assembly_62b",
+        "VN_Sh743e83a0_Base_Cabinet_Assembly_62_c",
+        "N_Sh743e83a0_Base_Cabinet_Assembly_62c",
+        "VN_Sh743e7ca0_Base_Cabinet_Assembly_63_a",
+        "N_Sh743e7ca0_Base_Cabinet_Assembly_63a",
+        "VN_Sh743e7ca0_Base_Cabinet_Assembly_63_b",
+        "N_Sh743e7ca0_Base_Cabinet_Assembly_63b"
+      ],
+      "output_file": "base_cabinet_assembly.glb"
+    },
+    "Cabinet": {
+      "count": 1016,
+      "sample_names": [
+        "VN_Sh90e514f0_Upper_Cabinet_Widget_Pull_128_a",
+        "N_Sh90e514f0_Upper_Cabinet_Widget_Pull_128a",
+        "VN_Sh7a8e37a0_Upper_Cabinet_Widget_Base_Plate_129_a",
+        "N_Sh7a8e37a0_Upper_Cabinet_Widget_Base_Plate_129a",
+        "VN_Sh7a8e1da0_Upper_Cabinet_Widget_Arm_130_a",
+        "N_Sh7a8e1da0_Upper_Cabinet_Widget_Arm_130a",
+        "VN_Sh7a8e37a0_Upper_Cabinet_Widget_Base_Plate_131_a",
+        "N_Sh7a8e37a0_Upper_Cabinet_Widget_Base_Plate_131a",
+        "VN_Sh7a8e1da0_Upper_Cabinet_Widget_Arm_132_a",
+        "N_Sh7a8e1da0_Upper_Cabinet_Widget_Arm_132a"
+      ],
+      "output_file": "cabinet.glb"
+    },
+    "CounterTop": {
+      "count": 38,
+      "sample_names": [
+        "VN_Sh75197dd0_Top_CounterTop_CounterTop_1959_a",
+        "N_Sh75197dd0_Top_CounterTop_CounterTop_1959a",
+        "VN_Sh75196e60_Splash_CounterTop_CounterTop_1960_a",
+        "N_Sh75196e60_Splash_CounterTop_CounterTop_1960a",
+        "VN_Sh75197000_Splash_CounterTop_CounterTop_1961_a",
+        "N_Sh75197000_Splash_CounterTop_CounterTop_1961a",
+        "VN_Sh75196f30_Splash_CounterTop_CounterTop_1962_a",
+        "N_Sh75196f30_Splash_CounterTop_CounterTop_1962a",
+        "VN_Sh7c892b30_Top_CounterTop_CounterTop_3000_a",
+        "N_Sh7c892b30_Top_CounterTop_CounterTop_3000a"
+      ],
+      "output_file": "countertop.glb"
+    },
+    "Decorative_Window": {
+      "count": 40,
+      "sample_names": [
+        "VN_Sh78f2d4d0_Decorative_Window_Room_5_a",
+        "N_Sh78f2d4d0_Decorative_Window_Room_5a",
+        "VN_Sh78f2e850_Decorative_Window_Color_6_a",
+        "N_Sh78f2e850_Decorative_Window_Color_6a",
+        "VN_Sh78f2e920_Decorative_Window_Color_7_a",
+        "N_Sh78f2e920_Decorative_Window_Color_7a",
+        "VN_Sh78f2ce50_Decorative_Window_Color_8_a",
+        "N_Sh78f2ce50_Decorative_Window_Color_8a",
+        "VN_Sh78f2db50_Decorative_Window_Color_9_a",
+        "N_Sh78f2db50_Decorative_Window_Color_9a"
+      ],
+      "output_file": "decorative_window.glb"
+    },
+    "Door": {
+      "count": 736,
+      "sample_names": [
+        "VN_Sh74270d60_Door_Door_134_a",
+        "N_Sh74270d60_Door_Door_134a",
+        "VN_Sh74274cc0_Door_Door_135_a",
+        "N_Sh74274cc0_Door_Door_135a",
+        "VN_Sh74274d90_Door_Door_136_a",
+        "N_Sh74274d90_Door_Door_136a",
+        "VN_Sh74272c40_Door_Door_137_a",
+        "N_Sh74272c40_Door_Door_137a",
+        "VN_Sh74274980_Door_Door_138_a",
+        "N_Sh74274980_Door_Door_138a"
+      ],
+      "output_file": "door.glb"
+    },
+    "Drawer": {
+      "count": 1404,
+      "sample_names": [
+        "VN_Sh91491560_Base_Cabinet_DrawerBox_960_a",
+        "N_Sh91491560_Base_Cabinet_DrawerBox_960a",
+        "VN_Sh91491560_Base_Cabinet_DrawerBox_960_b",
+        "N_Sh91491560_Base_Cabinet_DrawerBox_960b",
+        "VN_Sh91491560_Base_Cabinet_DrawerBox_960_c",
+        "N_Sh91491560_Base_Cabinet_DrawerBox_960c",
+        "VN_Sh914929b0_Base_Cabinet_DrawerBox_961_a",
+        "N_Sh914929b0_Base_Cabinet_DrawerBox_961a",
+        "VN_Sh914929b0_Base_Cabinet_DrawerBox_961_b",
+        "N_Sh914929b0_Base_Cabinet_DrawerBox_961b"
+      ],
+      "output_file": "drawer.glb"
+    },
+    "Light": {
+      "count": 4,
+      "sample_names": [
+        "LN_Light-1",
+        "LN_Light-2",
+        "LN_Light-3",
+        "LN_Light-4"
+      ],
+      "output_file": "light.glb"
+    },
+    "Molding": {
+      "count": 464,
+      "sample_names": [
+        "VN_Sh74119860_Molding_Molding_DrawerBox_970_a",
+        "N_Sh74119860_Molding_Molding_DrawerBox_970a",
+        "VN_Sh74119860_Molding_Molding_DrawerBox_970_b",
+        "N_Sh74119860_Molding_Molding_DrawerBox_970b",
+        "VN_Sh74119b60_Molding_Molding_DrawerBox_971_a",
+        "N_Sh74119b60_Molding_Molding_DrawerBox_971a",
+        "VN_Sh74119b60_Molding_Molding_DrawerBox_971_b",
+        "N_Sh74119b60_Molding_Molding_DrawerBox_971b",
+        "VN_Sh74117b60_Molding_Molding_DrawerBox_974_a",
+        "N_Sh74117b60_Molding_Molding_DrawerBox_974a"
+      ],
+      "output_file": "molding.glb"
+    },
+    "Other": {
+      "count": 4557,
+      "sample_names": [
+        "CVSc",
+        "PA_7961c9b0",
+        "PA_79e5c090",
+        "PA_7961f1f0",
+        "PA_7a81f4b0",
+        "PA_78f2d4d0",
+        "PA_78f2e850",
+        "PA_78f2e920",
+        "PA_78f2ce50",
+        "PA_78f2db50"
+      ],
+      "output_file": "other.glb"
+    },
+    "Tall_Cabinet_Assembly": {
+      "count": 474,
+      "sample_names": [
+        "VN_Sh799d5f60_Tall_Cabinet_Assembly_190_a",
+        "N_Sh799d5f60_Tall_Cabinet_Assembly_190a",
+        "VN_Sh799d5f60_Tall_Cabinet_Assembly_190_b",
+        "N_Sh799d5f60_Tall_Cabinet_Assembly_190b",
+        "VN_Sh799d5f60_Tall_Cabinet_Assembly_190_c",
+        "N_Sh799d5f60_Tall_Cabinet_Assembly_190c",
+        "VN_Sh799d5dc0_Tall_Cabinet_Assembly_239_a",
+        "N_Sh799d5dc0_Tall_Cabinet_Assembly_239a",
+        "VN_Sh799d5dc0_Tall_Cabinet_Assembly_239_b",
+        "N_Sh799d5dc0_Tall_Cabinet_Assembly_239b"
+      ],
+      "output_file": "tall_cabinet_assembly.glb"
+    },
+    "Upper_Cabinet_Assembly": {
+      "count": 4994,
+      "sample_names": [
+        "VN_Sh74271580_Upper_Cabinet_Assembly_22_a",
+        "N_Sh74271580_Upper_Cabinet_Assembly_22a",
+        "VN_Sh74271580_Upper_Cabinet_Assembly_22_b",
+        "N_Sh74271580_Upper_Cabinet_Assembly_22b",
+        "VN_Sh74271580_Upper_Cabinet_Assembly_22_c",
+        "N_Sh74271580_Upper_Cabinet_Assembly_22c",
+        "VN_Sh8c7c8df0_Upper_Cabinet_Assembly_23_a",
+        "N_Sh8c7c8df0_Upper_Cabinet_Assembly_23a",
+        "VN_Sh8c7c8df0_Upper_Cabinet_Assembly_23_b",
+        "N_Sh8c7c8df0_Upper_Cabinet_Assembly_23b"
+      ],
+      "output_file": "upper_cabinet_assembly.glb"
+    },
+    "Wall": {
+      "count": 6,
+      "sample_names": [
+        "VN_Sh79e5c090_Wall_Wall_Room_1_a",
+        "N_Sh79e5c090_Wall_Wall_Room_1a",
+        "VN_Sh79e5abf0_Wall_Wall_Room_1215_a",
+        "N_Sh79e5abf0_Wall_Wall_Room_1215a",
+        "VN_Sh79e59660_Wall_Wall_Room_1976_a",
+        "N_Sh79e59660_Wall_Wall_Room_1976a"
+      ],
+      "output_file": "wall.glb"
+    }
+  }
+}
