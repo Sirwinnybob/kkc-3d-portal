@@ -1,3 +1,7 @@
 ## 2025-05-15 - [Optimizing Hamming Distance with SWAR]
 **Learning:** In JavaScript, bitwise operations convert operands to 32-bit signed integers. When implementing low-level bitwise algorithms like population count (SWAR), using the signed right shift (`>>`) instead of the unsigned right shift (`>>>`) can lead to unexpected sign extension on values where the 31st bit is set. Additionally, multiplication in JS happens on 64-bit floats, not 32-bit ints, so results do not naturally wrap around at 32 bits unless explicitly masked or shifted.
 **Action:** Always use `>>>` for bitwise shifts intended for unsigned arithmetic. When porting C-style bitwise tricks that rely on 32nd-bit behavior or overflow, verify them against edge cases like `0x80000000` and `0xFFFFFFFF` in the JS environment.
+
+## 2025-05-22 - [O(N³) vs O(N⁴) 2D DCT]
+**Learning:** The naive 2D Discrete Cosine Transform (DCT) implementation is O(N⁴) due to nested loops over (u, v) and (x, y). Because the DCT is a separable transform, it can be computed as two 1D passes (rows then columns), reducing complexity to O(N³). In Node.js, for a fixed N=32, this reduction combined with precomputed cosine tables and scaling factors resulted in a ~100x speedup (28ms down to 0.28ms per operation).
+**Action:** When implementing mathematical transforms (DCT, FFT, etc.), always look for separability or symmetry properties to reduce dimensionality and leverage precomputed lookup tables for fixed-size inputs.
