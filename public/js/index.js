@@ -2,6 +2,16 @@ let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
 
+function escapeHtml(unsafe) {
+    if (!unsafe || typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 async function checkJob() {
     const code = document.getElementById('jobCode').value.trim();
     if (!code) return;
@@ -79,7 +89,7 @@ function showRoomSelection(rooms) {
 
     rooms.forEach((room, index) => {
         const btn = document.createElement('button');
-        btn.innerText = room;
+        btn.textContent = room;
         btn.className = 'room-btn';
         btn.id = `room-btn-${index}`;
         btn.style.margin = '5px 0';

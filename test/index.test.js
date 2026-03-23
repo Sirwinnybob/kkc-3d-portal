@@ -104,8 +104,8 @@ test('frontend index.js proceedAfterDisclaimer', async (t) => {
         assert.strictEqual(loginContainer.style.display, 'none');
         assert.strictEqual(roomContainer.style.display, 'block');
         assert.strictEqual(roomList.children.length, 2);
-        assert.strictEqual(roomList.children[0].innerText, 'Room A');
-        assert.strictEqual(roomList.children[1].innerText, 'Room B');
+        assert.strictEqual(roomList.children[0].textContent, 'Room A');
+        assert.strictEqual(roomList.children[1].textContent, 'Room B');
     });
 
     await t.test('Scenario 6: Does not throw if chkDontShow is completely missing from DOM', () => {
