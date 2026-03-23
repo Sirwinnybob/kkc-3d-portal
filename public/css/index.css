@@ -197,3 +197,84 @@ button:hover { background: #0056b3; }
 .accept-btn:active {
     transform: translateY(0);
 }
+
+/* Showroom Section */
+.showroom-divider {
+    display: flex;
+    align-items: center;
+    margin: 20px 0 16px;
+    gap: 12px;
+}
+.showroom-divider::before,
+.showroom-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #ddd;
+}
+.showroom-divider span {
+    color: #999;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.showroom-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 8px;
+    border: 2px solid #6c5ce7;
+    background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+    color: white;
+    font-size: 1.05em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.showroom-btn:hover {
+    background: linear-gradient(135deg, #5b4bd5, #918af0);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+}
+
+.pin-toggle-btn {
+    width: auto;
+    padding: 8px 16px;
+    margin-top: 12px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: #888;
+    font-size: 0.85em;
+    font-weight: normal;
+    cursor: pointer;
+    text-decoration: underline;
+}
+.pin-toggle-btn:hover { color: #555; background: transparent; }
+
+.pin-section {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: stretch;
+}
+.pin-section input {
+    flex: 1;
+    margin-bottom: 0;
+    font-size: 1.1em;
+    padding: 12px;
+    letter-spacing: 4px;
+}
+.pin-load-btn {
+    width: auto;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    background: #6c5ce7;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 0.95em;
+    white-space: nowrap;
+}
+.pin-load-btn:hover { background: #5b4bd5; }

@@ -14,6 +14,17 @@ let detectedMaterials = [];
 let selectedMaterialIndex = -1;
 let loadedModel = null;
 
+// Showroom state
+let isShowroomMode = false;
+let showroomPin = null;
+let showroomCategories = {};
+let showroomParts = {};       // { category: { group, style, file, tagData } }
+let kitchenMaterials = [];
+let islandMaterials = [];
+let kitchenStyle = 'face_frame';
+let islandStyle = 'face_frame';
+const MILKY_GRAY = 0xC8C8C8;
+
 // Bridge populated by setupTexturePanel so handleSingleTap (init scope) can open the picker
 const quickPicker = { open: null, close: null, paintTap: null };
 
@@ -90,15 +101,22 @@ async function init() {
     updateStatus("Initializing 3D...");
 
     const urlParams = new URLSearchParams(window.location.search);
+    isShowroomMode = urlParams.get('mode') === 'showroom';
+    const loadPin = urlParams.get('pin');
     const jobCode    = urlParams.get('job');
     const initialRoom = urlParams.get('room');
 
-    if (!jobCode || !initialRoom) { window.location.href = '/'; return; }
+    if (!isShowroomMode && (!jobCode || !initialRoom)) { window.location.href = '/'; return; }
 
     const jobDisplay = document.getElementById('job-code-display');
     const roomDisplay = document.getElementById('room-name-display');
-    if (jobDisplay) jobDisplay.innerText = jobCode;
-    if (roomDisplay) roomDisplay.innerText = initialRoom;
+    if (isShowroomMode) {
+        if (jobDisplay) jobDisplay.innerText = 'Showroom';
+        if (roomDisplay) roomDisplay.innerText = loadPin ? `PIN: ${loadPin}` : 'Custom';
+    } else {
+        if (jobDisplay) jobDisplay.innerText = jobCode;
+        if (roomDisplay) roomDisplay.innerText = initialRoom;
+    }
 
     // --- UI LISTENERS ---
     const menuBtn = document.getElementById('menu-btn');
@@ -240,6 +258,79 @@ async function init() {
     })();
 
     try {
+        // --- THREE.JS SETUP (shared by standard and showroom modes) ---
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 5000);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+        const dpr = Math.min(window.devicePixelRatio, 2);
+        renderer.setPixelRatio(dpr);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const canvasContainer = document.getElementById('canvas-container');
+        if (canvasContainer) canvasContainer.appendChild(renderer.domElement);
+
+        scene.add(camera);
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.25;
+
+        // --- LIGHTING ---
+        const li = SETTINGS.lightIntensity;
+        scene.add(new THREE.AmbientLight(0xffffff, li * 1.2));
+        const makeCamLight = (intensity, px, py, pz) => {
+            const light  = new THREE.DirectionalLight(0xffffff, intensity);
+            const target = new THREE.Object3D();
+            light.position.set(px, py, pz);
+            camera.add(light);
+            camera.add(target);
+            light.target = target;
+        };
+        makeCamLight(li * 0.5,  1,  1,  1);
+        const makeSceneLight = (intensity, px, py, pz) => {
+            const light = new THREE.DirectionalLight(0xffffff, intensity);
+            light.position.set(px, py, pz);
+            scene.add(light);
+        };
+        makeSceneLight(li * 0.22,  2,  1,  0);
+        makeSceneLight(li * 0.22, -2,  1,  0);
+        makeSceneLight(li * 0.22,  0,  1,  2);
+        makeSceneLight(li * 0.22,  0,  1, -2);
+        makeSceneLight(li * 0.2,   0, -1,  0);
+
+        // --- POST-PROCESSING ---
+        composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        kkcShader = new ShaderPass(KKCShader);
+        composer.addPass(kkcShader);
+        fxaaPass = new ShaderPass(FXAAShader);
+        fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * dpr);
+        fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * dpr);
+        composer.addPass(fxaaPass);
+        const outputPass = new OutputPass();
+        composer.addPass(outputPass);
+
+        // --- SENSITIVITY SLIDER ---
+        const sensSlider = document.getElementById('sens-slider');
+        const sensVal    = document.getElementById('sens-val');
+        if (sensSlider && sensVal) {
+            sensSlider.oninput = () => {
+                const v = parseFloat(sensSlider.value);
+                sensVal.innerText = v.toFixed(2);
+                controls.zoomSpeed = v;
+                controls.rotateSpeed = v;
+            };
+        }
+
+        // --- SHOWROOM MODE BRANCH ---
+        if (isShowroomMode) {
+            await initShowroomMode(loadPin);
+            window.addEventListener('resize', onWindowResize);
+            animate();
+            return; // Skip standard job loading
+        }
+
         const response = await fetch(`/api/job/${encodeURIComponent(jobCode)}`);
         const data = await response.json();
         if (data.success && data.rooms.length > 1) {
@@ -261,81 +352,6 @@ async function init() {
         const urlRes  = await fetch(`/api/job/${encodeURIComponent(jobCode)}/${encodeURIComponent(initialRoom)}`);
         const urlData = await urlRes.json();
         if (!urlData.success) throw new Error("Room URL not found");
-
-        // --- THREE.JS SETUP ---
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
-        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 5000); // Reduced near plane to 0.01 to allow closer viewing
-        
-        renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
-        const dpr = Math.min(window.devicePixelRatio, 2);
-        renderer.setPixelRatio(dpr);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        
-        const canvasContainer = document.getElementById('canvas-container');
-        if (canvasContainer) canvasContainer.appendChild(renderer.domElement);
-
-        scene.add(camera);
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.25;
-
-        // --- LIGHTING ---
-        const li = SETTINGS.lightIntensity;
-        // Higher ambient so no angle goes dark
-        scene.add(new THREE.AmbientLight(0xffffff, li * 1.2));
-
-        // Camera-attached key light (follows view)
-        const makeCamLight = (intensity, px, py, pz) => {
-            const light  = new THREE.DirectionalLight(0xffffff, intensity);
-            const target = new THREE.Object3D();
-            light.position.set(px, py, pz);
-            camera.add(light);
-            camera.add(target);
-            light.target = target;
-        };
-        makeCamLight(li * 0.5,  1,  1,  1);
-
-        // World-space fill lights — fixed in scene so all angles stay lit
-        // Lights are angled more horizontally (2:1 ratio) to reduce over-brightening
-        // of upward-facing horizontal surfaces vs vertical surfaces
-        const makeSceneLight = (intensity, px, py, pz) => {
-            const light = new THREE.DirectionalLight(0xffffff, intensity);
-            light.position.set(px, py, pz);
-            scene.add(light);
-        };
-        makeSceneLight(li * 0.22,  2,  1,  0);
-        makeSceneLight(li * 0.22, -2,  1,  0);
-        makeSceneLight(li * 0.22,  0,  1,  2);
-        makeSceneLight(li * 0.22,  0,  1, -2);
-        makeSceneLight(li * 0.2,   0, -1,  0); // under-fill
-
-        // --- POST-PROCESSING ---
-        composer = new EffectComposer(renderer);
-        composer.addPass(new RenderPass(scene, camera));
-        
-        kkcShader = new ShaderPass(KKCShader);
-        composer.addPass(kkcShader);
-
-        fxaaPass = new ShaderPass(FXAAShader);
-        fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * dpr);
-        fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * dpr);
-        composer.addPass(fxaaPass);
-
-        const outputPass = new OutputPass();
-        composer.addPass(outputPass);
-
-        // --- SENSITIVITY SLIDER ONLY ---
-        const sensSlider = document.getElementById('sens-slider');
-        const sensVal    = document.getElementById('sens-val');
-        if (sensSlider && sensVal) {
-            sensSlider.oninput = () => {
-                const v = parseFloat(sensSlider.value);
-                sensVal.innerText = v.toFixed(2);
-                controls.zoomSpeed = v;
-                controls.rotateSpeed = v;
-            };
-        }
 
         // --- TAP DETECTION: single tap → texture picker, double tap → pivot ---
         let lastTap = 0;
@@ -563,11 +579,19 @@ async function init() {
                     const changeLines = [];
                     for (const mat of detectedMaterials) {
                         if (!mat.hasTexture || mat.isHidden) continue;
-                        const orig = mat.originalMatchedName;
-                        const curr = mat.matchedName;
-                        if (!orig || !curr || orig === curr) continue;
-                        const prefix = mat.hasPartialChange ? 'PARTIAL ' : '';
-                        changeLines.push(`${prefix}${orig} \u21c4 ${curr}`);
+                        if (isShowroomMode) {
+                            // In showroom mode, list all applied textures/colors
+                            if (mat.matchedName) {
+                                const section = mat.isIsland ? '[ISLAND] ' : '';
+                                changeLines.push(`${section}${mat.name}: ${mat.matchedName}`);
+                            }
+                        } else {
+                            const orig = mat.originalMatchedName;
+                            const curr = mat.matchedName;
+                            if (!orig || !curr || orig === curr) continue;
+                            const prefix = mat.hasPartialChange ? 'PARTIAL ' : '';
+                            changeLines.push(`${prefix}${orig} \u21c4 ${curr}`);
+                        }
                     }
 
                     ctx.fillStyle = 'white';
@@ -588,7 +612,9 @@ async function init() {
 
                     // Draw main job/room line
                     ctx.font = `bold ${fontSize}px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
-                    const textContent = `Job: ${jobCode} | Room: ${initialRoom}`;
+                    const textContent = isShowroomMode
+                        ? `Showroom${showroomPin ? ` | PIN: ${showroomPin}` : ''}`
+                        : `Job: ${jobCode} | Room: ${initialRoom}`;
                     const metrics = ctx.measureText(textContent);
                     if (textX + metrics.width > targetWidth - padding) {
                         const maxTextWidth = targetWidth - textX - padding;
@@ -615,7 +641,9 @@ async function init() {
                 const dataUrl = canvas2d.toDataURL('image/jpeg', 0.92);
                 const a = document.createElement('a');
                 a.href = dataUrl;
-                a.download = `KKC_${jobCode}_${initialRoom.replace(/ /g, '_')}.jpg`;
+                a.download = isShowroomMode
+                    ? `KKC_Showroom${showroomPin ? `_${showroomPin}` : ''}.jpg`
+                    : `KKC_${jobCode}_${initialRoom.replace(/ /g, '_')}.jpg`;
                 a.click();
 
                 updateStatus("Photo Saved");
@@ -811,46 +839,69 @@ async function init() {
                     return;
                 }
 
-                visibleMaterials.forEach((mat) => {
-                    const btn = document.createElement('button');
-                    btn.className = 'material-item';
+                // In showroom mode, separate kitchen and island
+                if (isShowroomMode) {
+                    const kitchenVis = visibleMaterials.filter(m => !m.isIsland);
+                    const islandVis = visibleMaterials.filter(m => m.isIsland);
 
-                    let previewHtml = '';
-                    if (mat.hasTexture && mat.material.map && mat.material.map.image) {
-                        try {
-                            const img = mat.material.map.image;
-                            const canvas = document.createElement('canvas');
-                            canvas.width = 64;
-                            canvas.height = 64;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0, 64, 64);
-                            previewHtml = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
-                        } catch {
-                            previewHtml = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
-                        }
-                    } else {
-                        const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-                        previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+                    if (kitchenVis.length > 0) {
+                        const header = document.createElement('div');
+                        header.className = 'material-section-header';
+                        header.textContent = 'Kitchen';
+                        materialList.appendChild(header);
+                        kitchenVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
                     }
+                    if (islandVis.length > 0) {
+                        const header = document.createElement('div');
+                        header.className = 'material-section-header';
+                        header.textContent = 'Island';
+                        materialList.appendChild(header);
+                        islandVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
+                    }
+                } else {
+                    visibleMaterials.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
+                }
 
-                    const displayName = mat.matchedName || mat.name;
-                    btn.innerHTML = `
-                        <div class="material-item-left">
-                            ${previewHtml}
-                            <div class="material-info">
-                                <span class="material-name">${displayName}</span>
-                                <span class="material-status">Customizable</span>
-                            </div>
-                        </div>
-                        <span class="material-badge">Has Texture</span>
-                    `;
-                    // Find actual index in detectedMaterials for selectMaterial
-                    const originalIndex = detectedMaterials.indexOf(mat);
-                    btn.onclick = () => selectMaterial(originalIndex);
-                    materialList.appendChild(btn);
-                });
                 document.getElementById('materials-view').style.display = 'block';
                 document.getElementById('catalog-view').style.display = 'none';
+            }
+
+            function createMaterialItem(mat) {
+                const btn = document.createElement('button');
+                btn.className = 'material-item';
+
+                let previewHtml = '';
+                if (mat.hasTexture && mat.material.map && mat.material.map.image) {
+                    try {
+                        const img = mat.material.map.image;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 64;
+                        canvas.height = 64;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, 64, 64);
+                        previewHtml = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
+                    } catch {
+                        previewHtml = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+                    }
+                } else {
+                    const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+                    previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+                }
+
+                const displayName = mat.matchedName || mat.name;
+                btn.innerHTML = `
+                    <div class="material-item-left">
+                        ${previewHtml}
+                        <div class="material-info">
+                            <span class="material-name">${displayName}</span>
+                            <span class="material-status">Customizable</span>
+                        </div>
+                    </div>
+                    <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
+                `;
+                const originalIndex = detectedMaterials.indexOf(mat);
+                btn.onclick = () => selectMaterial(originalIndex);
+                return btn;
             }
 
             // Select a material and show catalog
@@ -954,6 +1005,14 @@ async function init() {
                         textureCategories = data.categories;
                         textureGrid.innerHTML = '';
                         catalogTitle.innerText = 'Select a Category';
+
+                        // Add "Solid Colors" as the first category
+                        const colorBtn = document.createElement('button');
+                        colorBtn.className = 'texture-category-btn';
+                        colorBtn.innerText = 'Solid Colors';
+                        colorBtn.onclick = () => showSolidColorsView();
+                        textureGrid.appendChild(colorBtn);
+
                         textureCategories.forEach(cat => {
                             const btn = document.createElement('button');
                             btn.className = 'texture-category-btn';
@@ -964,6 +1023,81 @@ async function init() {
                     }
                 } catch (e) {
                     console.error("Failed to load categories:", e);
+                }
+            }
+
+            // Solid Colors view
+            function showSolidColorsView() {
+                if (selectedMaterialIndex < 0) return;
+                catalogTitle.innerText = 'Solid Colors';
+                textureGrid.innerHTML = '';
+
+                // Browse button to go back
+                insertBrowseButton();
+
+                // Preset swatches
+                const presetsDiv = document.createElement('div');
+                presetsDiv.className = 'color-presets';
+                COLOR_PRESETS.forEach(preset => {
+                    const swatch = document.createElement('button');
+                    swatch.className = 'color-swatch';
+                    swatch.style.backgroundColor = preset.hex;
+                    swatch.title = preset.name;
+                    swatch.onclick = () => {
+                        applySolidColor(detectedMaterials[selectedMaterialIndex], preset.hex);
+                        presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                        swatch.classList.add('active');
+                    };
+                    presetsDiv.appendChild(swatch);
+                });
+                textureGrid.appendChild(presetsDiv);
+
+                // Color picker
+                const pickerRow = document.createElement('div');
+                pickerRow.className = 'color-picker-row';
+                const pickerLabel = document.createElement('label');
+                pickerLabel.textContent = 'Custom:';
+                const picker = document.createElement('input');
+                picker.type = 'color';
+                picker.value = '#C8C8C8';
+                const hexDisplay = document.createElement('span');
+                hexDisplay.className = 'color-hex-display';
+                hexDisplay.textContent = picker.value;
+
+                picker.oninput = () => {
+                    hexDisplay.textContent = picker.value;
+                    applySolidColor(detectedMaterials[selectedMaterialIndex], picker.value);
+                    presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                };
+                pickerRow.appendChild(pickerLabel);
+                pickerRow.appendChild(picker);
+                pickerRow.appendChild(hexDisplay);
+                textureGrid.appendChild(pickerRow);
+
+                // Recent colors
+                const recent = getRecentColors();
+                if (recent.length > 0) {
+                    const recentSection = document.createElement('div');
+                    recentSection.className = 'recent-colors-section';
+                    const recentLabel = document.createElement('div');
+                    recentLabel.className = 'recent-colors-label';
+                    recentLabel.textContent = 'Recent Colors';
+                    recentSection.appendChild(recentLabel);
+
+                    const recentRow = document.createElement('div');
+                    recentRow.className = 'recent-colors-row';
+                    recent.forEach(hex => {
+                        const swatch = document.createElement('button');
+                        swatch.className = 'recent-color-swatch';
+                        swatch.style.backgroundColor = hex;
+                        swatch.title = hex;
+                        swatch.onclick = () => {
+                            applySolidColor(detectedMaterials[selectedMaterialIndex], hex);
+                        };
+                        recentRow.appendChild(swatch);
+                    });
+                    recentSection.appendChild(recentRow);
+                    textureGrid.appendChild(recentSection);
                 }
             }
 
@@ -1159,6 +1293,14 @@ async function init() {
                     const data = await resp.json();
                     if (!data.success) throw new Error();
                     qpCategoryGrid.innerHTML = '';
+
+                    // Add Solid Colors first
+                    const colorBtn = document.createElement('button');
+                    colorBtn.className = 'qp-category-btn';
+                    colorBtn.textContent = 'Solid Colors';
+                    colorBtn.addEventListener('click', () => loadQpSolidColors(mat));
+                    qpCategoryGrid.appendChild(colorBtn);
+
                     data.categories.forEach(cat => {
                         const btn = document.createElement('button');
                         btn.className = 'qp-category-btn';
@@ -1172,6 +1314,64 @@ async function init() {
                 } catch {
                     qpCategoryGrid.innerHTML = '<div style="color:#f87171;padding:20px;text-align:center;grid-column:1/-1;">Failed to load categories</div>';
                 }
+            }
+
+            // Quick picker solid colors view
+            function loadQpSolidColors(mat) {
+                qpTitle.textContent = 'Solid Colors';
+                showQpTexturesView();
+                qpTextureStrip.innerHTML = '';
+
+                // Presets
+                COLOR_PRESETS.forEach(preset => {
+                    const btn = document.createElement('button');
+                    btn.className = 'qp-tex-item';
+                    btn.innerHTML = `<div class="color-swatch" style="background-color:${preset.hex};width:60px;height:60px;border-radius:8px;"></div><span>${preset.name}</span>`;
+                    btn.addEventListener('click', () => {
+                        if (qpMatGroupIndex >= 0) {
+                            const targetMat = detectedMaterials[qpMatGroupIndex];
+                            if (qpReplaceAll) {
+                                applySolidColor(targetMat, preset.hex);
+                            } else {
+                                // Paint mode: single mesh
+                                const color = new THREE.Color(preset.hex);
+                                qpTappedMesh.material.map = null;
+                                qpTappedMesh.material.color.copy(color);
+                                qpTappedMesh.material.needsUpdate = true;
+                                targetMat.hasPartialChange = true;
+                                targetMat.isColor = true;
+                                targetMat.colorHex = preset.hex;
+                                const r = Math.round(color.r * 255);
+                                const g = Math.round(color.g * 255);
+                                const b = Math.round(color.b * 255);
+                                targetMat.matchedName = `RGB(${r},${g},${b})`;
+                                addRecentColor(preset.hex);
+                            }
+                            // Update active
+                            qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                            qpLastTextureUrl = null;
+                            qpLastTextureName = preset.name;
+                        }
+                    });
+                    qpTextureStrip.appendChild(btn);
+                });
+
+                // Recent colors
+                const recent = getRecentColors();
+                recent.forEach(hex => {
+                    const btn = document.createElement('button');
+                    btn.className = 'qp-tex-item';
+                    btn.innerHTML = `<div class="color-swatch" style="background-color:${hex};width:60px;height:60px;border-radius:8px;"></div><span>${hex}</span>`;
+                    btn.addEventListener('click', () => {
+                        if (qpMatGroupIndex >= 0) {
+                            applySolidColor(detectedMaterials[qpMatGroupIndex], hex);
+                            qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                        }
+                    });
+                    qpTextureStrip.appendChild(btn);
+                });
             }
 
             async function loadQpCategoryTextures(category, mat) {
@@ -1312,6 +1512,445 @@ async function init() {
 
     window.addEventListener('resize', onWindowResize);
     animate();
+}
+
+// ================================================================
+// SHOWROOM MODE
+// ================================================================
+
+async function initShowroomMode(pinToLoad) {
+    updateStatus('Loading Showroom...');
+
+    // Show showroom-specific UI
+    const showroomBtn = document.getElementById('showroom-btn');
+    const saveConfigBtn = document.getElementById('save-config-btn');
+    const showroomPanel = document.getElementById('showroom-panel');
+    if (showroomBtn) showroomBtn.style.display = '';
+    if (saveConfigBtn) saveConfigBtn.style.display = '';
+
+    // Hide job-specific UI (room switcher)
+    const roomSwitcher = document.getElementById('room-switcher');
+    if (roomSwitcher) roomSwitcher.style.display = 'none';
+
+    // Toggle showroom panel
+    if (showroomBtn) {
+        showroomBtn.onclick = () => showroomPanel.classList.toggle('show');
+    }
+    const panelClose = document.getElementById('showroom-panel-close');
+    if (panelClose) panelClose.onclick = () => showroomPanel.classList.remove('show');
+
+    // Fetch showroom categories
+    try {
+        const resp = await fetch('/api/showroom/categories');
+        const data = await resp.json();
+        if (data.success) showroomCategories = data.categories;
+    } catch (e) {
+        updateStatus('Failed to load showroom data', true);
+        return;
+    }
+
+    // Setup style toggles
+    setupStyleToggle('kitchen-style-toggle', (style) => {
+        kitchenStyle = style;
+        populateKitchenParts();
+    });
+    setupStyleToggle('island-style-toggle', (style) => {
+        islandStyle = style;
+        populateIslandParts();
+    });
+
+    // Populate initial parts
+    populateKitchenParts();
+    populateIslandParts();
+
+    // Setup save config button
+    if (saveConfigBtn) saveConfigBtn.onclick = saveShowroomConfig;
+
+    // PIN modal close
+    const pinModalClose = document.getElementById('pin-modal-close');
+    if (pinModalClose) pinModalClose.onclick = () => {
+        document.getElementById('pin-modal').style.display = 'none';
+    };
+
+    // Setup texture panel for showroom (reuse existing)
+    setupTexturePanel(null, null);
+
+    // Load from PIN if provided
+    if (pinToLoad) {
+        await loadShowroomConfig(pinToLoad);
+    } else {
+        // Open showroom panel by default
+        showroomPanel.classList.add('show');
+    }
+
+    updateStatus('');
+}
+
+function setupStyleToggle(elementId, onChange) {
+    const toggle = document.getElementById(elementId);
+    if (!toggle) return;
+    const buttons = toggle.querySelectorAll('.style-btn');
+    buttons.forEach(btn => {
+        btn.onclick = () => {
+            buttons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            onChange(btn.dataset.style);
+        };
+    });
+}
+
+function populateKitchenParts() {
+    const kitchenCats = ['base', 'doors', 'drawers', 'crown', 'finished_ends', 'case_parts'];
+    kitchenCats.forEach(cat => {
+        const container = document.querySelector(`#kitchen-parts .part-options[data-category="${cat}"]`);
+        if (!container) return;
+        const parts = (showroomCategories[cat] && showroomCategories[cat][kitchenStyle]) || [];
+        renderPartOptions(container, cat, kitchenStyle, parts);
+    });
+}
+
+function populateIslandParts() {
+    const container = document.querySelector(`#island-parts .part-options[data-category="island"]`);
+    if (!container) return;
+    const parts = (showroomCategories.island && showroomCategories.island[islandStyle]) || [];
+    renderPartOptions(container, 'island', islandStyle, parts);
+}
+
+function renderPartOptions(container, category, style, parts) {
+    container.innerHTML = '';
+    if (parts.length === 0) {
+        container.innerHTML = '<span class="part-options-empty">No parts available</span>';
+        return;
+    }
+    parts.forEach(part => {
+        const btn = document.createElement('button');
+        btn.className = 'part-option-btn';
+        btn.textContent = part.name;
+        btn.dataset.file = part.file;
+
+        // Check if already active
+        const current = showroomParts[category];
+        if (current && current.file === part.file && current.style === style) {
+            btn.classList.add('active');
+        }
+
+        btn.onclick = () => loadShowroomPart(category, style, part.file, btn);
+        container.appendChild(btn);
+    });
+}
+
+async function loadShowroomPart(category, style, file, btnEl) {
+    if (btnEl) {
+        // Deactivate siblings
+        btnEl.parentElement.querySelectorAll('.part-option-btn').forEach(b => b.classList.remove('active'));
+        btnEl.classList.add('active', 'loading');
+    }
+
+    // Remove previous part for this category
+    if (showroomParts[category]) {
+        scene.remove(showroomParts[category].group);
+        // Remove materials from tracking
+        const oldMeshes = new Set();
+        showroomParts[category].group.traverse(c => { if (c.isMesh) oldMeshes.add(c); });
+        detectedMaterials = detectedMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
+        kitchenMaterials = kitchenMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
+        islandMaterials = islandMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
+        delete showroomParts[category];
+    }
+
+    // Load tags
+    let tagData = null;
+    try {
+        const tagsResp = await fetch(`/api/showroom/tags/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`);
+        if (tagsResp.ok) {
+            const td = await tagsResp.json();
+            if (td.success) tagData = td.tags;
+        }
+    } catch { /* no tags */ }
+
+    // Load GLB
+    const glbUrl = `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`;
+    const loader = new GLTFLoader();
+
+    return new Promise((resolve) => {
+        loader.load(glbUrl, (gltf) => {
+            const group = gltf.scene;
+            const materialMap = new Map();
+            const isIsland = (category === 'island');
+
+            group.traverse((child) => {
+                if (!child.isMesh) return;
+
+                // Tag-based visibility: hide meshes not tagged for this category
+                if (tagData && tagData.taggedMeshes) {
+                    const meshName = child.name || '';
+                    if (!tagData.taggedMeshes.includes(meshName)) {
+                        child.visible = false;
+                        return;
+                    }
+                }
+
+                const prevMat = child.material;
+                const hasTexture = !!prevMat.map;
+
+                // Check if texture should be stripped (not in Hidden folder)
+                // In showroom mode, strip ALL textures to milky gray
+                // Hidden textures are identified post-matching, so for now strip all
+                child.material = new THREE.MeshLambertMaterial({
+                    color: MILKY_GRAY,
+                    side: THREE.DoubleSide,
+                    polygonOffset: true,
+                    polygonOffsetFactor: 1,
+                    polygonOffsetUnits: 1
+                });
+
+                if (hasTexture) {
+                    const texSrc = prevMat.map?.image?.src || prevMat.map?.uuid || `tex_${materialMap.size}`;
+                    if (materialMap.has(texSrc)) {
+                        materialMap.get(texSrc).meshes.push(child);
+                    } else {
+                        materialMap.set(texSrc, {
+                            name: prevMat.name || child.name || `Material_${materialMap.size}`,
+                            material: child.material,
+                            meshes: [child],
+                            hasTexture: true,
+                            originalMap: null, // stripped
+                            originalColor: new THREE.Color(MILKY_GRAY),
+                            matchedName: null,
+                            originalMatchedName: null,
+                            isHidden: false,
+                            isIsland: isIsland,
+                            showroomCategory: category
+                        });
+                    }
+                }
+            });
+
+            const newMaterials = Array.from(materialMap.values());
+            detectedMaterials.push(...newMaterials);
+            if (isIsland) {
+                islandMaterials.push(...newMaterials);
+            } else {
+                kitchenMaterials.push(...newMaterials);
+            }
+
+            scene.add(group);
+            showroomParts[category] = { group, style, file, tagData };
+
+            // Reframe camera around all loaded parts
+            reframeShowroomCamera();
+
+            if (btnEl) btnEl.classList.remove('loading');
+            resolve();
+        }, undefined, (err) => {
+            console.error(`Failed to load showroom part: ${category}/${style}/${file}`, err);
+            if (btnEl) btnEl.classList.remove('loading');
+            resolve();
+        });
+    });
+}
+
+function reframeShowroomCamera() {
+    const box = new THREE.Box3();
+    let hasContent = false;
+    for (const part of Object.values(showroomParts)) {
+        const partBox = new THREE.Box3().setFromObject(part.group);
+        if (!partBox.isEmpty()) {
+            box.union(partBox);
+            hasContent = true;
+        }
+    }
+    if (!hasContent) return;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    camera.position.set(center.x + maxDim, center.y + maxDim * 0.7, center.z + maxDim);
+    camera.lookAt(center);
+    controls.target.copy(center);
+    controls.update();
+}
+
+// --- SAVE / LOAD CONFIG ---
+
+async function saveShowroomConfig() {
+    const config = {
+        kitchen: {
+            style: kitchenStyle,
+            parts: {},
+            textures: {}
+        },
+        island: {
+            style: islandStyle,
+            parts: {},
+            textures: {}
+        },
+        camera: {
+            position: [camera.position.x, camera.position.y, camera.position.z],
+            target: [controls.target.x, controls.target.y, controls.target.z]
+        }
+    };
+
+    // Record selected parts
+    for (const [cat, part] of Object.entries(showroomParts)) {
+        const section = cat === 'island' ? config.island : config.kitchen;
+        section.parts[cat] = { style: part.style, file: part.file };
+    }
+
+    // Record texture/color assignments
+    for (const mat of detectedMaterials) {
+        if (!mat.hasTexture) continue;
+        const section = mat.isIsland ? config.island : config.kitchen;
+        const key = mat.name;
+        if (mat.isColor) {
+            section.textures[key] = { type: 'color', hex: mat.colorHex };
+        } else if (mat.matchedName) {
+            section.textures[key] = { type: 'texture', name: mat.matchedName, category: mat.bestCategory };
+        }
+    }
+
+    updateStatus('Saving configuration...');
+    try {
+        const resp = await fetch('/api/showroom/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        const data = await resp.json();
+        if (data.success) {
+            showroomPin = data.pin;
+            const roomDisplay = document.getElementById('room-name-display');
+            if (roomDisplay) roomDisplay.innerText = `PIN: ${data.pin}`;
+
+            // Show PIN modal
+            const pinModal = document.getElementById('pin-modal');
+            const pinDisplay = document.getElementById('pin-display');
+            if (pinDisplay) pinDisplay.textContent = data.pin;
+            if (pinModal) pinModal.style.display = '';
+            updateStatus('Configuration saved!');
+            setTimeout(() => updateStatus(''), 3000);
+        } else {
+            updateStatus('Failed to save', true);
+        }
+    } catch (e) {
+        updateStatus('Save error', true);
+        console.error(e);
+    }
+}
+
+async function loadShowroomConfig(pin) {
+    updateStatus(`Loading PIN ${pin}...`);
+    try {
+        const resp = await fetch(`/api/showroom/config/${encodeURIComponent(pin)}`);
+        const data = await resp.json();
+        if (!data.success || !data.config) {
+            updateStatus('PIN not found', true);
+            return;
+        }
+
+        const config = data.config;
+        showroomPin = pin;
+
+        // Set styles
+        if (config.kitchen && config.kitchen.style) {
+            kitchenStyle = config.kitchen.style;
+            setStyleToggle('kitchen-style-toggle', kitchenStyle);
+            populateKitchenParts();
+        }
+        if (config.island && config.island.style) {
+            islandStyle = config.island.style;
+            setStyleToggle('island-style-toggle', islandStyle);
+            populateIslandParts();
+        }
+
+        // Load parts
+        const loadPromises = [];
+        const allParts = { ...(config.kitchen?.parts || {}), ...(config.island?.parts || {}) };
+        for (const [cat, partInfo] of Object.entries(allParts)) {
+            loadPromises.push(loadShowroomPart(cat, partInfo.style, partInfo.file, null));
+        }
+        await Promise.all(loadPromises);
+
+        // Apply textures/colors
+        const allTextures = { ...(config.kitchen?.textures || {}), ...(config.island?.textures || {}) };
+        for (const [matName, texInfo] of Object.entries(allTextures)) {
+            const mat = detectedMaterials.find(m => m.name === matName);
+            if (!mat) continue;
+
+            if (texInfo.type === 'color') {
+                applySolidColor(mat, texInfo.hex);
+            } else if (texInfo.type === 'texture' && texInfo.name) {
+                // Try to find and apply the texture from catalog
+                mat.matchedName = texInfo.name;
+                mat.bestCategory = texInfo.category;
+            }
+        }
+
+        // Restore camera
+        if (config.camera) {
+            const pos = config.camera.position;
+            const tgt = config.camera.target;
+            if (pos) camera.position.set(pos[0], pos[1], pos[2]);
+            if (tgt) controls.target.set(tgt[0], tgt[1], tgt[2]);
+            controls.update();
+        }
+
+        updateStatus('');
+    } catch (e) {
+        updateStatus('Failed to load PIN', true);
+        console.error(e);
+    }
+}
+
+function setStyleToggle(elementId, style) {
+    const toggle = document.getElementById(elementId);
+    if (!toggle) return;
+    toggle.querySelectorAll('.style-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.style === style);
+    });
+}
+
+// --- SOLID COLOR SUPPORT ---
+
+const COLOR_PRESETS = [
+    { name: 'White', hex: '#FFFFFF' },
+    { name: 'Cream', hex: '#F5F0E1' },
+    { name: 'Navy', hex: '#1B2A4A' },
+    { name: 'Sage Green', hex: '#9CAF88' },
+    { name: 'Charcoal', hex: '#36454F' },
+    { name: 'Black', hex: '#1C1C1C' },
+    { name: 'Dove Gray', hex: '#B0B0B0' },
+    { name: 'Warm Taupe', hex: '#B39B86' }
+];
+
+function getRecentColors() {
+    try {
+        return JSON.parse(localStorage.getItem('kkc_recent_colors') || '[]').slice(0, 10);
+    } catch { return []; }
+}
+
+function addRecentColor(hex) {
+    let recent = getRecentColors().filter(c => c !== hex);
+    recent.unshift(hex);
+    if (recent.length > 10) recent = recent.slice(0, 10);
+    localStorage.setItem('kkc_recent_colors', JSON.stringify(recent));
+}
+
+function applySolidColor(matGroup, hexColor) {
+    const color = new THREE.Color(hexColor);
+    matGroup.meshes.forEach(mesh => {
+        mesh.material.map = null;
+        mesh.material.color.copy(color);
+        mesh.material.needsUpdate = true;
+    });
+    // Parse RGB for display
+    const r = Math.round(color.r * 255);
+    const g = Math.round(color.g * 255);
+    const b = Math.round(color.b * 255);
+    matGroup.matchedName = `RGB(${r},${g},${b})`;
+    matGroup.isColor = true;
+    matGroup.colorHex = hexColor;
+    addRecentColor(hexColor);
 }
 
 function onWindowResize() {
