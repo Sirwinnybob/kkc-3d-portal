@@ -14,6 +14,16 @@ let detectedMaterials = [];
 let selectedMaterialIndex = -1;
 let loadedModel = null;
 
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return unsafe;
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
 // Bridge populated by setupTexturePanel so handleSingleTap (init scope) can open the picker
 const quickPicker = { open: null, close: null, paintTap: null };
 
@@ -838,7 +848,7 @@ async function init() {
                         <div class="material-item-left">
                             ${previewHtml}
                             <div class="material-info">
-                                <span class="material-name">${displayName}</span>
+                                <span class="material-name">${escapeHtml(displayName)}</span>
                                 <span class="material-status">Customizable</span>
                             </div>
                         </div>
@@ -991,7 +1001,7 @@ async function init() {
                     const btn = document.createElement('button');
                     btn.className = 'texture-thumb';
                     btn.setAttribute('aria-label', `Select texture ${tex.name}`);
-                    btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
+                    btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
                     btn.onclick = () => previewTexture(tex.url, tex.name);
                     textureGrid.appendChild(btn);
                 });
@@ -1204,7 +1214,7 @@ async function init() {
                     const btn = document.createElement('button');
                     btn.className = 'qp-tex-item';
                     if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
-                    btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
+                    btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
                     btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name));
                     qpTextureStrip.appendChild(btn);
                 });
