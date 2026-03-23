@@ -1600,7 +1600,7 @@ function setupStyleToggle(elementId, onChange) {
 }
 
 function populateKitchenParts() {
-    const kitchenCats = ['base', 'doors', 'drawers', 'crown', 'finished_ends', 'case_parts'];
+    const kitchenCats = ['base', 'doors', 'drawers', 'crown', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
     kitchenCats.forEach(cat => {
         const container = document.querySelector(`#kitchen-parts .part-options[data-category="${cat}"]`);
         if (!container) return;
