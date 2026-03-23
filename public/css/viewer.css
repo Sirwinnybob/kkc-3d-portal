@@ -1268,27 +1268,47 @@ body {
 
 /* Showroom toggle button (left side) */
 #showroom-btn {
-    position: fixed; left: 15px; bottom: 120px; z-index: 1000;
-    width: 50px; height: 50px; border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(30, 30, 50, 0.85);
-    backdrop-filter: blur(12px); cursor: pointer;
+    position: fixed; left: 20px; bottom: 20px; z-index: 1000;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: #ffffff;
+    border: 3px solid #ccc;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s; color: #a29bfe;
+    padding: 0;
+    transition: transform 0.1s, background 0.2s, border-color 0.2s;
 }
-#showroom-btn:hover { background: rgba(108, 92, 231, 0.3); border-color: #6c5ce7; }
+#showroom-btn:hover {
+    background: #f8f8f8;
+    border-color: #bbb;
+}
+#showroom-btn:active {
+    transform: scale(0.95);
+    background: #e0e0e0;
+}
+#showroom-btn .camera-inner svg { color: #a29bfe; }
 
 /* Save config button */
 #save-config-btn {
-    position: fixed; right: 15px; bottom: 240px; z-index: 1000;
-    width: 50px; height: 50px; border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(30, 30, 50, 0.85);
-    backdrop-filter: blur(12px); cursor: pointer;
+    position: fixed; right: 20px; bottom: 160px; z-index: 1000;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: #ffffff;
+    border: 3px solid #ccc;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s; color: #28a745;
+    padding: 0;
+    transition: transform 0.1s, background 0.2s, border-color 0.2s;
 }
-#save-config-btn:hover { background: rgba(40,167,69,0.3); border-color: #28a745; }
+#save-config-btn:hover {
+    background: #f8f8f8;
+    border-color: #bbb;
+}
+#save-config-btn:active {
+    transform: scale(0.95);
+    background: #e0e0e0;
+}
+#save-config-btn .camera-inner svg { color: #28a745; }
 
 /* PIN Modal */
 #pin-modal {
@@ -1359,6 +1379,6 @@ body {
 
 @media (max-width: 600px) {
     #showroom-panel { width: 100%; }
-    #showroom-btn { left: 10px; bottom: 80px; width: 44px; height: 44px; border-radius: 12px; }
-    #save-config-btn { bottom: 200px; }
+    #showroom-btn { left: 10px; bottom: 10px; width: 50px; height: 50px; border-radius: 50%; }
+    #save-config-btn { bottom: 130px; right: 10px; width: 50px; height: 50px; border-radius: 50%; }
 }
