@@ -864,6 +864,33 @@ async function generateTextureManifest(glbPath) {
     }
 }
 
+// Batch generate manifests for all GLBs in a directory
+async function generateAllManifests(dir, force = false) {
+    try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                await generateAllManifests(fullPath, force);
+            } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                const manifestPath = fullPath.replace(/\.glb$/i, '.textures.json');
+                if (!force && fs.existsSync(manifestPath)) {
+                    try {
+                        const [glbStat, manifestStat] = await Promise.all([
+                            fs.promises.stat(fullPath),
+                            fs.promises.stat(manifestPath)
+                        ]);
+                        if (manifestStat.mtimeMs >= glbStat.mtimeMs) continue;
+                    } catch { /* ignore stat errors, just regenerate */ }
+                }
+                await generateTextureManifest(fullPath);
+            }
+        }
+    } catch (e) {
+        console.error(`[Texture Manifest] Batch error in ${dir}: ${e.message}`);
+    }
+}
+
 // --- CONVERSION ENGINE ---
 const conversionQueue = [];
 let isConverting = false;
@@ -1213,22 +1240,8 @@ if (require.main === module) {
         };
         scan(JOBS_DIR);
 
-        // Regenerate all texture manifests on startup to ensure hidden/matched data is current
-        const generateAllManifests = async (dir) => {
-            try {
-                const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                for (const entry of entries) {
-                    const fullPath = path.join(dir, entry.name);
-                    if (entry.isDirectory()) {
-                        await generateAllManifests(fullPath);
-                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                        await generateTextureManifest(fullPath);
-                    }
-                }
-            } catch { /* ignore */ }
-        };
         // Run after a short delay so DAE conversions start first
-        setTimeout(() => generateAllManifests(JOBS_DIR), 5000);
+        setTimeout(() => generateAllManifests(JOBS_DIR, false), 5000);
     });
 
     chokidar.watch(JOBS_DIR, {
@@ -1300,20 +1313,7 @@ if (require.main === module) {
                 // If not a job texture (manually added to the library), regenerate all manifests
                 if (!jobMatch) {
                     console.log('[Texture] Library changed — regenerating all texture manifests...');
-                    const regenerateManifests = async (dir) => {
-                        try {
-                            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                            for (const entry of entries) {
-                                const fullPath = path.join(dir, entry.name);
-                                if (entry.isDirectory()) {
-                                    await regenerateManifests(fullPath);
-                                } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                                    await generateTextureManifest(fullPath);
-                                }
-                            }
-                        } catch { /* ignore */ }
-                    };
-                    await regenerateManifests(JOBS_DIR);
+                    await generateAllManifests(JOBS_DIR, true);
                     console.log('[Texture] All manifests regenerated.');
                 }
             }, 60000); // Wait 1 minute after last change before re-scanning
