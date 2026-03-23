@@ -15,6 +15,8 @@ function escapeHtml(unsafe) {
 let scene, camera, renderer, controls;
 let loadedModel = null;
 let meshEntries = []; // { name, mesh, tag: 'tagged'|'ignore'|null, selected: false }
+const meshToEntry = new Map(); // O(1) lookup from THREE.Mesh to entry object
+const selectedEntries = new Set(); // O(1) tracking of selected meshes
 
 const statusText = document.getElementById('status-text');
 const updateStatus = (msg) => { if (statusText) statusText.innerText = msg; };
@@ -90,10 +92,10 @@ async function init() {
     // Tag actions
     document.getElementById('btn-tag-selected').onclick = () => tagSelected();
     document.getElementById('btn-select-all').onclick = () => {
-        meshEntries.forEach(e => { e.selected = true; updateEntryUI(e); });
+        meshEntries.forEach(e => toggleSelection(e, true));
     };
     document.getElementById('btn-deselect-all').onclick = () => {
-        meshEntries.forEach(e => { e.selected = false; updateEntryUI(e); });
+        selectedEntries.forEach(e => toggleSelection(e, false));
     };
     document.getElementById('btn-save').onclick = () => saveTags();
 
@@ -120,6 +122,8 @@ async function loadGlb() {
     // Clear previous
     if (loadedModel) { scene.remove(loadedModel); loadedModel = null; }
     meshEntries = [];
+    meshToEntry.clear();
+    selectedEntries.clear();
 
     // Check for full version first (for re-tagging)
     const baseName = file.replace(/\.glb$/i, '');
@@ -168,7 +172,9 @@ async function loadGlb() {
                     tag = existingTags.meshTags[name];
                 }
 
-                meshEntries.push({ name, mesh: child, tag, selected: false });
+                const entry = { name, mesh: child, tag, selected: false };
+                meshEntries.push(entry);
+                meshToEntry.set(child, entry);
             }
         });
 
@@ -217,9 +223,7 @@ function renderMeshList() {
 
         div.onclick = (e) => {
             if (e.target.tagName === 'INPUT') return;
-            entry.selected = !entry.selected;
-            updateEntryUI(entry);
-            highlightMesh(entry.mesh, entry.selected);
+            toggleSelection(entry, !entry.selected);
         };
 
         fragment.appendChild(div);
@@ -238,8 +242,7 @@ function updateEntryUI(entry) {
     const dotClass = entry.tag === 'tagged' ? 'tagged' : entry.tag === 'ignore' ? 'ignore' : 'untagged';
     const tagLabel = entry.tag || 'untagged';
 
-    // We only update the innerHTML if it doesn't exist yet (initial render)
-    // or if the tag changed. For selection, we just toggle classes/checked.
+    // Update innerHTML only if tag changed or it's empty
     if (!entry.el.innerHTML || entry.el.dataset.tag !== (entry.tag || 'null')) {
         entry.el.innerHTML = `
             <input type="checkbox">
@@ -249,12 +252,9 @@ function updateEntryUI(entry) {
         `;
         entry.el.dataset.tag = entry.tag || 'null';
 
-        // Re-bind checkbox since we just overwrote innerHTML
+        // Re-bind checkbox
         const cb = entry.el.querySelector('input');
-        cb.onchange = (e) => {
-            entry.selected = e.target.checked;
-            updateEntryUI(entry);
-        };
+        cb.onchange = (e) => toggleSelection(entry, e.target.checked);
     }
 
     entry.el.className = 'mesh-item' + (entry.selected ? ' selected' : '');
@@ -266,7 +266,7 @@ function highlightMesh(mesh, highlight) {
         mesh.material.emissive = new THREE.Color(0x3b82f6);
         mesh.material.emissiveIntensity = 0.3;
     } else {
-        updateSingleMeshColor(meshEntries.find(e => e.mesh === mesh));
+        updateSingleMeshColor(meshToEntry.get(mesh));
     }
 }
 
@@ -281,15 +281,23 @@ function updateSingleMeshColor(entry) {
     entry.mesh.material.emissiveIntensity = entry.selected ? 0.3 : 0.08;
 }
 
+function toggleSelection(entry, selected) {
+    if (entry.selected === selected) return;
+    entry.selected = selected;
+    if (selected) selectedEntries.add(entry);
+    else selectedEntries.delete(entry);
+
+    updateEntryUI(entry);
+    updateSingleMeshColor(entry);
+}
+
 function tagSelected() {
     const tagValue = document.getElementById('tag-assign').value;
-    meshEntries.forEach(entry => {
-        if (entry.selected) {
-            entry.tag = tagValue;
-            updateEntryUI(entry);
-        }
+    selectedEntries.forEach(entry => {
+        entry.tag = tagValue;
+        updateEntryUI(entry);
+        updateSingleMeshColor(entry);
     });
-    updateMeshColors();
 }
 
 function onCanvasClick(e) {
@@ -303,32 +311,24 @@ function onCanvasClick(e) {
 
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
+    const intersects = raycaster.intersectObjects(loadedModel.children, true);
     if (!intersects.length) return;
 
     const hitMesh = intersects[0].object;
-    const entry = meshEntries.find(e => e.mesh === hitMesh);
+    const entry = meshToEntry.get(hitMesh);
     if (!entry) return;
 
     // Toggle selection
     if (e.shiftKey) {
-        // Shift-click: add to selection
-        entry.selected = !entry.selected;
-        updateEntryUI(entry);
+        toggleSelection(entry, !entry.selected);
     } else {
-        // Regular click: select only this one
-        meshEntries.forEach(e => {
-            const wasSelected = e.selected;
-            e.selected = (e === entry);
-            if (wasSelected || e.selected) updateEntryUI(e);
-        });
+        // Fast clear existing selection (O(M) where M is selected count, instead of O(N))
+        selectedEntries.forEach(e => { if (e !== entry) toggleSelection(e, false); });
+        toggleSelection(entry, true);
     }
-    updateMeshColors();
 
-    // Scroll to the item in the list
-    const items = document.querySelectorAll('.mesh-item');
-    const idx = meshEntries.indexOf(entry);
-    if (items[idx]) items[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // Scroll to the item (O(1))
+    if (entry.el) entry.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function saveTags() {
