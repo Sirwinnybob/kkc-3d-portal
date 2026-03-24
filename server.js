@@ -13,7 +13,7 @@ const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.1.1";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -310,29 +310,74 @@ async function computePhash(imageBuffer) {
     }
 }
 
+// Precomputed cosine and scaling factor tables for DCT-II (N=32)
+const DCT_N = 32;
+const DCT_COS_TABLE = new Float64Array(DCT_N * DCT_N);
+const DCT_C_TABLE = new Float64Array(DCT_N);
+
+for (let u = 0; u < DCT_N; u++) {
+    for (let x = 0; x < DCT_N; x++) {
+        DCT_COS_TABLE[u * DCT_N + x] = Math.cos(((2 * x + 1) * u * Math.PI) / (2 * DCT_N));
+    }
+    DCT_C_TABLE[u] = u === 0 ? Math.sqrt(1.0 / DCT_N) : Math.sqrt(2.0 / DCT_N);
+}
+
 /**
  * 2D Discrete Cosine Transform (DCT-II)
- * Optimized for small N (e.g., 32)
+ * Optimized to O(N³) using separability and precomputed tables.
  */
 function performDCT(pixels, N) {
-    const dct = new Float64Array(N * N);
-    const c = new Float64Array(N);
-    for (let i = 1; i < N; i++) c[i] = Math.sqrt(2.0 / N);
-    c[0] = Math.sqrt(1.0 / N);
+    if (N !== DCT_N) {
+        // Fallback for non-32 sizes (original O(N^4) logic)
+        const dct = new Float64Array(N * N);
+        const c = new Float64Array(N);
+        for (let i = 1; i < N; i++) c[i] = Math.sqrt(2.0 / N);
+        c[0] = Math.sqrt(1.0 / N);
 
-    for (let u = 0; u < N; u++) {
-        for (let v = 0; v < N; v++) {
-            let sum = 0;
-            for (let x = 0; x < N; x++) {
-                for (let y = 0; y < N; y++) {
-                    sum += pixels[x * N + y] *
-                           Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N)) *
-                           Math.cos(((2 * y + 1) * v * Math.PI) / (2 * N));
+        for (let u = 0; u < N; u++) {
+            for (let v = 0; v < N; v++) {
+                let sum = 0;
+                for (let x = 0; x < N; x++) {
+                    for (let y = 0; y < N; y++) {
+                        sum += pixels[x * N + y] *
+                               Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N)) *
+                               Math.cos(((2 * y + 1) * v * Math.PI) / (2 * N));
+                    }
                 }
+                dct[u * N + v] = c[u] * c[v] * sum;
             }
-            dct[u * N + v] = c[u] * c[v] * sum;
+        }
+        return dct;
+    }
+
+    const intermediate = new Float64Array(DCT_N * DCT_N);
+    const dct = new Float64Array(DCT_N * DCT_N);
+
+    // DCT along rows
+    for (let x = 0; x < DCT_N; x++) {
+        const offset = x * DCT_N;
+        for (let v = 0; v < DCT_N; v++) {
+            let sum = 0;
+            const cosOffset = v * DCT_N;
+            for (let y = 0; y < DCT_N; y++) {
+                sum += pixels[offset + y] * DCT_COS_TABLE[cosOffset + y];
+            }
+            intermediate[offset + v] = sum;
         }
     }
+
+    // DCT along columns
+    for (let v = 0; v < DCT_N; v++) {
+        for (let u = 0; u < DCT_N; u++) {
+            let sum = 0;
+            const cosOffset = u * DCT_N;
+            for (let x = 0; x < DCT_N; x++) {
+                sum += intermediate[x * DCT_N + v] * DCT_COS_TABLE[cosOffset + x];
+            }
+            dct[u * DCT_N + v] = DCT_C_TABLE[u] * DCT_C_TABLE[v] * sum;
+        }
+    }
+
     return dct;
 }
 
@@ -881,6 +926,33 @@ async function generateTextureManifest(glbPath) {
         console.log(`[Texture Manifest] Generated: ${path.basename(manifestPath)} (${Object.keys(manifest.materials).length} materials)`);
     } catch (e) {
         console.error(`[Texture Manifest] Error: ${e.message}`);
+    }
+}
+
+// Batch generate manifests for all GLBs in a directory
+async function generateAllManifests(dir, force = false) {
+    try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                await generateAllManifests(fullPath, force);
+            } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                const manifestPath = fullPath.replace(/\.glb$/i, '.textures.json');
+                if (!force && fs.existsSync(manifestPath)) {
+                    try {
+                        const [glbStat, manifestStat] = await Promise.all([
+                            fs.promises.stat(fullPath),
+                            fs.promises.stat(manifestPath)
+                        ]);
+                        if (manifestStat.mtimeMs >= glbStat.mtimeMs) continue;
+                    } catch { /* ignore stat errors, just regenerate */ }
+                }
+                await generateTextureManifest(fullPath);
+            }
+        }
+    } catch (e) {
+        console.error(`[Texture Manifest] Batch error in ${dir}: ${e.message}`);
     }
 }
 
@@ -1629,22 +1701,8 @@ if (require.main === module) {
         };
         scan(JOBS_DIR);
 
-        // Regenerate all texture manifests on startup to ensure hidden/matched data is current
-        const generateAllManifests = async (dir) => {
-            try {
-                const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                for (const entry of entries) {
-                    const fullPath = path.join(dir, entry.name);
-                    if (entry.isDirectory()) {
-                        await generateAllManifests(fullPath);
-                    } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                        await generateTextureManifest(fullPath);
-                    }
-                }
-            } catch { /* ignore */ }
-        };
         // Run after a short delay so DAE conversions start first
-        setTimeout(() => generateAllManifests(JOBS_DIR), 5000);
+        setTimeout(() => generateAllManifests(JOBS_DIR, false), 5000);
     });
 
     chokidar.watch(JOBS_DIR, {
@@ -1760,20 +1818,7 @@ if (require.main === module) {
                 // If not a job texture (manually added to the library), regenerate all manifests
                 if (!jobMatch) {
                     console.log('[Texture] Library changed — regenerating all texture manifests...');
-                    const regenerateManifests = async (dir) => {
-                        try {
-                            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                            for (const entry of entries) {
-                                const fullPath = path.join(dir, entry.name);
-                                if (entry.isDirectory()) {
-                                    await regenerateManifests(fullPath);
-                                } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                                    await generateTextureManifest(fullPath);
-                                }
-                            }
-                        } catch { /* ignore */ }
-                    };
-                    await regenerateManifests(JOBS_DIR);
+                    await generateAllManifests(JOBS_DIR, true);
                     console.log('[Texture] All manifests regenerated.');
                 }
             }, 60000); // Wait 1 minute after last change before re-scanning

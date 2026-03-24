@@ -6,6 +6,7 @@ test.describe('Texture Catalog Accessibility', () => {
     await page.addInitScript(() => {
       localStorage.setItem('kkc_help_shown', 'true');
       localStorage.setItem('kkc_skip_disclaimer', 'true');
+      localStorage.setItem('kkc_tutorial_v1', 'true');
     });
 
     // Mock API responses
@@ -104,7 +105,10 @@ test.describe('Texture Catalog Accessibility', () => {
         });
     });
 
-    await page.click('.texture-category-btn');
+    await page.evaluate(() => {
+        const btn = document.querySelector('.texture-category-btn');
+        if (btn) btn.click();
+    });
 
     // Since we can't easily trigger the real internal functions without refactoring viewer.js,
     // let's instead refactor viewer.js slightly to expose the functions we need to test.

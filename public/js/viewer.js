@@ -8,6 +8,16 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
+function escapeHtml(unsafe) {
+    if (!unsafe || typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
 let zoomVelocity = 0;
 let detectedMaterials = [];
@@ -111,11 +121,11 @@ async function init() {
     const jobDisplay = document.getElementById('job-code-display');
     const roomDisplay = document.getElementById('room-name-display');
     if (isShowroomMode) {
-        if (jobDisplay) jobDisplay.innerText = 'Showroom';
-        if (roomDisplay) roomDisplay.innerText = loadPin ? `PIN: ${loadPin}` : 'Custom';
+        if (jobDisplay) jobDisplay.textContent = 'Showroom';
+        if (roomDisplay) roomDisplay.textContent = loadPin ? `PIN: ${loadPin}` : 'Custom';
     } else {
-        if (jobDisplay) jobDisplay.innerText = jobCode;
-        if (roomDisplay) roomDisplay.innerText = initialRoom;
+        if (jobDisplay) jobDisplay.textContent = jobCode;
+        if (roomDisplay) roomDisplay.textContent = initialRoom;
     }
 
     // --- UI LISTENERS ---
@@ -154,6 +164,30 @@ async function init() {
     if (helpBtn) helpBtn.onclick = () => toggleHelp(true);
     if (closeHelpX) closeHelpX.onclick = () => toggleHelp(false);
     if (closeHelpBtn) closeHelpBtn.onclick = () => toggleHelp(false);
+
+    // --- ESCAPE KEY: Close active overlays ---
+    window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const activeInput = document.activeElement;
+        if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) {
+            activeInput.blur();
+            return;
+        }
+        const tour = document.getElementById('product-tour');
+        if (tour?.classList.contains('show')) return document.getElementById('tour-skip')?.click();
+        if (helpModal?.classList.contains('show')) return toggleHelp(false);
+        if (document.getElementById('quick-picker')?.classList.contains('show')) return quickPicker.close?.();
+        const sheet = document.getElementById('tap-replace-sheet');
+        if (sheet?.classList.contains('show')) {
+            sheet.classList.remove('show');
+            return typeof clearMeshHighlight === 'function' && clearMeshHighlight();
+        }
+        if (document.getElementById('texture-panel')?.classList.contains('show')) return document.getElementById('texture-panel').classList.remove('show');
+        if (dropdown?.classList.contains('show')) {
+            dropdown.classList.remove('show');
+            menuBtn?.setAttribute('aria-expanded', 'false');
+        }
+    });
 
     // AUTO-SHOW HELP: only if tour also not shown (legacy users who skipped the tour)
     if (localStorage.getItem('kkc_help_shown') !== 'true' && localStorage.getItem('kkc_tutorial_v1') === 'true') {
@@ -835,7 +869,10 @@ async function init() {
                 const visibleMaterials = detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
 
                 if (visibleMaterials.length === 0) {
-                    materialList.innerHTML = `<div style="padding:20px; text-align:center; color:#888;">${isMatchingAll ? 'Matching textures...' : 'No customizable textures found.'}</div>`;
+                    const div = document.createElement('div');
+                    div.style.cssText = 'padding:20px; text-align:center; color:#888;';
+                    div.textContent = isMatchingAll ? 'Matching textures...' : 'No customizable textures found.';
+                    materialList.appendChild(div);
                     return;
                 }
 
@@ -893,7 +930,7 @@ async function init() {
                     <div class="material-item-left">
                         ${previewHtml}
                         <div class="material-info">
-                            <span class="material-name">${displayName}</span>
+                            <span class="material-name">${escapeHtml(displayName)}</span>
                             <span class="material-status">Customizable</span>
                         </div>
                     </div>
@@ -1124,8 +1161,8 @@ async function init() {
                 currentCategoryTextures.forEach(tex => {
                     const btn = document.createElement('button');
                     btn.className = 'texture-thumb';
-                    btn.setAttribute('aria-label', `Select texture ${tex.name}`);
-                    btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
+                    btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
+                    btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
                     btn.onclick = () => previewTexture(tex.url, tex.name);
                     textureGrid.appendChild(btn);
                 });
@@ -1287,7 +1324,11 @@ async function init() {
 
             // ---- Category loading ----
             async function loadQpCategories(mat) {
-                qpCategoryGrid.innerHTML = '<div style="color:rgba(255,255,255,0.4);padding:20px;text-align:center;grid-column:1/-1;font-size:0.9em;">Loading…</div>';
+                const loadingDiv = document.createElement('div');
+                loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;text-align:center;grid-column:1/-1;font-size:0.9em;';
+                loadingDiv.textContent = 'Loading…';
+                qpCategoryGrid.innerHTML = '';
+                qpCategoryGrid.appendChild(loadingDiv);
                 try {
                     const resp = await fetch('/api/textures');
                     const data = await resp.json();
@@ -1312,7 +1353,11 @@ async function init() {
                         qpCategoryGrid.appendChild(btn);
                     });
                 } catch {
-                    qpCategoryGrid.innerHTML = '<div style="color:#f87171;padding:20px;text-align:center;grid-column:1/-1;">Failed to load categories</div>';
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'color:#f87171;padding:20px;text-align:center;grid-column:1/-1;';
+                    errorDiv.textContent = 'Failed to load categories';
+                    qpCategoryGrid.innerHTML = '';
+                    qpCategoryGrid.appendChild(errorDiv);
                 }
             }
 
@@ -1326,7 +1371,7 @@ async function init() {
                 COLOR_PRESETS.forEach(preset => {
                     const btn = document.createElement('button');
                     btn.className = 'qp-tex-item';
-                    btn.innerHTML = `<div class="color-swatch" style="background-color:${preset.hex};width:60px;height:60px;border-radius:8px;"></div><span>${preset.name}</span>`;
+                    btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
                     btn.addEventListener('click', () => {
                         if (qpMatGroupIndex >= 0) {
                             const targetMat = detectedMaterials[qpMatGroupIndex];
@@ -1362,7 +1407,7 @@ async function init() {
                 recent.forEach(hex => {
                     const btn = document.createElement('button');
                     btn.className = 'qp-tex-item';
-                    btn.innerHTML = `<div class="color-swatch" style="background-color:${hex};width:60px;height:60px;border-radius:8px;"></div><span>${hex}</span>`;
+                    btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
                     btn.addEventListener('click', () => {
                         if (qpMatGroupIndex >= 0) {
                             applySolidColor(detectedMaterials[qpMatGroupIndex], hex);
@@ -1377,7 +1422,11 @@ async function init() {
             async function loadQpCategoryTextures(category, mat) {
                 qpTitle.textContent = category;
                 showQpTexturesView();
-                qpTextureStrip.innerHTML = '<div style="color:rgba(255,255,255,0.4);padding:20px;display:flex;align-items:center;">Loading…</div>';
+                const loadingDiv = document.createElement('div');
+                loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;display:flex;align-items:center;';
+                loadingDiv.textContent = 'Loading…';
+                qpTextureStrip.innerHTML = '';
+                qpTextureStrip.appendChild(loadingDiv);
                 try {
                     const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
                     const data = await resp.json();
@@ -1390,7 +1439,11 @@ async function init() {
                     }
                     renderQpStrip(mat);
                 } catch {
-                    qpTextureStrip.innerHTML = '<div style="color:#f87171;padding:20px;">Failed to load textures</div>';
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'color:#f87171;padding:20px;';
+                    errorDiv.textContent = 'Failed to load textures';
+                    qpTextureStrip.innerHTML = '';
+                    qpTextureStrip.appendChild(errorDiv);
                 }
             }
 
@@ -1404,7 +1457,7 @@ async function init() {
                     const btn = document.createElement('button');
                     btn.className = 'qp-tex-item';
                     if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
-                    btn.innerHTML = `<img src="${tex.url}" alt="${tex.name}" loading="lazy"><span>${tex.name}</span>`;
+                    btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
                     btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name));
                     qpTextureStrip.appendChild(btn);
                 });
@@ -1602,7 +1655,8 @@ function setupStyleToggle(elementId, onChange) {
 function populateKitchenParts() {
     const kitchenCats = ['base', 'doors', 'drawers', 'crown', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
     kitchenCats.forEach(cat => {
-        const container = document.querySelector(`#kitchen-parts .part-options[data-category="${cat}"]`);
+        const selector = `#kitchen-parts .part-options[data-category="${cat}"]`;
+        const container = document.querySelector(selector);
         if (!container) return;
         const parts = (showroomCategories[cat] && showroomCategories[cat][kitchenStyle]) || [];
         renderPartOptions(container, cat, kitchenStyle, parts);
@@ -1619,7 +1673,10 @@ function populateIslandParts() {
 function renderPartOptions(container, category, style, parts) {
     container.innerHTML = '';
     if (parts.length === 0) {
-        container.innerHTML = '<span class="part-options-empty">No parts available</span>';
+        const span = document.createElement('span');
+        span.className = 'part-options-empty';
+        span.textContent = 'No parts available';
+        container.appendChild(span);
         return;
     }
     parts.forEach(part => {

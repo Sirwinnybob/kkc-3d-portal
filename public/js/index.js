@@ -2,9 +2,25 @@ let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
 
+function escapeHtml(unsafe) {
+    if (!unsafe || typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 async function checkJob() {
     const code = document.getElementById('jobCode').value.trim();
     if (!code) return;
+
+    // PIN logic: 5 digits means showroom PIN
+    if (/^\d{5}$/.test(code)) {
+        window.location.href = `/viewer.html?mode=showroom&pin=${code}`;
+        return;
+    }
 
     const btn = document.getElementById('btnCheckJob');
     const errorMsg = document.getElementById('errorMsg');
@@ -73,7 +89,7 @@ function showRoomSelection(rooms) {
 
     rooms.forEach((room, index) => {
         const btn = document.createElement('button');
-        btn.innerText = room;
+        btn.textContent = room;
         btn.className = 'room-btn';
         btn.id = `room-btn-${index}`;
         btn.style.margin = '5px 0';
@@ -120,41 +136,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- SHOWROOM ---
     const showroomBtn = document.getElementById('btnShowroom');
-    const pinToggle = document.getElementById('btnTogglePin');
-    const pinSection = document.getElementById('pin-section');
-    const pinInput = document.getElementById('pinInput');
-    const pinLoadBtn = document.getElementById('btnLoadPin');
 
     if (showroomBtn) {
         showroomBtn.addEventListener('click', () => {
             window.location.href = '/viewer.html?mode=showroom';
-        });
-    }
-
-    if (pinToggle && pinSection) {
-        pinToggle.addEventListener('click', () => {
-            const isVisible = pinSection.style.display !== 'none';
-            pinSection.style.display = isVisible ? 'none' : 'flex';
-            pinToggle.textContent = isVisible ? 'Have a PIN?' : 'Hide PIN';
-            if (!isVisible && pinInput) pinInput.focus();
-        });
-    }
-
-    if (pinLoadBtn && pinInput) {
-        const loadPin = () => {
-            const pin = pinInput.value.trim();
-            if (!/^\d{5}$/.test(pin)) {
-                pinInput.style.borderColor = '#e74c3c';
-                return;
-            }
-            window.location.href = `/viewer.html?mode=showroom&pin=${pin}`;
-        };
-        pinLoadBtn.addEventListener('click', loadPin);
-        pinInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') loadPin();
-        });
-        pinInput.addEventListener('input', () => {
-            pinInput.style.borderColor = '';
         });
     }
 });

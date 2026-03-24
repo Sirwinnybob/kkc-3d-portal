@@ -2,12 +2,21 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+function escapeHtml(unsafe) {
+    if (!unsafe || typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 let scene, camera, renderer, controls;
 let loadedModel = null;
-let meshEntries = []; // { name, mesh, tag, selected, hidden }
-let currentMode = 'staging'; // 'staging' | 'category' | 'doors'
-let categoriesData = {};
-let hiddenMeshes = new Set();
+let meshEntries = []; // { name, mesh, tag: 'tagged'|'ignore'|null, selected: false }
+const meshToEntry = new Map(); // O(1) lookup from THREE.Mesh to entry object
+const selectedEntries = new Set(); // O(1) tracking of selected meshes
 
 const statusText = document.getElementById('status-text');
 const updateStatus = (msg) => { if (statusText) statusText.innerText = msg; };
@@ -48,9 +57,19 @@ async function init() {
     const selCategory = document.getElementById('sel-category');
     const selStyle = document.getElementById('sel-style');
     const categories = Object.keys(categoriesData);
-    selCategory.innerHTML = categories.map(c => `<option value="${c}">${c.replace(/_/g, ' ')}</option>`).join('');
+    selCategory.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c.replace(/_/g, ' '))}</option>`).join('');
+
     const styles = ['face_frame', 'full_inset', 'frameless'];
-    selStyle.innerHTML = styles.map(s => `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('');
+    selStyle.innerHTML = styles.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s.replace(/_/g, ' '))}</option>`).join('');
+
+    function updateFileList() {
+        const cat = selCategory.value;
+        const style = selStyle.value;
+        const files = (categoriesData[cat] && categoriesData[cat][style]) || [];
+        selFile.innerHTML = '<option value="">-- Select --</option>' +
+            files.map(f => `<option value="${escapeHtml(f.file)}">${escapeHtml(f.name)}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
+    }
+
     selCategory.onchange = updateFileList;
     selStyle.onchange = updateFileList;
     updateFileList();
@@ -111,9 +130,15 @@ async function init() {
         });
     };
 
-    // Doors style/file refresh
-    document.getElementById('sel-doors-style').onchange = updateDoorsFileList;
-    updateDoorsFileList();
+    // Tag actions
+    document.getElementById('btn-tag-selected').onclick = () => tagSelected();
+    document.getElementById('btn-select-all').onclick = () => {
+        meshEntries.forEach(e => toggleSelection(e, true));
+    };
+    document.getElementById('btn-deselect-all').onclick = () => {
+        selectedEntries.forEach(e => toggleSelection(e, false));
+    };
+    document.getElementById('btn-save').onclick = () => saveTags();
 
     // Canvas click
     renderer.domElement.addEventListener('click', onCanvasClick);
@@ -297,7 +322,13 @@ async function loadCategoryGlb() {
     updateStatus('Loading...');
     clearScene();
 
-    // Check for full version first
+    // Clear previous
+    if (loadedModel) { scene.remove(loadedModel); loadedModel = null; }
+    meshEntries = [];
+    meshToEntry.clear();
+    selectedEntries.clear();
+
+    // Check for full version first (for re-tagging)
     const baseName = file.replace(/\.glb$/i, '');
     const fullUrl = `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(baseName + '.full.glb')}`;
     const normalUrl = `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`;
@@ -472,9 +503,14 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
                     polygonOffsetUnits: 1
                 });
 
-                const entry = { name, mesh: child, tag: null, selected: false, hidden: false };
-                if (onEntry) onEntry(entry);
+                let tag = null;
+                if (existingTags && existingTags.meshTags && existingTags.meshTags[name]) {
+                    tag = existingTags.meshTags[name];
+                }
+
+                const entry = { name, mesh: child, tag, selected: false };
                 meshEntries.push(entry);
+                meshToEntry.set(child, entry);
             }
         });
 
@@ -493,15 +529,68 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
     });
 }
 
-function frameCameraToModel(model) {
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
-    camera.lookAt(center);
-    controls.target.copy(center);
-    controls.update();
+/**
+ * Initial render of the mesh list. This builds the DOM once per GLB load.
+ * We store a reference to the DOM element in each entry for fast updates.
+ */
+function renderMeshList() {
+    const list = document.getElementById('mesh-list');
+    list.innerHTML = '';
+
+    const fragment = document.createDocumentFragment();
+
+    meshEntries.forEach((entry) => {
+        const div = document.createElement('div');
+        entry.el = div; // Store reference for fast O(1) updates
+        updateEntryUI(entry);
+
+        div.onclick = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            toggleSelection(entry, !entry.selected);
+        };
+
+        fragment.appendChild(div);
+    });
+
+    list.appendChild(fragment);
+}
+
+/**
+ * Targeted UI update for a single mesh entry.
+ * Prevents full list re-renders (O(N) -> O(1)).
+ */
+function updateEntryUI(entry) {
+    if (!entry.el) return;
+
+    const dotClass = entry.tag === 'tagged' ? 'tagged' : entry.tag === 'ignore' ? 'ignore' : 'untagged';
+    const tagLabel = entry.tag || 'untagged';
+
+    // Update innerHTML only if tag changed or it's empty
+    if (!entry.el.innerHTML || entry.el.dataset.tag !== (entry.tag || 'null')) {
+        entry.el.innerHTML = `
+            <input type="checkbox">
+            <span class="mesh-dot ${dotClass}"></span>
+            <span class="mesh-name">${escapeHtml(entry.name)}</span>
+            <span class="mesh-tag-label">${escapeHtml(tagLabel)}</span>
+        `;
+        entry.el.dataset.tag = entry.tag || 'null';
+
+        // Re-bind checkbox
+        const cb = entry.el.querySelector('input');
+        cb.onchange = (e) => toggleSelection(entry, e.target.checked);
+    }
+
+    entry.el.className = 'mesh-item' + (entry.selected ? ' selected' : '');
+    entry.el.querySelector('input').checked = entry.selected;
+}
+
+function highlightMesh(mesh, highlight) {
+    if (highlight) {
+        mesh.material.emissive = new THREE.Color(0x3b82f6);
+        mesh.material.emissiveIntensity = 0.3;
+    } else {
+        updateSingleMeshColor(meshToEntry.get(mesh));
+    }
 }
 
 // --- SHARED: Mesh Colors ---
@@ -521,30 +610,23 @@ function updateSingleMeshColor(entry) {
     entry.mesh.material.emissiveIntensity = entry.selected ? 0.3 : 0.08;
 }
 
-// --- SHARED: Tag Stats ---
-function updateTagStats() {
-    const stats = {};
-    meshEntries.forEach(e => {
-        const t = e.tag || 'untagged';
-        stats[t] = (stats[t] || 0) + 1;
-    });
+function toggleSelection(entry, selected) {
+    if (entry.selected === selected) return;
+    entry.selected = selected;
+    if (selected) selectedEntries.add(entry);
+    else selectedEntries.delete(entry);
 
-    const statsEl = currentMode === 'doors' ? document.getElementById('doors-stats') : document.getElementById('tag-stats');
-    if (statsEl) {
-        statsEl.innerHTML = Object.entries(stats)
-            .sort(([, a], [, b]) => b - a)
-            .map(([tag, count]) => `<span class="dot ${tag}"></span> ${tag.replace(/_/g, ' ')}: ${count}`)
-            .join(' &nbsp; ');
-    }
+    updateEntryUI(entry);
+    updateSingleMeshColor(entry);
 }
 
-// --- SHARED: Legend Builder ---
-function buildLegend(elementId, categories) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    el.innerHTML = categories
-        .map(c => `<span class="legend-item"><span class="dot ${c}"></span> ${c.replace(/_/g, ' ')}</span>`)
-        .join('');
+function tagSelected() {
+    const tagValue = document.getElementById('tag-assign').value;
+    selectedEntries.forEach(entry => {
+        entry.tag = tagValue;
+        updateEntryUI(entry);
+        updateSingleMeshColor(entry);
+    });
 }
 
 // --- CLICK POPUP ---
@@ -560,31 +642,23 @@ function onCanvasClick(e) {
 
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
-
-    if (!intersects.length) {
-        closePopup();
-        return;
-    }
+    const intersects = raycaster.intersectObjects(loadedModel.children, true);
+    if (!intersects.length) return;
 
     const hitMesh = intersects[0].object;
-    const entry = meshEntries.find(en => en.mesh === hitMesh);
-    if (!entry) { closePopup(); return; }
+    const entry = meshToEntry.get(hitMesh);
+    if (!entry) return;
 
     if (e.shiftKey) {
-        // Shift-click: toggle selection, apply current popup tag
-        entry.selected = !entry.selected;
-        updateMeshColors();
-        return;
+        toggleSelection(entry, !entry.selected);
+    } else {
+        // Fast clear existing selection (O(M) where M is selected count, instead of O(N))
+        selectedEntries.forEach(e => { if (e !== entry) toggleSelection(e, false); });
+        toggleSelection(entry, true);
     }
 
-    // Deselect all, select this one
-    meshEntries.forEach(en => en.selected = false);
-    entry.selected = true;
-    updateMeshColors();
-
-    // Show popup near cursor
-    showPopup(entry, e.clientX, e.clientY);
+    // Scroll to the item (O(1))
+    if (entry.el) entry.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function showPopup(entry, x, y) {
