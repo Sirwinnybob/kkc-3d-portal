@@ -194,6 +194,14 @@ async function loadStagingGlb() {
     updateStatus('Loading staged GLB...');
     clearScene();
 
+    // Fetch mesh names from server for consistency
+    let serverMeshNames = [];
+    try {
+        const meshResp = await fetch(`/api/showroom/staging/meshes/${encodeURIComponent(file)}`);
+        const meshData = await meshResp.json();
+        if (meshData.success) serverMeshNames = meshData.meshes;
+    } catch { /* fallback to default naming */ }
+
     const glbUrl = `/showroom/staging/${encodeURIComponent(file)}`;
 
     // Load existing tags if any
@@ -207,7 +215,15 @@ async function loadStagingGlb() {
         }
     } catch { /* no existing tags */ }
 
+    let meshIdx = 0;
     loadGlbFromUrl(glbUrl, (entry) => {
+        // Use server-provided name if available
+        if (serverMeshNames[meshIdx]) {
+            entry.name = serverMeshNames[meshIdx];
+            entry.mesh.name = serverMeshNames[meshIdx];
+        }
+        meshIdx++;
+
         // Apply existing tags
         if (existingTags && existingTags.meshCategories && existingTags.meshCategories[entry.name]) {
             entry.tag = existingTags.meshCategories[entry.name];
@@ -334,6 +350,14 @@ async function loadCategoryGlb() {
     meshToEntry.clear();
     selectedEntries.clear();
 
+    // Fetch mesh names from server for consistency
+    let serverMeshNames = [];
+    try {
+        const meshResp = await fetch(`/api/showroom/meshes/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`);
+        const meshData = await meshResp.json();
+        if (meshData.success) serverMeshNames = meshData.meshes;
+    } catch { /* fallback */ }
+
     // Check for full version first (for re-tagging)
     const baseName = file.replace(/\.glb$/i, '');
     const fullUrl = `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(baseName + '.full.glb')}`;
@@ -355,9 +379,30 @@ async function loadCategoryGlb() {
         }
     } catch { /* no existing tags */ }
 
+    let meshIdx = 0;
     loadGlbFromUrl(glbUrl, (entry) => {
+        // Use server-provided name if available
+        if (serverMeshNames[meshIdx]) {
+            entry.name = serverMeshNames[meshIdx];
+            entry.mesh.name = serverMeshNames[meshIdx];
+        }
+        meshIdx++;
+
         if (existingTags && existingTags.meshTags && existingTags.meshTags[entry.name]) {
             entry.tag = existingTags.meshTags[entry.name];
+        }
+
+        // Auto-filter: if not tagged/replaceable, hide by default in category mode
+        // If NO tags exist yet (newly split file), show everything as 'tagged' by default
+        if (existingTags) {
+            if (!entry.tag || (entry.tag !== 'tagged' && entry.tag !== 'paneled_end_replaceable')) {
+                entry.hidden = true;
+                entry.mesh.visible = false;
+                hiddenMeshes.add(entry.name);
+            }
+        } else {
+            // New file from splitter — assume all meshes are part of this category
+            entry.tag = 'tagged';
         }
     }, () => {
         document.getElementById('category-actions').style.display = 'block';
@@ -428,6 +473,14 @@ async function loadDoorsGlb() {
     updateStatus('Loading doors GLB...');
     clearScene();
 
+    // Fetch mesh names from server for consistency
+    let serverMeshNames = [];
+    try {
+        const meshResp = await fetch(`/api/showroom/meshes/doors/${encodeURIComponent(style)}/${encodeURIComponent(file)}`);
+        const meshData = await meshResp.json();
+        if (meshData.success) serverMeshNames = meshData.meshes;
+    } catch { /* fallback */ }
+
     const baseName = file.replace(/\.glb$/i, '');
     const fullUrl = `/showroom/doors/${encodeURIComponent(style)}/${encodeURIComponent(baseName + '.full.glb')}`;
     const normalUrl = `/showroom/doors/${encodeURIComponent(style)}/${encodeURIComponent(file)}`;
@@ -438,8 +491,38 @@ async function loadDoorsGlb() {
         if (headResp.ok) glbUrl = fullUrl;
     } catch { /* use normal */ }
 
+    // Load existing tags
+    let existingTags = null;
+    try {
+        const tagsResp = await fetch(`/api/showroom/tags/doors/${encodeURIComponent(style)}/${encodeURIComponent(file)}`);
+        if (tagsResp.ok) {
+            const tagsData = await tagsResp.json();
+            if (tagsData.success) existingTags = tagsData.tags;
+        }
+    } catch { /* no existing tags */ }
+
+    let meshIdx = 0;
     loadGlbFromUrl(glbUrl, (entry) => {
-        entry.tag = 'doors'; // default all to doors
+        // Use server-provided name if available
+        if (serverMeshNames[meshIdx]) {
+            entry.name = serverMeshNames[meshIdx];
+            entry.mesh.name = serverMeshNames[meshIdx];
+        }
+        meshIdx++;
+
+        if (existingTags && existingTags.meshTags && existingTags.meshTags[entry.name]) {
+            entry.tag = existingTags.meshTags[entry.name];
+        } else {
+            entry.tag = 'doors'; // default
+        }
+
+        // Auto-filter: in door mode, we show everything initially if it's the doors file
+        // but hide things that were explicitly ignored in previous tagging sessions
+        if (existingTags && entry.tag === 'ignore') {
+            entry.hidden = true;
+            entry.mesh.visible = false;
+            hiddenMeshes.add(entry.name);
+        }
     }, () => {
         document.getElementById('doors-actions').style.display = 'block';
         document.getElementById('shared-controls').style.display = 'block';

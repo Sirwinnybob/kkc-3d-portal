@@ -1739,8 +1739,15 @@ async function loadShowroomPart(category, style, file, btnEl) {
             const materialMap = new Map();
             const isIsland = (category === 'island');
 
+            let meshIdx = 0;
             group.traverse((child) => {
                 if (!child.isMesh) return;
+
+                // Standardize node name for index-based tag matching
+                if (!child.name || child.name.startsWith('Mesh_') || child.name.startsWith('Node_')) {
+                    child.name = `Node_${meshIdx}`;
+                }
+                meshIdx++;
 
                 // Tag-based visibility: hide meshes not tagged for this category
                 if (tagData && tagData.taggedMeshes) {

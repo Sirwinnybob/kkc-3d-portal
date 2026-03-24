@@ -1261,7 +1261,7 @@ app.get('/api/showroom/meshes/:category/:style/:file', async (req, res) => {
             for (const nodeIdx of nodes) {
                 const node = allNodes[nodeIdx];
                 if (node.mesh !== undefined && gltf.meshes && gltf.meshes[node.mesh]) {
-                    meshNames.push(node.name || gltf.meshes[node.mesh].name || `Mesh_${nodeIdx}`);
+                    meshNames.push(node.name || `Node_${nodeIdx}`);
                 }
                 if (node.children) extractMeshes(node.children, allNodes);
             }
@@ -1367,6 +1367,8 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
             nodeRemap[idx] = newNodes.length;
             const node = { ...newGltf.nodes[idx] };
             if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
+            // Standardize node name
+            if (!node.name) node.name = `Node_${idx}`;
             node.children = undefined; // flatten hierarchy
             newNodes.push(node);
         }
@@ -1394,9 +1396,9 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
         newGltf.scenes = [{ name: `${cat}_scene`, nodes: newNodes.map((_, i) => i) }];
         newGltf.scene = 0;
 
-        // Convert back to GLB
+        // Convert back to GLB (embed textures)
         try {
-            const glbResult = await gltfPipeline.gltfToGlb(newGltf);
+            const glbResult = await gltfPipeline.gltfToGlb(newGltf, { resourceDirectory: path.dirname(glbPath) });
             const outputDir = path.join(SHOWROOM_DIR, cat, style);
             if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
@@ -1476,7 +1478,7 @@ app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
             for (let i = 0; i < gltf.nodes.length; i++) {
                 const node = gltf.nodes[i];
                 if (node.mesh !== undefined && gltf.meshes && gltf.meshes[node.mesh]) {
-                    meshNames.push(node.name || gltf.meshes[node.mesh].name || `Mesh_${i}`);
+                    meshNames.push(node.name || `Node_${i}`);
                 }
             }
         }
@@ -1646,6 +1648,8 @@ app.post('/api/showroom/doors/split', express.json({ limit: '10mb' }), async (re
             for (const idx of nodeIndices) {
                 const node = { ...newGltf.nodes[idx] };
                 if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
+                // Standardize node name
+                if (!node.name) node.name = `Node_${idx}`;
                 node.children = undefined;
                 newNodes.push(node);
             }
@@ -1671,7 +1675,8 @@ app.post('/api/showroom/doors/split', express.json({ limit: '10mb' }), async (re
             newGltf.scene = 0;
 
             try {
-                const glbResult = await gltfPipeline.gltfToGlb(newGltf);
+                // Convert back to GLB (embed textures)
+                const glbResult = await gltfPipeline.gltfToGlb(newGltf, { resourceDirectory: path.dirname(filePath) });
                 const outputDir = path.join(SHOWROOM_DIR, targetFolder, style);
                 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
