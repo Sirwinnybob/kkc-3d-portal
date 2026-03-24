@@ -13,7 +13,7 @@ const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.1";
+const APP_VERSION = "2.1.2";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -1407,6 +1407,23 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
             const fullFile = path.join(outputDir, `${outputBaseName}.full.glb`);
             await fs.promises.writeFile(fullFile, await fs.promises.readFile(glbPath));
 
+            // Generate .tags.json for the split category
+            const tags = {
+                file: `${outputBaseName}.glb`,
+                category: cat,
+                style,
+                extracted: false,
+                meshTags: {},
+                taggedMeshes: []
+            };
+            for (const idx of nodeIndices) {
+                const name = gltf.nodes[idx].name || `Node_${idx}`;
+                tags.meshTags[name] = 'tagged';
+                tags.taggedMeshes.push(name);
+            }
+            const tagsPath = path.join(outputDir, `${outputBaseName}.tags.json`);
+            await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
+
             results[cat] = { file: `${outputBaseName}.glb`, meshCount: nodeIndices.length };
             console.log(`[Staging] Split ${cat}: ${nodeIndices.length} meshes -> ${outputFile}`);
         } catch (e) {
@@ -1658,9 +1675,28 @@ app.post('/api/showroom/doors/split', express.json({ limit: '10mb' }), async (re
                 const outputDir = path.join(SHOWROOM_DIR, targetFolder, style);
                 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-                const outputFile = path.join(outputDir, `${baseName}_${subCat}.glb`);
+                const outFileName = `${baseName}_${subCat}.glb`;
+                const outputFile = path.join(outputDir, outFileName);
                 await fs.promises.writeFile(outputFile, glbResult.glb);
-                results[subCat] = { file: `${baseName}_${subCat}.glb`, folder: targetFolder, meshCount: nodeIndices.length };
+
+                // Generate .tags.json for the split sub-category
+                const tags = {
+                    file: outFileName,
+                    category: targetFolder,
+                    style,
+                    extracted: false,
+                    meshTags: {},
+                    taggedMeshes: []
+                };
+                for (const idx of nodeIndices) {
+                    const name = gltf.nodes[idx].name || `Node_${idx}`;
+                    tags.meshTags[name] = 'tagged';
+                    tags.taggedMeshes.push(name);
+                }
+                const tagsPath = path.join(outputDir, `${baseName}_${subCat}.tags.json`);
+                await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
+
+                results[subCat] = { file: outFileName, folder: targetFolder, meshCount: nodeIndices.length };
                 console.log(`[Doors Split] ${subCat}: ${nodeIndices.length} meshes -> ${outputFile}`);
             } catch (e) {
                 console.error(`[Doors Split] Failed ${subCat}: ${e.message}`);
