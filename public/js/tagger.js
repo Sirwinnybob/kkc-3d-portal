@@ -57,6 +57,7 @@ async function init() {
     // Populate category mode dropdowns
     const selCategory = document.getElementById('sel-category');
     const selStyle = document.getElementById('sel-style');
+    const selFile = document.getElementById('sel-file');
     const categories = Object.keys(categoriesData);
     selCategory.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c.replace(/_/g, ' '))}</option>`).join('');
 
