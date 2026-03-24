@@ -5,3 +5,7 @@
 ## 2025-05-22 - [O(N³) vs O(N⁴) 2D DCT]
 **Learning:** The naive 2D Discrete Cosine Transform (DCT) implementation is O(N⁴) due to nested loops over (u, v) and (x, y). Because the DCT is a separable transform, it can be computed as two 1D passes (rows then columns), reducing complexity to O(N³). In Node.js, for a fixed N=32, this reduction combined with precomputed cosine tables and scaling factors resulted in a ~100x speedup (28ms down to 0.28ms per operation).
 **Action:** When implementing mathematical transforms (DCT, FFT, etc.), always look for separability or symmetry properties to reduce dimensionality and leverage precomputed lookup tables for fixed-size inputs.
+
+## 2025-06-05 - [Pre-splitting BigInts for Hot-Loop Performance]
+**Learning:** Performing `BigInt` XOR and bitwise extraction (`& 0xFFFFFFFFn`, `>> 32n`) inside a hot loop (e.g., matching 1 texture against a library of 1000) adds significant overhead in Node.js. By pre-splitting the 64-bit hashes into 32-bit `Number` primitives during the indexing phase, the `hammingDistance` function can operate directly on standard integers. This approach achieved an ~8x speedup (52us down to 6us per comparison) when paired with a SWAR population count.
+**Action:** In performance-critical loops involving 64-bit bitwise logic, pre-calculate 32-bit fragments at the data source (indexing or loading) to avoid redundant BigInt math and conversions during the "hot" comparison phase.

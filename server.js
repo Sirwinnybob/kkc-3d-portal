@@ -237,8 +237,6 @@ app.get('/api/job/:code/:room/textures', async (req, res) => {
 
 // Perceptual hash cache
 let textureHashCache = null;
-let textureHashCacheTime = 0;
-const HASH_CACHE_TTL = 60000; // 1 minute
 
 /**
  * Perceptual Hash (pHash) using Discrete Cosine Transform (DCT)
@@ -293,13 +291,17 @@ async function computePhash(imageBuffer) {
 // Precomputed cosine and scaling factor tables for DCT-II (N=32)
 const DCT_N = 32;
 const DCT_COS_TABLE = new Float64Array(DCT_N * DCT_N);
-const DCT_C_TABLE = new Float64Array(DCT_N);
+const DCT_CV_TABLE = new Float64Array(DCT_N * DCT_N);
 
 for (let u = 0; u < DCT_N; u++) {
     for (let x = 0; x < DCT_N; x++) {
         DCT_COS_TABLE[u * DCT_N + x] = Math.cos(((2 * x + 1) * u * Math.PI) / (2 * DCT_N));
     }
-    DCT_C_TABLE[u] = u === 0 ? Math.sqrt(1.0 / DCT_N) : Math.sqrt(2.0 / DCT_N);
+    const cu = u === 0 ? Math.sqrt(1.0 / DCT_N) : Math.sqrt(2.0 / DCT_N);
+    for (let v = 0; v < DCT_N; v++) {
+        const cv = v === 0 ? Math.sqrt(1.0 / DCT_N) : Math.sqrt(2.0 / DCT_N);
+        DCT_CV_TABLE[u * DCT_N + v] = cu * cv;
+    }
 }
 
 /**
@@ -354,7 +356,7 @@ function performDCT(pixels, N) {
             for (let x = 0; x < DCT_N; x++) {
                 sum += intermediate[x * DCT_N + v] * DCT_COS_TABLE[cosOffset + x];
             }
-            dct[u * DCT_N + v] = DCT_C_TABLE[u] * DCT_C_TABLE[v] * sum;
+            dct[u * DCT_N + v] = sum * DCT_CV_TABLE[u * DCT_N + v];
         }
     }
 
@@ -366,16 +368,11 @@ function performDCT(pixels, N) {
  * Highly optimized Hamming distance between two 64-bit BigInt hashes.
  * Uses SWAR (SIMD Within A Register) population count algorithm for ~100x speedup.
  */
-function hammingDistance(hash1, hash2) {
-    const diff = hash1 ^ hash2;
-
-    // Split 64-bit BigInt into two 32-bit signed integers for high-performance bitwise ops.
-    // Numbers in Node.js are 64-bit floats, but bitwise operations convert them to 32-bit ints.
-    const low = Number(diff & 0xFFFFFFFFn);
-    const high = Number(diff >> 32n);
+function hammingDistance(h1Low, h1High, h2Low, h2High) {
+    const low = h1Low ^ h2Low;
+    const high = h1High ^ h2High;
 
     // SWAR population count for 32-bit integers.
-    // Uses unsigned right shift (>>>) for predictable behavior with JavaScript's 32nd bit.
     const popcount32 = (n) => {
         n = n - ((n >>> 1) & 0x55555555);
         n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
@@ -387,92 +384,86 @@ function hammingDistance(hash1, hash2) {
 
 // Build hash index for all textures in the catalog
 async function buildTextureHashIndex() {
-    const now = Date.now();
-    if (textureHashCache && (now - textureHashCacheTime) < HASH_CACHE_TTL) {
-        return textureHashCache;
-    }
+    if (textureHashCache) return textureHashCache;
 
     const index = {};
-
     try {
         const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.isDirectory() && entry.name !== 'Uncategorized') {
-                const categoryPath = path.join(TEXTURES_DIR, entry.name);
-                const isHidden = entry.name === 'Hidden';
-                const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
-                index[entry.name] = [];
+        const categories = entries.filter(e => e.isDirectory() && e.name !== 'Uncategorized');
 
-                // 1. Process main textures first
-                for (const item of items) {
-                    if (item.isDirectory()) continue;
-                    const file = item.name;
-                    if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+        await Promise.all(categories.map(async (entry) => {
+            const categoryPath = path.join(TEXTURES_DIR, entry.name);
+            const isHidden = entry.name === 'Hidden';
+            const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
+            const catTextures = [];
+
+            // 1. Process main textures
+            await Promise.all(items.map(async (item) => {
+                if (item.isDirectory()) return;
+                const file = item.name;
+                if (file === 'Thumbs.db' || file.startsWith('.')) return;
+                const ext = path.extname(file).toLowerCase();
+                if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
+
+                try {
+                    const filePath = path.join(categoryPath, file);
+                    const buffer = await fs.promises.readFile(filePath);
+                    const hash = await computePhash(buffer);
+                    catTextures.push({
+                        name: path.basename(file, ext),
+                        file: file,
+                        url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
+                        hidden: isHidden,
+                        hash: hash.toString(),
+                        hLow: Number(hash & 0xFFFFFFFFn),
+                        hHigh: Number(hash >> 32n)
+                    });
+                } catch (e) {
+                    console.error(`[Texture] Hash error for ${file}: ${e.message}`);
+                }
+            }));
+
+            // 2. Process variant hashes
+            const hashFolderPath = path.join(categoryPath, 'hashes');
+            if (fs.existsSync(hashFolderPath)) {
+                const variantFiles = await fs.promises.readdir(hashFolderPath);
+                await Promise.all(variantFiles.map(async (file) => {
+                    if (file === 'Thumbs.db' || file.startsWith('.')) return;
                     const ext = path.extname(file).toLowerCase();
-                    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-                        try {
-                            const filePath = path.join(categoryPath, file);
-                            const buffer = await fs.promises.readFile(filePath);
-                            const hash = await computePhash(buffer);
-                            index[entry.name].push({
-                                name: path.basename(file, ext),
-                                file: file,
-                                url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
-                                hidden: isHidden,
-                                hash: hash.toString()
+                    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
+
+                    try {
+                        const filePath = path.join(hashFolderPath, file);
+                        const buffer = await fs.promises.readFile(filePath);
+                        const hash = await computePhash(buffer);
+                        let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
+                        const canonical = catTextures.find(t => t.name === canonicalName);
+
+                        if (canonical) {
+                            catTextures.push({
+                                name: canonical.name,
+                                file: canonical.file,
+                                url: canonical.url,
+                                hidden: canonical.hidden,
+                                hash: hash.toString(),
+                                hLow: Number(hash & 0xFFFFFFFFn),
+                                hHigh: Number(hash >> 32n),
+                                isVariant: true,
+                                variantFile: file
                             });
-                        } catch (e) {
-                            console.error(`[Texture] Hash error for ${file}: ${e.message}`);
                         }
+                    } catch (e) {
+                        console.error(`[Texture] Variant hash error for ${file}: ${e.message}`);
                     }
-                }
-
-                // 2. Process variant hashes in the 'hashes/' sub-folder
-                const hashFolderPath = path.join(categoryPath, 'hashes');
-                if (fs.existsSync(hashFolderPath)) {
-                    const variantFiles = await fs.promises.readdir(hashFolderPath);
-                    for (const file of variantFiles) {
-                        if (file === 'Thumbs.db' || file.startsWith('.')) continue;
-                        const ext = path.extname(file).toLowerCase();
-                        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-                            try {
-                                const filePath = path.join(hashFolderPath, file);
-                                const buffer = await fs.promises.readFile(filePath);
-                                const hash = await computePhash(buffer);
-
-                                // Identify canonical texture by stripping "_N" suffix (e.g., "Wild Cherry_1.jpg" -> "Wild Cherry")
-                                let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
-
-                                // Find the canonical entry in the index (must match name exactly)
-                                const canonical = index[entry.name].find(t => t.name === canonicalName);
-
-                                if (canonical) {
-                                    index[entry.name].push({
-                                        name: canonical.name, // Return canonical name
-                                        file: canonical.file, // Return canonical file
-                                        url: canonical.url,   // Return canonical URL
-                                        hidden: canonical.hidden,
-                                        hash: hash.toString(),
-                                        isVariant: true,
-                                        variantFile: file
-                                    });
-                                } else {
-                                    console.warn(`[Texture] Variant ${file} found but no canonical texture '${canonicalName}' exists in ${entry.name}.`);
-                                }
-                            } catch (e) {
-                                console.error(`[Texture] Variant hash error for ${file}: ${e.message}`);
-                            }
-                        }
-                    }
-                }
+                }));
             }
-        }
+            index[entry.name] = catTextures;
+        }));
     } catch (e) {
         console.error(`[Texture] Index build error: ${e.message}`);
     }
 
     textureHashCache = index;
-    textureHashCacheTime = now;
     return index;
 }
 
@@ -537,7 +528,8 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         // Compute hash for the input image
         const inputHash = await computePhash(imageBuffer);
-        const inputHashStr = inputHash.toString();
+        const inLow = Number(inputHash & 0xFFFFFFFFn);
+        const inHigh = Number(inputHash >> 32n);
 
         // Build/load hash index
         const index = await buildTextureHashIndex();
@@ -549,8 +541,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         for (const [category, textures] of Object.entries(index)) {
             for (const tex of textures) {
-                const catHash = BigInt(tex.hash);
-                const distance = hammingDistance(inputHash, catHash);
+                const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
 
                 // Track absolute best match including hidden ones
                 if (distance < bestDistance) {
@@ -714,12 +705,13 @@ async function extractTexturesFromGlb(glbPath) {
         if (imageData.length === 0) continue;
 
         const hash = await computePhash(imageData);
+        const hLow = Number(hash & 0xFFFFFFFFn);
+        const hHigh = Number(hash >> 32n);
         let isMatched = false;
 
         for (const [category, textures] of Object.entries(index)) {
             for (const tex of textures) {
-                const catHash = BigInt(tex.hash);
-                const distance = hammingDistance(hash, catHash);
+                const distance = hammingDistance(hLow, hHigh, tex.hLow, tex.hHigh);
                 if (distance <= 15) {
                     isMatched = true;
                     break;
@@ -776,12 +768,13 @@ async function extractTexturesFromDaeImages(daeFilePath) {
             try {
                 const buffer = await fs.promises.readFile(srcPath);
                 const hash = await computePhash(buffer);
+                const hLow = Number(hash & 0xFFFFFFFFn);
+                const hHigh = Number(hash >> 32n);
                 let isMatched = false;
 
                 for (const [category, textures] of Object.entries(index)) {
                     for (const tex of textures) {
-                        const catHash = BigInt(tex.hash);
-                        const distance = hammingDistance(hash, catHash);
+                        const distance = hammingDistance(hLow, hHigh, tex.hLow, tex.hHigh);
                         if (distance <= 15) {
                             isMatched = true;
                             break;
@@ -855,14 +848,16 @@ async function generateTextureManifest(glbPath) {
                 if (imageIdx === undefined) continue;
 
                 // Reuse cached hash for this image index
-                let inputHash;
+                let inLow, inHigh;
                 if (imageHashCache.has(imageIdx)) {
-                    inputHash = imageHashCache.get(imageIdx);
+                    ({ inLow, inHigh } = imageHashCache.get(imageIdx));
                 } else {
                     const imageData = getImageData(imageIdx);
                     if (!imageData || imageData.length === 0) continue;
-                    inputHash = await computePhash(imageData);
-                    imageHashCache.set(imageIdx, inputHash);
+                    const inputHash = await computePhash(imageData);
+                    inLow = Number(inputHash & 0xFFFFFFFFn);
+                    inHigh = Number(inputHash >> 32n);
+                    imageHashCache.set(imageIdx, { inLow, inHigh });
                 }
 
                 let bestMatch = null;
@@ -871,8 +866,7 @@ async function generateTextureManifest(glbPath) {
 
                 for (const [category, textures] of Object.entries(libraryIndex)) {
                     for (const tex of textures) {
-                        const catHash = BigInt(tex.hash);
-                        const distance = hammingDistance(inputHash, catHash);
+                        const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
                         if (distance < bestDistance) {
                             bestDistance = distance;
                             bestMatch = { ...tex, category };
