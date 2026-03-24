@@ -610,6 +610,43 @@ function highlightMesh(mesh, highlight) {
 }
 
 // --- SHARED: Mesh Colors ---
+function updateTagStats() {
+    const counts = {};
+    meshEntries.forEach(e => {
+        if (e.hidden) return;
+        const key = e.tag || 'untagged';
+        counts[key] = (counts[key] || 0) + 1;
+    });
+
+    if (currentMode === 'staging') {
+        const el = document.getElementById('tag-stats');
+        if (el) el.innerHTML = Object.entries(counts).map(([k, v]) =>
+            `<div class="parse-count-row"><span><span class="dot ${k}"></span> ${k.replace(/_/g, ' ')}</span><span class="count-badge">${v}</span></div>`
+        ).join('');
+    } else if (currentMode === 'doors') {
+        const el = document.getElementById('doors-stats');
+        if (el) el.innerHTML = Object.entries(counts).map(([k, v]) =>
+            `<div class="parse-count-row"><span><span class="dot ${k}"></span> ${k.replace(/_/g, ' ')}</span><span class="count-badge">${v}</span></div>`
+        ).join('');
+    } else {
+        const el = document.getElementById('tag-stats');
+        if (el) el.innerHTML = Object.entries(counts).map(([k, v]) =>
+            `<div class="parse-count-row"><span>${k.replace(/_/g, ' ')}</span><span class="count-badge">${v}</span></div>`
+        ).join('');
+    }
+
+    const meshCount = document.getElementById('mesh-count');
+    if (meshCount) meshCount.textContent = `${meshEntries.filter(e => !e.hidden).length} meshes`;
+}
+
+function buildLegend(elementId, categories) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = categories.map(c =>
+        `<span class="legend-item"><span class="dot ${c}"></span> ${c.replace(/_/g, ' ')}</span>`
+    ).join('');
+}
+
 function updateMeshColors() {
     meshEntries.forEach(entry => updateSingleMeshColor(entry));
 }
