@@ -381,11 +381,15 @@ async function init() {
 
         // --- SHOWROOM MODE BRANCH ---
         if (isShowroomMode) {
+            window.setupTexturePanel = setupTexturePanel; // Expose for showroom mode
             await initShowroomMode(loadPin);
             window.addEventListener('resize', onWindowResize);
             animate();
             return; // Skip standard job loading
         }
+
+        // --- RENDERER SETUP (Standard only, showroom handles separately) ---
+        renderer.setClearColor(0x111111);
 
         const response = await fetch(`/api/job/${encodeURIComponent(jobCode)}`);
         const data = await response.json();
@@ -1585,9 +1589,16 @@ async function initShowroomMode(pinToLoad) {
     const roomSwitcher = document.getElementById('room-switcher');
     if (roomSwitcher) roomSwitcher.style.display = 'none';
 
+    // Ensure inline display:none from HTML is removed so .show (display:flex) works
+    if (showroomPanel) showroomPanel.style.display = '';
+
     // Toggle showroom panel
     if (showroomBtn) {
-        showroomBtn.onclick = () => showroomPanel.classList.toggle('show');
+        showroomBtn.onclick = () => {
+            showroomPanel.classList.toggle('show');
+            const isVisible = showroomPanel.classList.contains('show');
+            showroomBtn.setAttribute('aria-expanded', isVisible.toString());
+        };
     }
     const panelClose = document.getElementById('showroom-panel-close');
     if (panelClose) panelClose.onclick = () => showroomPanel.classList.remove('show');
@@ -1697,6 +1708,7 @@ function renderPartOptions(container, category, style, parts) {
 }
 
 async function loadShowroomPart(category, style, file, btnEl) {
+    if (!renderer) return;
     if (btnEl) {
         // Deactivate siblings
         btnEl.parentElement.querySelectorAll('.part-option-btn').forEach(b => b.classList.remove('active'));
@@ -1732,6 +1744,9 @@ async function loadShowroomPart(category, style, file, btnEl) {
     // Load GLB
     const glbUrl = `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`;
     const loader = new GLTFLoader();
+
+    // Ensure background is correct
+    if (scene) scene.background = new THREE.Color(0x111111);
 
     return new Promise((resolve) => {
         loader.load(glbUrl, (gltf) => {

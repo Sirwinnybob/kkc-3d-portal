@@ -85,25 +85,41 @@ async function init() {
     // Setup Three.js
     const container = document.getElementById('canvas-container');
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x222222);
+    scene.background = new THREE.Color(0x111111);
     camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 5000);
-    renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setClearColor(0x111111);
     container.appendChild(renderer.domElement);
 
+    scene.add(camera);
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.25;
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-    const dl1 = new THREE.DirectionalLight(0xffffff, 0.6);
-    dl1.position.set(2, 3, 2);
-    scene.add(dl1);
-    const dl2 = new THREE.DirectionalLight(0xffffff, 0.3);
-    dl2.position.set(-2, 1, -2);
-    scene.add(dl2);
+    // Lighting (Matching viewer.js)
+    const li = 1.0;
+    scene.add(new THREE.AmbientLight(0xffffff, li * 1.2));
+    const makeCamLight = (intensity, px, py, pz) => {
+        const light  = new THREE.DirectionalLight(0xffffff, intensity);
+        const target = new THREE.Object3D();
+        light.position.set(px, py, pz);
+        camera.add(light);
+        camera.add(target);
+        light.target = target;
+    };
+    makeCamLight(li * 0.5,  1,  1,  1);
+    const makeSceneLight = (intensity, px, py, pz) => {
+        const light = new THREE.DirectionalLight(0xffffff, intensity);
+        light.position.set(px, py, pz);
+        scene.add(light);
+    };
+    makeSceneLight(li * 0.22,  2,  1,  0);
+    makeSceneLight(li * 0.22, -2,  1,  0);
+    makeSceneLight(li * 0.22,  0,  1,  2);
+    makeSceneLight(li * 0.22,  0,  1, -2);
+    makeSceneLight(li * 0.2,   0, -1,  0);
 
     // Mode tab switching
     document.querySelectorAll('.mode-tab').forEach(tab => {
