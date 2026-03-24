@@ -15,6 +15,7 @@ function escapeHtml(unsafe) {
 let scene, camera, renderer, controls;
 let loadedModel = null;
 let meshEntries = []; // { name, mesh, tag: 'tagged'|'ignore'|null, selected: false }
+let categoriesData = {};
 const meshToEntry = new Map(); // O(1) lookup from THREE.Mesh to entry object
 const selectedEntries = new Set(); // O(1) tracking of selected meshes
 
