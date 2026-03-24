@@ -73,6 +73,7 @@ hr { border: none; border-top: 1px solid #333; margin: 16px 0; }
 .dot.drawer_fronts { background: #9C27B0; }
 .dot.paneled_ends { background: #00BCD4; }
 .dot.island_backs { background: #E91E63; }
+.dot.paneled_end_replaceable { background: #FFD600; }
 
 /* Tag Stats */
 .tag-stats { font-size: 0.82em; color: #aaa; margin: 8px 0; line-height: 1.6; }

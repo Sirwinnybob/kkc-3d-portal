@@ -31,6 +31,7 @@ const CATEGORY_COLORS = {
     island_backs: new THREE.Color(0xE91E63),
     // Category mode
     tagged: new THREE.Color(0x28a745),
+    paneled_end_replaceable: new THREE.Color(0xFFD600),
     null: new THREE.Color(0x888888)
 };
 
@@ -337,14 +338,22 @@ async function saveCategoryTags() {
 
     const meshTags = {};
     const taggedMeshes = [];
+    const paneledEndReplacements = [];
     meshEntries.forEach(entry => {
         if (entry.tag) {
             meshTags[entry.name] = entry.tag;
             if (entry.tag === 'tagged') taggedMeshes.push(entry.name);
+            if (entry.tag === 'paneled_end_replaceable') {
+                taggedMeshes.push(entry.name); // still visible by default
+                paneledEndReplacements.push(entry.name);
+            }
         }
     });
 
     const tags = { file, category, style, extracted: false, meshTags, taggedMeshes };
+    if (category === 'base' && paneledEndReplacements.length > 0) {
+        tags.paneledEndReplacements = paneledEndReplacements;
+    }
 
     updateStatus('Saving tags...');
     try {
@@ -593,7 +602,12 @@ function showPopup(entry, x, y) {
     } else if (currentMode === 'doors') {
         tagOptions = ['doors', 'drawer_fronts', 'paneled_ends', 'island_backs', 'ignore'];
     } else {
-        tagOptions = ['tagged', 'ignore'];
+        const selectedCat = document.getElementById('sel-category')?.value;
+        if (selectedCat === 'base') {
+            tagOptions = ['tagged', 'paneled_end_replaceable', 'ignore'];
+        } else {
+            tagOptions = ['tagged', 'ignore'];
+        }
     }
 
     for (const opt of tagOptions) {

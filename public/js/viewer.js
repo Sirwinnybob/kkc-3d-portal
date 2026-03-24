@@ -1648,6 +1648,10 @@ async function loadShowroomPart(category, style, file, btnEl) {
 
     // Remove previous part for this category
     if (showroomParts[category]) {
+        // If removing finished_ends, restore hidden base meshes
+        if (category === 'finished_ends') {
+            restoreBasePaneledEndMeshes();
+        }
         scene.remove(showroomParts[category].group);
         // Remove materials from tracking
         const oldMeshes = new Set();
@@ -1737,6 +1741,12 @@ async function loadShowroomPart(category, style, file, btnEl) {
             scene.add(group);
             showroomParts[category] = { group, style, file, tagData };
 
+            // Paneled ends: when loading a finished_ends part that is a paneled end,
+            // hide the base cabinet meshes marked as paneled_end_replaceable
+            if (category === 'finished_ends') {
+                handlePaneledEndSwap(file);
+            }
+
             // Reframe camera around all loaded parts
             reframeShowroomCamera();
 
@@ -1747,6 +1757,41 @@ async function loadShowroomPart(category, style, file, btnEl) {
             if (btnEl) btnEl.classList.remove('loading');
             resolve();
         });
+    });
+}
+
+// --- PANELED END REPLACEMENT LOGIC ---
+
+function handlePaneledEndSwap(finishedEndsFile) {
+    // Check if this is a paneled end file (from doors split)
+    const isPaneledEnd = /_paneled_ends\.glb$/i.test(finishedEndsFile);
+    if (!isPaneledEnd) {
+        // Loading plain finished ends — restore any hidden base meshes
+        restoreBasePaneledEndMeshes();
+        return;
+    }
+
+    // It's a paneled end — hide the base cabinet's replaceable meshes
+    const basePart = showroomParts['base'];
+    if (!basePart || !basePart.tagData || !basePart.tagData.paneledEndReplacements) return;
+
+    const replaceableNames = new Set(basePart.tagData.paneledEndReplacements);
+    basePart.group.traverse(child => {
+        if (child.isMesh && replaceableNames.has(child.name)) {
+            child.visible = false;
+            child.userData._hiddenByPaneledEnd = true;
+        }
+    });
+}
+
+function restoreBasePaneledEndMeshes() {
+    const basePart = showroomParts['base'];
+    if (!basePart) return;
+    basePart.group.traverse(child => {
+        if (child.isMesh && child.userData._hiddenByPaneledEnd) {
+            child.visible = true;
+            delete child.userData._hiddenByPaneledEnd;
+        }
     });
 }
 
