@@ -16,6 +16,8 @@ let scene, camera, renderer, controls;
 let loadedModel = null;
 let meshEntries = []; // { name, mesh, tag: 'tagged'|'ignore'|null, selected: false }
 let categoriesData = {};
+let currentMode = 'staging'; // 'staging' | 'category' | 'doors'
+let hiddenMeshes = new Set();
 const meshToEntry = new Map(); // O(1) lookup from THREE.Mesh to entry object
 const selectedEntries = new Set(); // O(1) tracking of selected meshes
 
@@ -75,6 +77,7 @@ async function init() {
     selCategory.onchange = updateFileList;
     selStyle.onchange = updateFileList;
     updateFileList();
+    updateDoorsFileList();
 
     // Load staging files
     await loadStagingFileList();
@@ -115,6 +118,7 @@ async function init() {
     document.getElementById('btn-save').onclick = saveCategoryTags;
     document.getElementById('btn-load-doors').onclick = loadDoorsGlb;
     document.getElementById('btn-split-doors').onclick = splitDoors;
+    document.getElementById('sel-doors-style').onchange = updateDoorsFileList;
 
     // Show hidden toggle
     document.getElementById('chk-show-hidden').onchange = (e) => {
@@ -133,14 +137,14 @@ async function init() {
     };
 
     // Tag actions
-    document.getElementById('btn-tag-selected').onclick = () => tagSelected();
-    document.getElementById('btn-select-all').onclick = () => {
-        meshEntries.forEach(e => toggleSelection(e, true));
-    };
-    document.getElementById('btn-deselect-all').onclick = () => {
-        selectedEntries.forEach(e => toggleSelection(e, false));
-    };
-    document.getElementById('btn-save').onclick = () => saveTags();
+    const btnTagSelected = document.getElementById('btn-tag-selected');
+    if (btnTagSelected) btnTagSelected.onclick = () => tagSelected();
+    const btnSelectAll = document.getElementById('btn-select-all');
+    if (btnSelectAll) btnSelectAll.onclick = () => { meshEntries.forEach(e => toggleSelection(e, true)); };
+    const btnDeselectAll = document.getElementById('btn-deselect-all');
+    if (btnDeselectAll) btnDeselectAll.onclick = () => { selectedEntries.forEach(e => toggleSelection(e, false)); };
+    const btnSave = document.getElementById('btn-save');
+    if (btnSave) btnSave.onclick = () => saveTags();
 
     // Canvas click
     renderer.domElement.addEventListener('click', onCanvasClick);
@@ -505,12 +509,8 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
                     polygonOffsetUnits: 1
                 });
 
-                let tag = null;
-                if (existingTags && existingTags.meshTags && existingTags.meshTags[name]) {
-                    tag = existingTags.meshTags[name];
-                }
-
-                const entry = { name, mesh: child, tag, selected: false };
+                const entry = { name, mesh: child, tag: null, selected: false };
+                if (onEntry) onEntry(entry);
                 meshEntries.push(entry);
                 meshToEntry.set(child, entry);
             }
@@ -654,13 +654,11 @@ function onCanvasClick(e) {
     if (e.shiftKey) {
         toggleSelection(entry, !entry.selected);
     } else {
-        // Fast clear existing selection (O(M) where M is selected count, instead of O(N))
-        selectedEntries.forEach(e => { if (e !== entry) toggleSelection(e, false); });
+        selectedEntries.forEach(en => { if (en !== entry) toggleSelection(en, false); });
         toggleSelection(entry, true);
     }
 
-    // Scroll to the item (O(1))
-    if (entry.el) entry.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    showPopup(entry, e.clientX, e.clientY);
 }
 
 function showPopup(entry, x, y) {
