@@ -24,6 +24,28 @@ let detectedMaterials = [];
 let selectedMaterialIndex = -1;
 let loadedModel = null;
 
+// Surface Highlight state
+let highlightedMesh = null;
+let highlightOriginalEmissive = null;
+
+function highlightMesh(mesh) {
+    clearMeshHighlight();
+    if (!mesh || !mesh.material) return;
+    highlightedMesh = mesh;
+    highlightOriginalEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : null;
+    mesh.material.emissive = new THREE.Color(0x3b82f6);
+    mesh.material.emissiveIntensity = 0.15;
+}
+
+function clearMeshHighlight() {
+    if (highlightedMesh && highlightedMesh.material) {
+        highlightedMesh.material.emissive = highlightOriginalEmissive || new THREE.Color(0x000000);
+        highlightedMesh.material.emissiveIntensity = 0;
+    }
+    highlightedMesh = null;
+    highlightOriginalEmissive = null;
+}
+
 // Showroom state
 let isShowroomMode = false;
 let showroomPin = null;
@@ -473,28 +495,6 @@ async function init() {
             if (quickPicker.open) quickPicker.open(matGroupIndex, tappedMesh);
         }
 
-        // --- SURFACE HIGHLIGHT ---
-        let highlightedMesh = null;
-        let highlightOriginalEmissive = null;
-
-        function highlightMesh(mesh) {
-            clearMeshHighlight();
-            if (!mesh || !mesh.material) return;
-            highlightedMesh = mesh;
-            highlightOriginalEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : null;
-            mesh.material.emissive = new THREE.Color(0x3b82f6);
-            mesh.material.emissiveIntensity = 0.15;
-        }
-
-        function clearMeshHighlight() {
-            if (highlightedMesh && highlightedMesh.material) {
-                highlightedMesh.material.emissive = highlightOriginalEmissive || new THREE.Color(0x000000);
-                highlightedMesh.material.emissiveIntensity = 0;
-            }
-            highlightedMesh = null;
-            highlightOriginalEmissive = null;
-        }
-
         // --- ZOOM JOYSTICK ---
         const joystickHandle    = document.getElementById('joystick-handle');
         const joystickContainer = document.getElementById('joystick-container');
@@ -762,802 +762,6 @@ async function init() {
             }
         });
 
-        // --- TEXTURE CATALOG PANEL ---
-        async function setupTexturePanel(jobCode, room) {
-            const textureBtn = document.getElementById('texture-btn');
-            const texturePanel = document.getElementById('texture-panel');
-            const closeTextureBtn = document.getElementById('close-texture-btn');
-            const materialList = document.getElementById('material-list');
-            const textureGrid = document.getElementById('texture-grid');
-            const textureSearch = document.getElementById('texture-search');
-            const catalogTitle = document.getElementById('catalog-title');
-            const backToMaterialsBtn = document.getElementById('back-to-materials');
-
-            let textureCategories = [];
-            let currentCategoryTextures = [];
-            let isMatchingAll = false;
-
-            // Insert a "Browse All Categories" button at the top of the texture grid
-            function insertBrowseButton() {
-                const browseBtn = document.createElement('button');
-                browseBtn.className = 'browse-all-categories-btn';
-                browseBtn.innerText = '\u2190 Browse All Categories';
-                browseBtn.onclick = () => showAllCategories();
-                textureGrid.insertBefore(browseBtn, textureGrid.firstChild);
-            }
-
-            // Toggle texture panel
-            if (textureBtn) {
-                textureBtn.onclick = () => {
-                    texturePanel.classList.toggle('show');
-                    if (texturePanel.classList.contains('show')) {
-                        renderMaterialList();
-                    }
-                };
-            }
-            if (closeTextureBtn) {
-                closeTextureBtn.onclick = () => texturePanel.classList.remove('show');
-            }
-
-            // Internal function to match all textures on load
-            // Tries server-side manifest first, falls back to client-side matching
-            window.matchAllTextures = async () => {
-                if (isMatchingAll) return;
-                isMatchingAll = true;
-
-                const texturedMaterials = detectedMaterials.filter(m => m.hasTexture);
-                if (texturedMaterials.length === 0) {
-                    isMatchingAll = false;
-                    return;
-                }
-
-                updateStatus(`Loading texture data...`);
-
-                // Try server-side manifest first
-                let manifestLoaded = false;
-                try {
-                    const resp = await fetch(`/api/job/${encodeURIComponent(jobCode)}/${encodeURIComponent(room)}/textures`);
-                    if (resp.ok) {
-                        const manifest = await resp.json();
-                        if (manifest.materials) {
-                            for (const mat of texturedMaterials) {
-                                const entry = manifest.materials[mat.name];
-                                if (entry && entry.matched) {
-                                    mat.matchedName = entry.bestMatch ? entry.bestMatch.name : null;
-                                    mat.bestCategory = entry.bestCategory;
-                                    mat.similarTextures = entry.similarTextures;
-                                    mat.isHidden = !!entry.isHidden;
-                                } else {
-                                    mat.matchedName = null;
-                                    mat.isHidden = false;
-                                }
-                                if (mat.originalMatchedName === undefined) mat.originalMatchedName = mat.matchedName;
-                            }
-                            manifestLoaded = true;
-                        }
-                    }
-                } catch (e) {
-                    console.log("Manifest not available, falling back to client-side matching");
-                }
-
-                // Fallback: client-side matching if manifest unavailable
-                if (!manifestLoaded) {
-                    updateStatus(`Matching ${texturedMaterials.length} textures...`);
-                    for (let i = 0; i < texturedMaterials.length; i++) {
-                        const mat = texturedMaterials[i];
-                        try {
-                            await matchTexture(mat, jobCode, room);
-                        } catch (e) {
-                            console.error("Match error:", e);
-                        }
-                        if (texturePanel.classList.contains('show')) renderMaterialList();
-                    }
-                }
-
-                isMatchingAll = false;
-                updateStatus("");
-                if (texturePanel.classList.contains('show')) renderMaterialList();
-            };
-
-            // Render material list
-            function renderMaterialList() {
-                if (!materialList) return;
-                materialList.innerHTML = '';
-
-                // Filter: only show real textures (mat.hasTexture)
-                // and hide ones marked as hidden by the matching engine
-                const visibleMaterials = detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
-
-                if (visibleMaterials.length === 0) {
-                    const div = document.createElement('div');
-                    div.style.cssText = 'padding:20px; text-align:center; color:#888;';
-                    div.textContent = isMatchingAll ? 'Matching textures...' : 'No customizable textures found.';
-                    materialList.appendChild(div);
-                    return;
-                }
-
-                // In showroom mode, separate kitchen and island
-                if (isShowroomMode) {
-                    const kitchenVis = visibleMaterials.filter(m => !m.isIsland);
-                    const islandVis = visibleMaterials.filter(m => m.isIsland);
-
-                    if (kitchenVis.length > 0) {
-                        const header = document.createElement('div');
-                        header.className = 'material-section-header';
-                        header.textContent = 'Kitchen';
-                        materialList.appendChild(header);
-                        kitchenVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
-                    }
-                    if (islandVis.length > 0) {
-                        const header = document.createElement('div');
-                        header.className = 'material-section-header';
-                        header.textContent = 'Island';
-                        materialList.appendChild(header);
-                        islandVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
-                    }
-                } else {
-                    visibleMaterials.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
-                }
-
-                document.getElementById('materials-view').style.display = 'block';
-                document.getElementById('catalog-view').style.display = 'none';
-            }
-
-            function createMaterialItem(mat) {
-                const btn = document.createElement('button');
-                btn.className = 'material-item';
-
-                let previewHtml = '';
-                if (mat.hasTexture && mat.material.map && mat.material.map.image) {
-                    try {
-                        const img = mat.material.map.image;
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 64;
-                        canvas.height = 64;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, 64, 64);
-                        previewHtml = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
-                    } catch {
-                        previewHtml = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
-                    }
-                } else {
-                    const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-                    previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
-                }
-
-                const displayName = mat.matchedName || mat.name;
-                btn.innerHTML = `
-                    <div class="material-item-left">
-                        ${previewHtml}
-                        <div class="material-info">
-                            <span class="material-name">${escapeHtml(displayName)}</span>
-                            <span class="material-status">Customizable</span>
-                        </div>
-                    </div>
-                    <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
-                `;
-                const originalIndex = detectedMaterials.indexOf(mat);
-                btn.onclick = () => selectMaterial(originalIndex);
-                return btn;
-            }
-
-            // Select a material and show catalog
-            async function selectMaterial(index) {
-                selectedMaterialIndex = index;
-                const mat = detectedMaterials[index];
-                document.getElementById('materials-view').style.display = 'none';
-                document.getElementById('catalog-view').style.display = 'block';
-                catalogTitle.innerText = `Replace: ${mat.matchedName || mat.name}`;
-
-                // If manifest already gave us a category, use it directly (no API call)
-                if (mat.bestCategory) {
-                    await loadCategoryTextures(mat.bestCategory);
-                    if (mat.similarTextures && mat.similarTextures.length > 0) {
-                        const uniqueSimilar = mat.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
-                        currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
-                        renderTextureGrid();
-                        insertBrowseButton();
-                    }
-                } else if (mat.hasTexture && mat.originalMap) {
-                    await matchAndShowCatalog(mat, jobCode, room);
-                } else {
-                    await showAllCategories();
-                }
-            }
-
-            // Core match function
-            async function matchTexture(mat, jobCode, room) {
-                if (!mat.hasTexture || !mat.originalMap) return null;
-
-                // Extract texture image data
-                const img = mat.originalMap.image;
-                if (!img) return null;
-
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.min(img.width || 256, 256);
-                canvas.height = Math.min(img.height || 256, 256);
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-                const resp = await fetch('/api/textures/match', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imageData, jobCode, room, materialName: mat.name })
-                });
-                const data = await resp.json();
-
-                if (data.success && data.matched) {
-                    mat.matchedName = data.bestMatch ? data.bestMatch.name : null;
-                    mat.bestCategory = data.bestCategory;
-                    mat.similarTextures = data.similarTextures;
-                    mat.isHidden = !!data.isHidden;
-                } else {
-                    mat.matchedName = null;
-                    mat.isHidden = false;
-                }
-                if (mat.originalMatchedName === undefined) mat.originalMatchedName = mat.matchedName;
-                return data;
-            }
-
-            // Match texture and show catalog
-            async function matchAndShowCatalog(mat, jobCode, room) {
-                updateStatus("Matching texture...");
-                try {
-                    const data = await matchTexture(mat, jobCode, room);
-
-                    if (data && data.success && data.matched && data.bestCategory) {
-                        // Update catalog title to show matched texture name
-                        if (mat.matchedName) {
-                            catalogTitle.innerText = `Replace: ${mat.matchedName}`;
-                        }
-
-                        // Show matched category textures first, then similar
-                        await loadCategoryTextures(data.bestCategory);
-                        if (data.similarTextures && data.similarTextures.length > 0) {
-                            // Prepend similar matches at top (preserve their real names)
-                            const uniqueSimilar = data.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
-                            currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
-                        }
-                        renderTextureGrid();
-                        insertBrowseButton();
-                    } else {
-                        // No match — show all categories
-                        await showAllCategories();
-                    }
-                    updateStatus("");
-                } catch (e) {
-                    console.error("Texture match error:", e);
-                    updateStatus("");
-                    await showAllCategories();
-                }
-            }
-
-            // Show all categories as clickable items
-            async function showAllCategories() {
-                try {
-                    const resp = await fetch('/api/textures');
-                    const data = await resp.json();
-                    if (data.success) {
-                        textureCategories = data.categories;
-                        textureGrid.innerHTML = '';
-                        catalogTitle.innerText = 'Select a Category';
-
-                        // Add "Solid Colors" as the first category
-                        const colorBtn = document.createElement('button');
-                        colorBtn.className = 'texture-category-btn';
-                        colorBtn.innerText = 'Solid Colors';
-                        colorBtn.onclick = () => showSolidColorsView();
-                        textureGrid.appendChild(colorBtn);
-
-                        textureCategories.forEach(cat => {
-                            const btn = document.createElement('button');
-                            btn.className = 'texture-category-btn';
-                            btn.innerText = cat;
-                            btn.onclick = () => loadCategoryTextures(cat);
-                            textureGrid.appendChild(btn);
-                        });
-                    }
-                } catch (e) {
-                    console.error("Failed to load categories:", e);
-                }
-            }
-
-            // Solid Colors view
-            function showSolidColorsView() {
-                if (selectedMaterialIndex < 0) return;
-                catalogTitle.innerText = 'Solid Colors';
-                textureGrid.innerHTML = '';
-
-                // Browse button to go back
-                insertBrowseButton();
-
-                // Preset swatches
-                const presetsDiv = document.createElement('div');
-                presetsDiv.className = 'color-presets';
-                COLOR_PRESETS.forEach(preset => {
-                    const swatch = document.createElement('button');
-                    swatch.className = 'color-swatch';
-                    swatch.style.backgroundColor = preset.hex;
-                    swatch.title = preset.name;
-                    swatch.onclick = () => {
-                        applySolidColor(detectedMaterials[selectedMaterialIndex], preset.hex);
-                        presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                        swatch.classList.add('active');
-                    };
-                    presetsDiv.appendChild(swatch);
-                });
-                textureGrid.appendChild(presetsDiv);
-
-                // Color picker
-                const pickerRow = document.createElement('div');
-                pickerRow.className = 'color-picker-row';
-                const pickerLabel = document.createElement('label');
-                pickerLabel.textContent = 'Custom:';
-                const picker = document.createElement('input');
-                picker.type = 'color';
-                picker.value = '#C8C8C8';
-                const hexDisplay = document.createElement('span');
-                hexDisplay.className = 'color-hex-display';
-                hexDisplay.textContent = picker.value;
-
-                picker.oninput = () => {
-                    hexDisplay.textContent = picker.value;
-                    applySolidColor(detectedMaterials[selectedMaterialIndex], picker.value);
-                    presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                };
-                pickerRow.appendChild(pickerLabel);
-                pickerRow.appendChild(picker);
-                pickerRow.appendChild(hexDisplay);
-                textureGrid.appendChild(pickerRow);
-
-                // Recent colors
-                const recent = getRecentColors();
-                if (recent.length > 0) {
-                    const recentSection = document.createElement('div');
-                    recentSection.className = 'recent-colors-section';
-                    const recentLabel = document.createElement('div');
-                    recentLabel.className = 'recent-colors-label';
-                    recentLabel.textContent = 'Recent Colors';
-                    recentSection.appendChild(recentLabel);
-
-                    const recentRow = document.createElement('div');
-                    recentRow.className = 'recent-colors-row';
-                    recent.forEach(hex => {
-                        const swatch = document.createElement('button');
-                        swatch.className = 'recent-color-swatch';
-                        swatch.style.backgroundColor = hex;
-                        swatch.title = hex;
-                        swatch.onclick = () => {
-                            applySolidColor(detectedMaterials[selectedMaterialIndex], hex);
-                        };
-                        recentRow.appendChild(swatch);
-                    });
-                    recentSection.appendChild(recentRow);
-                    textureGrid.appendChild(recentSection);
-                }
-            }
-
-            // Load textures for a category
-            async function loadCategoryTextures(category) {
-                try {
-                    const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
-                    const data = await resp.json();
-                    if (data.success) {
-                        currentCategoryTextures = data.textures;
-                        catalogTitle.innerText = category;
-                        renderTextureGrid();
-                        insertBrowseButton();
-                    }
-                } catch (e) {
-                    console.error("Failed to load textures:", e);
-                }
-            }
-
-            // Render texture thumbnails
-            function renderTextureGrid() {
-                if (!textureGrid) return;
-                textureGrid.innerHTML = '';
-                currentCategoryTextures.forEach(tex => {
-                    const btn = document.createElement('button');
-                    btn.className = 'texture-thumb';
-                    btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
-                    btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
-                    btn.onclick = () => previewTexture(tex.url, tex.name);
-                    textureGrid.appendChild(btn);
-                });
-            }
-
-            // Preview texture on selected material (applies to all meshes in group)
-            function previewTexture(url, name) {
-                if (selectedMaterialIndex < 0) return;
-                const matGroup = detectedMaterials[selectedMaterialIndex];
-                const texLoader = new THREE.TextureLoader();
-                texLoader.load(url, (newTex) => {
-                    newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                    newTex.minFilter = THREE.LinearMipmapLinearFilter;
-                    newTex.magFilter = THREE.LinearFilter;
-                    newTex.wrapS = THREE.RepeatWrapping;
-                    newTex.wrapT = THREE.RepeatWrapping;
-                    // Apply to all meshes sharing this material
-                    matGroup.meshes.forEach(mesh => {
-                        mesh.material.map = newTex;
-                        // Use white color so texture renders at true brightness
-                        mesh.material.color.set(0xffffff);
-                        mesh.material.needsUpdate = true;
-                    });
-                    // Update the displayed name so the material list reflects the new texture
-                    if (name) matGroup.matchedName = name;
-                });
-            }
-
-            // Back to materials list
-            if (backToMaterialsBtn) {
-                backToMaterialsBtn.onclick = () => {
-                    renderMaterialList();
-                };
-            }
-
-            // Search filter
-            if (textureSearch) {
-                textureSearch.oninput = () => {
-                    const q = textureSearch.value.toLowerCase();
-                    const thumbs = textureGrid.querySelectorAll('.texture-thumb');
-                    thumbs.forEach(th => {
-                        const name = th.querySelector('span')?.innerText?.toLowerCase() || '';
-                        th.style.display = name.includes(q) ? '' : 'none';
-                    });
-                };
-            }
-
-            // ================================================================
-            // QUICK PICKER — tap-to-select texture (bottom sheet UI)
-            // ================================================================
-            const tapReplaceSheet    = document.getElementById('tap-replace-sheet');
-            const tapReplaceLabel    = document.getElementById('tap-replace-label');
-            const tapReplaceAllBtn   = document.getElementById('tap-replace-all-btn');
-            const tapReplaceOneBtn   = document.getElementById('tap-replace-one-btn');
-            const tapReplaceCancel   = document.getElementById('tap-replace-cancel');
-            const tapReplaceBackdrop = document.getElementById('tap-replace-backdrop');
-
-            const qpEl             = document.getElementById('quick-picker');
-            const qpTitle          = document.getElementById('qp-title');
-            const qpCategoriesBack = document.getElementById('qp-categories-back');
-            const qpClose          = document.getElementById('qp-close');
-            const qpViewsContainer = document.getElementById('qp-views-container');
-            const qpCategoriesView = document.getElementById('qp-categories-view');
-            const qpCategoryGrid   = document.getElementById('qp-category-grid');
-            const qpTexturesView   = document.getElementById('qp-textures-view');
-            const qpTextureStrip   = document.getElementById('qp-texture-strip');
-
-            let qpMatGroupIndex    = -1;
-            let qpTappedMesh       = null;
-            let qpReplaceAll       = true;
-            let qpCurrentTextures  = [];
-            let qpPaintMode        = false;
-            let qpLastTextureUrl   = null;
-            let qpLastTextureName  = null;
-
-            // ---- Replace-mode sheet ----
-            function openReplaceSheet(matGroupIndex, mesh) {
-                qpMatGroupIndex = matGroupIndex;
-                qpTappedMesh    = mesh;
-                highlightMesh(mesh);
-                const mat   = detectedMaterials[matGroupIndex];
-                const label = mat.matchedName || mat.name;
-
-                if (mat.meshes.length > 1) {
-                    tapReplaceLabel.textContent = `How do you want to change "${label}"?`;
-                    tapReplaceSheet.classList.add('show');
-                } else {
-                    // Only one mesh — skip the dialog
-                    qpReplaceAll = true;
-                    openQuickPicker();
-                }
-            }
-
-            function closeReplaceSheet() {
-                tapReplaceSheet.classList.remove('show');
-            }
-
-            tapReplaceAllBtn.addEventListener('click', () => {
-                qpReplaceAll = true;
-                closeReplaceSheet();
-                openQuickPicker();
-            });
-            tapReplaceOneBtn.addEventListener('click', () => {
-                qpReplaceAll = false;
-                qpPaintMode  = true;
-                closeReplaceSheet();
-                openQuickPicker();
-            });
-            tapReplaceCancel.addEventListener('click', closeReplaceSheet);
-            tapReplaceBackdrop.addEventListener('click', closeReplaceSheet);
-
-            // ---- Quick Picker panel ----
-            async function openQuickPicker() {
-                if (qpMatGroupIndex < 0) return;
-                const mat = detectedMaterials[qpMatGroupIndex];
-                qpTitle.textContent = mat.matchedName || mat.name;
-
-                if (mat.bestCategory) {
-                    // Go directly to matched category's texture strip
-                    showQpTexturesView();
-                    await loadQpCategoryTextures(mat.bestCategory, mat);
-                } else {
-                    showQpCategoriesView();
-                    await loadQpCategories(mat);
-                }
-                qpEl.classList.add('show');
-            }
-
-            function closeQuickPicker() {
-                qpEl.classList.remove('show');
-                qpMatGroupIndex    = -1;
-                qpTappedMesh       = null;
-                qpCurrentTextures  = [];
-                qpPaintMode        = false;
-                qpLastTextureUrl   = null;
-                qpLastTextureName  = null;
-                quickPicker.paintTap = null;
-                clearMeshHighlight();
-            }
-
-            qpClose.addEventListener('click', closeQuickPicker);
-
-            // ---- View switching ----
-            function showQpCategoriesView() {
-                qpViewsContainer.classList.remove('show-textures');
-                qpCategoriesBack.classList.add('hidden');
-            }
-
-            function showQpTexturesView() {
-                qpViewsContainer.classList.add('show-textures');
-                qpCategoriesBack.classList.remove('hidden');
-            }
-
-            qpCategoriesBack.addEventListener('click', () => {
-                const mat = qpMatGroupIndex >= 0 ? detectedMaterials[qpMatGroupIndex] : null;
-                showQpCategoriesView();
-                if (mat) loadQpCategories(mat);
-            });
-
-            // ---- Category loading ----
-            async function loadQpCategories(mat) {
-                const loadingDiv = document.createElement('div');
-                loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;text-align:center;grid-column:1/-1;font-size:0.9em;';
-                loadingDiv.textContent = 'Loading…';
-                qpCategoryGrid.innerHTML = '';
-                qpCategoryGrid.appendChild(loadingDiv);
-                try {
-                    const resp = await fetch('/api/textures');
-                    const data = await resp.json();
-                    if (!data.success) throw new Error();
-                    qpCategoryGrid.innerHTML = '';
-
-                    // Add Solid Colors first
-                    const colorBtn = document.createElement('button');
-                    colorBtn.className = 'qp-category-btn';
-                    colorBtn.textContent = 'Solid Colors';
-                    colorBtn.addEventListener('click', () => loadQpSolidColors(mat));
-                    qpCategoryGrid.appendChild(colorBtn);
-
-                    data.categories.forEach(cat => {
-                        const btn = document.createElement('button');
-                        btn.className = 'qp-category-btn';
-                        if (mat && mat.bestCategory && cat === mat.bestCategory) {
-                            btn.classList.add('current-cat');
-                        }
-                        btn.textContent = cat;
-                        btn.addEventListener('click', () => loadQpCategoryTextures(cat, mat));
-                        qpCategoryGrid.appendChild(btn);
-                    });
-                } catch {
-                    const errorDiv = document.createElement('div');
-                    errorDiv.style.cssText = 'color:#f87171;padding:20px;text-align:center;grid-column:1/-1;';
-                    errorDiv.textContent = 'Failed to load categories';
-                    qpCategoryGrid.innerHTML = '';
-                    qpCategoryGrid.appendChild(errorDiv);
-                }
-            }
-
-            // Quick picker solid colors view
-            function loadQpSolidColors(mat) {
-                qpTitle.textContent = 'Solid Colors';
-                showQpTexturesView();
-                qpTextureStrip.innerHTML = '';
-
-                // Presets
-                COLOR_PRESETS.forEach(preset => {
-                    const btn = document.createElement('button');
-                    btn.className = 'qp-tex-item';
-                    btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
-                    btn.addEventListener('click', () => {
-                        if (qpMatGroupIndex >= 0) {
-                            const targetMat = detectedMaterials[qpMatGroupIndex];
-                            if (qpReplaceAll) {
-                                applySolidColor(targetMat, preset.hex);
-                            } else {
-                                // Paint mode: single mesh
-                                const color = new THREE.Color(preset.hex);
-                                qpTappedMesh.material.map = null;
-                                qpTappedMesh.material.color.copy(color);
-                                qpTappedMesh.material.needsUpdate = true;
-                                targetMat.hasPartialChange = true;
-                                targetMat.isColor = true;
-                                targetMat.colorHex = preset.hex;
-                                const r = Math.round(color.r * 255);
-                                const g = Math.round(color.g * 255);
-                                const b = Math.round(color.b * 255);
-                                targetMat.matchedName = `RGB(${r},${g},${b})`;
-                                addRecentColor(preset.hex);
-                            }
-                            // Update active
-                            qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
-                            btn.classList.add('active');
-                            qpLastTextureUrl = null;
-                            qpLastTextureName = preset.name;
-                        }
-                    });
-                    qpTextureStrip.appendChild(btn);
-                });
-
-                // Recent colors
-                const recent = getRecentColors();
-                recent.forEach(hex => {
-                    const btn = document.createElement('button');
-                    btn.className = 'qp-tex-item';
-                    btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
-                    btn.addEventListener('click', () => {
-                        if (qpMatGroupIndex >= 0) {
-                            applySolidColor(detectedMaterials[qpMatGroupIndex], hex);
-                            qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
-                            btn.classList.add('active');
-                        }
-                    });
-                    qpTextureStrip.appendChild(btn);
-                });
-            }
-
-            async function loadQpCategoryTextures(category, mat) {
-                qpTitle.textContent = category;
-                showQpTexturesView();
-                const loadingDiv = document.createElement('div');
-                loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;display:flex;align-items:center;';
-                loadingDiv.textContent = 'Loading…';
-                qpTextureStrip.innerHTML = '';
-                qpTextureStrip.appendChild(loadingDiv);
-                try {
-                    const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
-                    const data = await resp.json();
-                    if (!data.success) throw new Error();
-                    qpCurrentTextures = data.textures;
-                    // Prepend similar textures for this material (deduped)
-                    if (mat && mat.similarTextures && mat.similarTextures.length > 0) {
-                        const unique = mat.similarTextures.filter(t => !qpCurrentTextures.some(ct => ct.url === t.url));
-                        qpCurrentTextures = [...unique, ...qpCurrentTextures];
-                    }
-                    renderQpStrip(mat);
-                } catch {
-                    const errorDiv = document.createElement('div');
-                    errorDiv.style.cssText = 'color:#f87171;padding:20px;';
-                    errorDiv.textContent = 'Failed to load textures';
-                    qpTextureStrip.innerHTML = '';
-                    qpTextureStrip.appendChild(errorDiv);
-                }
-            }
-
-            // ---- Render horizontal strip ----
-            function renderQpStrip(mat) {
-                qpTextureStrip.innerHTML = '';
-                const currentName = mat ? (mat.matchedName || null) : null;
-                let activeEl = null;
-
-                qpCurrentTextures.forEach(tex => {
-                    const btn = document.createElement('button');
-                    btn.className = 'qp-tex-item';
-                    if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
-                    btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
-                    btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name));
-                    qpTextureStrip.appendChild(btn);
-                });
-
-                // Scroll the active (current) texture to center
-                if (activeEl) {
-                    requestAnimationFrame(() => {
-                        const stripW = qpTextureStrip.offsetWidth;
-                        qpTextureStrip.scrollLeft = activeEl.offsetLeft - (stripW / 2) + (activeEl.offsetWidth / 2);
-                    });
-                }
-            }
-
-            // ---- Apply texture ----
-            function applyQpTexture(url, name) {
-                if (qpMatGroupIndex < 0) return;
-                const matGroup  = detectedMaterials[qpMatGroupIndex];
-                const texLoader = new THREE.TextureLoader();
-                texLoader.load(url, (newTex) => {
-                    newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                    newTex.minFilter  = THREE.LinearMipmapLinearFilter;
-                    newTex.magFilter  = THREE.LinearFilter;
-                    newTex.wrapS      = THREE.RepeatWrapping;
-                    newTex.wrapT      = THREE.RepeatWrapping;
-
-                    if (qpReplaceAll) {
-                        matGroup.meshes.forEach(mesh => {
-                            mesh.material.map = newTex;
-                            mesh.material.color.set(0xffffff);
-                            mesh.material.needsUpdate = true;
-                        });
-                    } else {
-                        // Each mesh has its own material instance — safe to update individually
-                        qpTappedMesh.material.map = newTex;
-                        qpTappedMesh.material.color.set(0xffffff);
-                        qpTappedMesh.material.needsUpdate = true;
-                        matGroup.hasPartialChange = true;
-                    }
-
-                    if (name) matGroup.matchedName = name;
-
-                    // Update active highlight in the strip
-                    qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(btn => {
-                        btn.classList.toggle('active', btn.querySelector('span')?.textContent === name);
-                    });
-
-                    // Store for paint mode
-                    qpLastTextureUrl  = url;
-                    qpLastTextureName = name;
-
-                    // Enable paint mode bridge after first texture is selected
-                    if (qpPaintMode) quickPicker.paintTap = paintTap;
-                });
-            }
-
-            // ---- Paint mode: apply last texture to newly tapped surfaces ----
-            function paintTap(clientX, clientY) {
-                if (!qpPaintMode || !qpLastTextureUrl) return;
-                const raycaster = new THREE.Raycaster();
-                const mouse = new THREE.Vector2(
-                    (clientX / window.innerWidth) * 2 - 1,
-                    -(clientY / window.innerHeight) * 2 + 1
-                );
-                raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(scene.children, true);
-                if (!intersects.length) return;
-
-                const mesh = intersects[0].object;
-                const idx = detectedMaterials.findIndex(g => g.meshes.includes(mesh));
-                if (idx < 0 || !detectedMaterials[idx].hasTexture) return;
-
-                // Update highlight to new surface
-                clearMeshHighlight();
-                qpTappedMesh = mesh;
-                highlightMesh(mesh);
-
-                // Track change on the painted group
-                const paintedGroup = detectedMaterials[idx];
-                paintedGroup.hasPartialChange = true;
-                if (qpLastTextureName) paintedGroup.matchedName = qpLastTextureName;
-
-                // Apply last selected texture
-                const texLoader = new THREE.TextureLoader();
-                texLoader.load(qpLastTextureUrl, (tex) => {
-                    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                    tex.minFilter  = THREE.LinearMipmapLinearFilter;
-                    tex.magFilter  = THREE.LinearFilter;
-                    tex.wrapS      = THREE.RepeatWrapping;
-                    tex.wrapT      = THREE.RepeatWrapping;
-                    mesh.material.map = tex;
-                    mesh.material.color.set(0xffffff);
-                    mesh.material.needsUpdate = true;
-                });
-            }
-
-            // Wire bridge so handleSingleTap (init scope) can open the picker
-            quickPicker.open  = openReplaceSheet;
-            quickPicker.close = closeQuickPicker;
-        }
-
     } catch (e) {
         console.error(e);
         updateStatus("Connection Error", true);
@@ -1565,6 +769,802 @@ async function init() {
 
     window.addEventListener('resize', onWindowResize);
     animate();
+}
+
+// --- TEXTURE CATALOG PANEL ---
+async function setupTexturePanel(jobCode, room) {
+    const textureBtn = document.getElementById('texture-btn');
+    const texturePanel = document.getElementById('texture-panel');
+    const closeTextureBtn = document.getElementById('close-texture-btn');
+    const materialList = document.getElementById('material-list');
+    const textureGrid = document.getElementById('texture-grid');
+    const textureSearch = document.getElementById('texture-search');
+    const catalogTitle = document.getElementById('catalog-title');
+    const backToMaterialsBtn = document.getElementById('back-to-materials');
+
+    let textureCategories = [];
+    let currentCategoryTextures = [];
+    let isMatchingAll = false;
+
+    // Insert a "Browse All Categories" button at the top of the texture grid
+    function insertBrowseButton() {
+        const browseBtn = document.createElement('button');
+        browseBtn.className = 'browse-all-categories-btn';
+        browseBtn.innerText = '\u2190 Browse All Categories';
+        browseBtn.onclick = () => showAllCategories();
+        textureGrid.insertBefore(browseBtn, textureGrid.firstChild);
+    }
+
+    // Toggle texture panel
+    if (textureBtn) {
+        textureBtn.onclick = () => {
+            texturePanel.classList.toggle('show');
+            if (texturePanel.classList.contains('show')) {
+                renderMaterialList();
+            }
+        };
+    }
+    if (closeTextureBtn) {
+        closeTextureBtn.onclick = () => texturePanel.classList.remove('show');
+    }
+
+    // Internal function to match all textures on load
+    // Tries server-side manifest first, falls back to client-side matching
+    window.matchAllTextures = async () => {
+        if (isMatchingAll) return;
+        isMatchingAll = true;
+
+        const texturedMaterials = detectedMaterials.filter(m => m.hasTexture);
+        if (texturedMaterials.length === 0) {
+            isMatchingAll = false;
+            return;
+        }
+
+        updateStatus(`Loading texture data...`);
+
+        // Try server-side manifest first
+        let manifestLoaded = false;
+        try {
+            const resp = await fetch(`/api/job/${encodeURIComponent(jobCode)}/${encodeURIComponent(room)}/textures`);
+            if (resp.ok) {
+                const manifest = await resp.json();
+                if (manifest.materials) {
+                    for (const mat of texturedMaterials) {
+                        const entry = manifest.materials[mat.name];
+                        if (entry && entry.matched) {
+                            mat.matchedName = entry.bestMatch ? entry.bestMatch.name : null;
+                            mat.bestCategory = entry.bestCategory;
+                            mat.similarTextures = entry.similarTextures;
+                            mat.isHidden = !!entry.isHidden;
+                        } else {
+                            mat.matchedName = null;
+                            mat.isHidden = false;
+                        }
+                        if (mat.originalMatchedName === undefined) mat.originalMatchedName = mat.matchedName;
+                    }
+                    manifestLoaded = true;
+                }
+            }
+        } catch (e) {
+            console.log("Manifest not available, falling back to client-side matching");
+        }
+
+        // Fallback: client-side matching if manifest unavailable
+        if (!manifestLoaded) {
+            updateStatus(`Matching ${texturedMaterials.length} textures...`);
+            for (let i = 0; i < texturedMaterials.length; i++) {
+                const mat = texturedMaterials[i];
+                try {
+                    await matchTexture(mat, jobCode, room);
+                } catch (e) {
+                    console.error("Match error:", e);
+                }
+                if (texturePanel.classList.contains('show')) renderMaterialList();
+            }
+        }
+
+        isMatchingAll = false;
+        updateStatus("");
+        if (texturePanel.classList.contains('show')) renderMaterialList();
+    };
+
+    // Render material list
+    function renderMaterialList() {
+        if (!materialList) return;
+        materialList.innerHTML = '';
+
+        // Filter: only show real textures (mat.hasTexture)
+        // and hide ones marked as hidden by the matching engine
+        const visibleMaterials = detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
+
+        if (visibleMaterials.length === 0) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:20px; text-align:center; color:#888;';
+            div.textContent = isMatchingAll ? 'Matching textures...' : 'No customizable textures found.';
+            materialList.appendChild(div);
+            return;
+        }
+
+        // In showroom mode, separate kitchen and island
+        if (isShowroomMode) {
+            const kitchenVis = visibleMaterials.filter(m => !m.isIsland);
+            const islandVis = visibleMaterials.filter(m => m.isIsland);
+
+            if (kitchenVis.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'material-section-header';
+                header.textContent = 'Kitchen';
+                materialList.appendChild(header);
+                kitchenVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
+            }
+            if (islandVis.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'material-section-header';
+                header.textContent = 'Island';
+                materialList.appendChild(header);
+                islandVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
+            }
+        } else {
+            visibleMaterials.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
+        }
+
+        document.getElementById('materials-view').style.display = 'block';
+        document.getElementById('catalog-view').style.display = 'none';
+    }
+
+    function createMaterialItem(mat) {
+        const btn = document.createElement('button');
+        btn.className = 'material-item';
+
+        let previewHtml = '';
+        if (mat.hasTexture && mat.material.map && mat.material.map.image) {
+            try {
+                const img = mat.material.map.image;
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, 64, 64);
+                previewHtml = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
+            } catch {
+                previewHtml = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+            }
+        } else {
+            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+            previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+        }
+
+        const displayName = mat.matchedName || mat.name;
+        btn.innerHTML = `
+            <div class="material-item-left">
+                ${previewHtml}
+                <div class="material-info">
+                    <span class="material-name">${escapeHtml(displayName)}</span>
+                    <span class="material-status">Customizable</span>
+                </div>
+            </div>
+            <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
+        `;
+        const originalIndex = detectedMaterials.indexOf(mat);
+        btn.onclick = () => selectMaterial(originalIndex);
+        return btn;
+    }
+
+    // Select a material and show catalog
+    async function selectMaterial(index) {
+        selectedMaterialIndex = index;
+        const mat = detectedMaterials[index];
+        document.getElementById('materials-view').style.display = 'none';
+        document.getElementById('catalog-view').style.display = 'block';
+        catalogTitle.innerText = `Replace: ${mat.matchedName || mat.name}`;
+
+        // If manifest already gave us a category, use it directly (no API call)
+        if (mat.bestCategory) {
+            await loadCategoryTextures(mat.bestCategory);
+            if (mat.similarTextures && mat.similarTextures.length > 0) {
+                const uniqueSimilar = mat.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
+                currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
+                renderTextureGrid();
+                insertBrowseButton();
+            }
+        } else if (mat.hasTexture && mat.originalMap) {
+            await matchAndShowCatalog(mat, jobCode, room);
+        } else {
+            await showAllCategories();
+        }
+    }
+
+    // Core match function
+    async function matchTexture(mat, jobCode, room) {
+        if (!mat.hasTexture || !mat.originalMap) return null;
+
+        // Extract texture image data
+        const img = mat.originalMap.image;
+        if (!img) return null;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.min(img.width || 256, 256);
+        canvas.height = Math.min(img.height || 256, 256);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+        const resp = await fetch('/api/textures/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageData, jobCode, room, materialName: mat.name })
+        });
+        const data = await resp.json();
+
+        if (data.success && data.matched) {
+            mat.matchedName = data.bestMatch ? data.bestMatch.name : null;
+            mat.bestCategory = data.bestCategory;
+            mat.similarTextures = data.similarTextures;
+            mat.isHidden = !!data.isHidden;
+        } else {
+            mat.matchedName = null;
+            mat.isHidden = false;
+        }
+        if (mat.originalMatchedName === undefined) mat.originalMatchedName = mat.matchedName;
+        return data;
+    }
+
+    // Match texture and show catalog
+    async function matchAndShowCatalog(mat, jobCode, room) {
+        updateStatus("Matching texture...");
+        try {
+            const data = await matchTexture(mat, jobCode, room);
+
+            if (data && data.success && data.matched && data.bestCategory) {
+                // Update catalog title to show matched texture name
+                if (mat.matchedName) {
+                    catalogTitle.innerText = `Replace: ${mat.matchedName}`;
+                }
+
+                // Show matched category textures first, then similar
+                await loadCategoryTextures(data.bestCategory);
+                if (data.similarTextures && data.similarTextures.length > 0) {
+                    // Prepend similar matches at top (preserve their real names)
+                    const uniqueSimilar = data.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
+                    currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
+                }
+                renderTextureGrid();
+                insertBrowseButton();
+            } else {
+                // No match — show all categories
+                await showAllCategories();
+            }
+            updateStatus("");
+        } catch (e) {
+            console.error("Texture match error:", e);
+            updateStatus("");
+            await showAllCategories();
+        }
+    }
+
+    // Show all categories as clickable items
+    async function showAllCategories() {
+        try {
+            const resp = await fetch('/api/textures');
+            const data = await resp.json();
+            if (data.success) {
+                textureCategories = data.categories;
+                textureGrid.innerHTML = '';
+                catalogTitle.innerText = 'Select a Category';
+
+                // Add "Solid Colors" as the first category
+                const colorBtn = document.createElement('button');
+                colorBtn.className = 'texture-category-btn';
+                colorBtn.innerText = 'Solid Colors';
+                colorBtn.onclick = () => showSolidColorsView();
+                textureGrid.appendChild(colorBtn);
+
+                textureCategories.forEach(cat => {
+                    const btn = document.createElement('button');
+                    btn.className = 'texture-category-btn';
+                    btn.innerText = cat;
+                    btn.onclick = () => loadCategoryTextures(cat);
+                    textureGrid.appendChild(btn);
+                });
+            }
+        } catch (e) {
+            console.error("Failed to load categories:", e);
+        }
+    }
+
+    // Solid Colors view
+    function showSolidColorsView() {
+        if (selectedMaterialIndex < 0) return;
+        catalogTitle.innerText = 'Solid Colors';
+        textureGrid.innerHTML = '';
+
+        // Browse button to go back
+        insertBrowseButton();
+
+        // Preset swatches
+        const presetsDiv = document.createElement('div');
+        presetsDiv.className = 'color-presets';
+        COLOR_PRESETS.forEach(preset => {
+            const swatch = document.createElement('button');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = preset.hex;
+            swatch.title = preset.name;
+            swatch.onclick = () => {
+                applySolidColor(detectedMaterials[selectedMaterialIndex], preset.hex);
+                presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                swatch.classList.add('active');
+            };
+            presetsDiv.appendChild(swatch);
+        });
+        textureGrid.appendChild(presetsDiv);
+
+        // Color picker
+        const pickerRow = document.createElement('div');
+        pickerRow.className = 'color-picker-row';
+        const pickerLabel = document.createElement('label');
+        pickerLabel.textContent = 'Custom:';
+        const picker = document.createElement('input');
+        picker.type = 'color';
+        picker.value = '#C8C8C8';
+        const hexDisplay = document.createElement('span');
+        hexDisplay.className = 'color-hex-display';
+        hexDisplay.textContent = picker.value;
+
+        picker.oninput = () => {
+            hexDisplay.textContent = picker.value;
+            applySolidColor(detectedMaterials[selectedMaterialIndex], picker.value);
+            presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        };
+        pickerRow.appendChild(pickerLabel);
+        pickerRow.appendChild(picker);
+        pickerRow.appendChild(hexDisplay);
+        textureGrid.appendChild(pickerRow);
+
+        // Recent colors
+        const recent = getRecentColors();
+        if (recent.length > 0) {
+            const recentSection = document.createElement('div');
+            recentSection.className = 'recent-colors-section';
+            const recentLabel = document.createElement('div');
+            recentLabel.className = 'recent-colors-label';
+            recentLabel.textContent = 'Recent Colors';
+            recentSection.appendChild(recentLabel);
+
+            const recentRow = document.createElement('div');
+            recentRow.className = 'recent-colors-row';
+            recent.forEach(hex => {
+                const swatch = document.createElement('button');
+                swatch.className = 'recent-color-swatch';
+                swatch.style.backgroundColor = hex;
+                swatch.title = hex;
+                swatch.onclick = () => {
+                    applySolidColor(detectedMaterials[selectedMaterialIndex], hex);
+                };
+                recentRow.appendChild(swatch);
+            });
+            recentSection.appendChild(recentRow);
+            textureGrid.appendChild(recentSection);
+        }
+    }
+
+    // Load textures for a category
+    async function loadCategoryTextures(category) {
+        try {
+            const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
+            const data = await resp.json();
+            if (data.success) {
+                currentCategoryTextures = data.textures;
+                catalogTitle.innerText = category;
+                renderTextureGrid();
+                insertBrowseButton();
+            }
+        } catch (e) {
+            console.error("Failed to load textures:", e);
+        }
+    }
+
+    // Render texture thumbnails
+    function renderTextureGrid() {
+        if (!textureGrid) return;
+        textureGrid.innerHTML = '';
+        currentCategoryTextures.forEach(tex => {
+            const btn = document.createElement('button');
+            btn.className = 'texture-thumb';
+            btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
+            btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
+            btn.onclick = () => previewTexture(tex.url, tex.name);
+            textureGrid.appendChild(btn);
+        });
+    }
+
+    // Preview texture on selected material (applies to all meshes in group)
+    function previewTexture(url, name) {
+        if (selectedMaterialIndex < 0) return;
+        const matGroup = detectedMaterials[selectedMaterialIndex];
+        const texLoader = new THREE.TextureLoader();
+        texLoader.load(url, (newTex) => {
+            newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            newTex.minFilter = THREE.LinearMipmapLinearFilter;
+            newTex.magFilter = THREE.LinearFilter;
+            newTex.wrapS = THREE.RepeatWrapping;
+            newTex.wrapT = THREE.RepeatWrapping;
+            // Apply to all meshes sharing this material
+            matGroup.meshes.forEach(mesh => {
+                mesh.material.map = newTex;
+                // Use white color so texture renders at true brightness
+                mesh.material.color.set(0xffffff);
+                mesh.material.needsUpdate = true;
+            });
+            // Update the displayed name so the material list reflects the new texture
+            if (name) matGroup.matchedName = name;
+        });
+    }
+
+    // Back to materials list
+    if (backToMaterialsBtn) {
+        backToMaterialsBtn.onclick = () => {
+            renderMaterialList();
+        };
+    }
+
+    // Search filter
+    if (textureSearch) {
+        textureSearch.oninput = () => {
+            const q = textureSearch.value.toLowerCase();
+            const thumbs = textureGrid.querySelectorAll('.texture-thumb');
+            thumbs.forEach(th => {
+                const name = th.querySelector('span')?.innerText?.toLowerCase() || '';
+                th.style.display = name.includes(q) ? '' : 'none';
+            });
+        };
+    }
+
+    // ================================================================
+    // QUICK PICKER — tap-to-select texture (bottom sheet UI)
+    // ================================================================
+    const tapReplaceSheet    = document.getElementById('tap-replace-sheet');
+    const tapReplaceLabel    = document.getElementById('tap-replace-label');
+    const tapReplaceAllBtn   = document.getElementById('tap-replace-all-btn');
+    const tapReplaceOneBtn   = document.getElementById('tap-replace-one-btn');
+    const tapReplaceCancel   = document.getElementById('tap-replace-cancel');
+    const tapReplaceBackdrop = document.getElementById('tap-replace-backdrop');
+
+    const qpEl             = document.getElementById('quick-picker');
+    const qpTitle          = document.getElementById('qp-title');
+    const qpCategoriesBack = document.getElementById('qp-categories-back');
+    const qpClose          = document.getElementById('qp-close');
+    const qpViewsContainer = document.getElementById('qp-views-container');
+    const qpCategoriesView = document.getElementById('qp-categories-view');
+    const qpCategoryGrid   = document.getElementById('qp-category-grid');
+    const qpTexturesView   = document.getElementById('qp-textures-view');
+    const qpTextureStrip   = document.getElementById('qp-texture-strip');
+
+    let qpMatGroupIndex    = -1;
+    let qpTappedMesh       = null;
+    let qpReplaceAll       = true;
+    let qpCurrentTextures  = [];
+    let qpPaintMode        = false;
+    let qpLastTextureUrl   = null;
+    let qpLastTextureName  = null;
+
+    // ---- Replace-mode sheet ----
+    function openReplaceSheet(matGroupIndex, mesh) {
+        qpMatGroupIndex = matGroupIndex;
+        qpTappedMesh    = mesh;
+        highlightMesh(mesh);
+        const mat   = detectedMaterials[matGroupIndex];
+        const label = mat.matchedName || mat.name;
+
+        if (mat.meshes.length > 1) {
+            tapReplaceLabel.textContent = `How do you want to change "${label}"?`;
+            tapReplaceSheet.classList.add('show');
+        } else {
+            // Only one mesh — skip the dialog
+            qpReplaceAll = true;
+            openQuickPicker();
+        }
+    }
+
+    function closeReplaceSheet() {
+        tapReplaceSheet.classList.remove('show');
+    }
+
+    tapReplaceAllBtn.addEventListener('click', () => {
+        qpReplaceAll = true;
+        closeReplaceSheet();
+        openQuickPicker();
+    });
+    tapReplaceOneBtn.addEventListener('click', () => {
+        qpReplaceAll = false;
+        qpPaintMode  = true;
+        closeReplaceSheet();
+        openQuickPicker();
+    });
+    tapReplaceCancel.addEventListener('click', closeReplaceSheet);
+    tapReplaceBackdrop.addEventListener('click', closeReplaceSheet);
+
+    // ---- Quick Picker panel ----
+    async function openQuickPicker() {
+        if (qpMatGroupIndex < 0) return;
+        const mat = detectedMaterials[qpMatGroupIndex];
+        qpTitle.textContent = mat.matchedName || mat.name;
+
+        if (mat.bestCategory) {
+            // Go directly to matched category's texture strip
+            showQpTexturesView();
+            await loadQpCategoryTextures(mat.bestCategory, mat);
+        } else {
+            showQpCategoriesView();
+            await loadQpCategories(mat);
+        }
+        qpEl.classList.add('show');
+    }
+
+    function closeQuickPicker() {
+        qpEl.classList.remove('show');
+        qpMatGroupIndex    = -1;
+        qpTappedMesh       = null;
+        qpCurrentTextures  = [];
+        qpPaintMode        = false;
+        qpLastTextureUrl   = null;
+        qpLastTextureName  = null;
+        quickPicker.paintTap = null;
+        clearMeshHighlight();
+    }
+
+    qpClose.addEventListener('click', closeQuickPicker);
+
+    // ---- View switching ----
+    function showQpCategoriesView() {
+        qpViewsContainer.classList.remove('show-textures');
+        qpCategoriesBack.classList.add('hidden');
+    }
+
+    function showQpTexturesView() {
+        qpViewsContainer.classList.add('show-textures');
+        qpCategoriesBack.classList.remove('hidden');
+    }
+
+    qpCategoriesBack.addEventListener('click', () => {
+        const mat = qpMatGroupIndex >= 0 ? detectedMaterials[qpMatGroupIndex] : null;
+        showQpCategoriesView();
+        if (mat) loadQpCategories(mat);
+    });
+
+    // ---- Category loading ----
+    async function loadQpCategories(mat) {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;text-align:center;grid-column:1/-1;font-size:0.9em;';
+        loadingDiv.textContent = 'Loading…';
+        qpCategoryGrid.innerHTML = '';
+        qpCategoryGrid.appendChild(loadingDiv);
+        try {
+            const resp = await fetch('/api/textures');
+            const data = await resp.json();
+            if (!data.success) throw new Error();
+            qpCategoryGrid.innerHTML = '';
+
+            // Add Solid Colors first
+            const colorBtn = document.createElement('button');
+            colorBtn.className = 'qp-category-btn';
+            colorBtn.textContent = 'Solid Colors';
+            colorBtn.addEventListener('click', () => loadQpSolidColors(mat));
+            qpCategoryGrid.appendChild(colorBtn);
+
+            data.categories.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = 'qp-category-btn';
+                if (mat && mat.bestCategory && cat === mat.bestCategory) {
+                    btn.classList.add('current-cat');
+                }
+                btn.textContent = cat;
+                btn.addEventListener('click', () => loadQpCategoryTextures(cat, mat));
+                qpCategoryGrid.appendChild(btn);
+            });
+        } catch {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'color:#f87171;padding:20px;text-align:center;grid-column:1/-1;';
+            errorDiv.textContent = 'Failed to load categories';
+            qpCategoryGrid.innerHTML = '';
+            qpCategoryGrid.appendChild(errorDiv);
+        }
+    }
+
+    // Quick picker solid colors view
+    function loadQpSolidColors(mat) {
+        qpTitle.textContent = 'Solid Colors';
+        showQpTexturesView();
+        qpTextureStrip.innerHTML = '';
+
+        // Presets
+        COLOR_PRESETS.forEach(preset => {
+            const btn = document.createElement('button');
+            btn.className = 'qp-tex-item';
+            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
+            btn.addEventListener('click', () => {
+                if (qpMatGroupIndex >= 0) {
+                    const targetMat = detectedMaterials[qpMatGroupIndex];
+                    if (qpReplaceAll) {
+                        applySolidColor(targetMat, preset.hex);
+                    } else {
+                        // Paint mode: single mesh
+                        const color = new THREE.Color(preset.hex);
+                        qpTappedMesh.material.map = null;
+                        qpTappedMesh.material.color.copy(color);
+                        qpTappedMesh.material.needsUpdate = true;
+                        targetMat.hasPartialChange = true;
+                        targetMat.isColor = true;
+                        targetMat.colorHex = preset.hex;
+                        const r = Math.round(color.r * 255);
+                        const g = Math.round(color.g * 255);
+                        const b = Math.round(color.b * 255);
+                        targetMat.matchedName = `RGB(${r},${g},${b})`;
+                        addRecentColor(preset.hex);
+                    }
+                    // Update active
+                    qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    qpLastTextureUrl = null;
+                    qpLastTextureName = preset.name;
+                }
+            });
+            qpTextureStrip.appendChild(btn);
+        });
+
+        // Recent colors
+        const recent = getRecentColors();
+        recent.forEach(hex => {
+            const btn = document.createElement('button');
+            btn.className = 'qp-tex-item';
+            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
+            btn.addEventListener('click', () => {
+                if (qpMatGroupIndex >= 0) {
+                    applySolidColor(detectedMaterials[qpMatGroupIndex], hex);
+                    qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                }
+            });
+            qpTextureStrip.appendChild(btn);
+        });
+    }
+
+    async function loadQpCategoryTextures(category, mat) {
+        qpTitle.textContent = category;
+        showQpTexturesView();
+        const loadingDiv = document.createElement('div');
+        loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;display:flex;align-items:center;';
+        loadingDiv.textContent = 'Loading…';
+        qpTextureStrip.innerHTML = '';
+        qpTextureStrip.appendChild(loadingDiv);
+        try {
+            const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
+            const data = await resp.json();
+            if (!data.success) throw new Error();
+            qpCurrentTextures = data.textures;
+            // Prepend similar textures for this material (deduped)
+            if (mat && mat.similarTextures && mat.similarTextures.length > 0) {
+                const unique = mat.similarTextures.filter(t => !qpCurrentTextures.some(ct => ct.url === t.url));
+                qpCurrentTextures = [...unique, ...qpCurrentTextures];
+            }
+            renderQpStrip(mat);
+        } catch {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'color:#f87171;padding:20px;';
+            errorDiv.textContent = 'Failed to load textures';
+            qpTextureStrip.innerHTML = '';
+            qpTextureStrip.appendChild(errorDiv);
+        }
+    }
+
+    // ---- Render horizontal strip ----
+    function renderQpStrip(mat) {
+        qpTextureStrip.innerHTML = '';
+        const currentName = mat ? (mat.matchedName || null) : null;
+        let activeEl = null;
+
+        qpCurrentTextures.forEach(tex => {
+            const btn = document.createElement('button');
+            btn.className = 'qp-tex-item';
+            if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
+            btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
+            btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name));
+            qpTextureStrip.appendChild(btn);
+        });
+
+        // Scroll the active (current) texture to center
+        if (activeEl) {
+            requestAnimationFrame(() => {
+                const stripW = qpTextureStrip.offsetWidth;
+                qpTextureStrip.scrollLeft = activeEl.offsetLeft - (stripW / 2) + (activeEl.offsetWidth / 2);
+            });
+        }
+    }
+
+    // ---- Apply texture ----
+    function applyQpTexture(url, name) {
+        if (qpMatGroupIndex < 0) return;
+        const matGroup  = detectedMaterials[qpMatGroupIndex];
+        const texLoader = new THREE.TextureLoader();
+        texLoader.load(url, (newTex) => {
+            newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            newTex.minFilter  = THREE.LinearMipmapLinearFilter;
+            newTex.magFilter  = THREE.LinearFilter;
+            newTex.wrapS      = THREE.RepeatWrapping;
+            newTex.wrapT      = THREE.RepeatWrapping;
+
+            if (qpReplaceAll) {
+                matGroup.meshes.forEach(mesh => {
+                    mesh.material.map = newTex;
+                    mesh.material.color.set(0xffffff);
+                    mesh.material.needsUpdate = true;
+                });
+            } else {
+                // Each mesh has its own material instance — safe to update individually
+                qpTappedMesh.material.map = newTex;
+                qpTappedMesh.material.color.set(0xffffff);
+                qpTappedMesh.material.needsUpdate = true;
+                matGroup.hasPartialChange = true;
+            }
+
+            if (name) matGroup.matchedName = name;
+
+            // Update active highlight in the strip
+            qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(btn => {
+                btn.classList.toggle('active', btn.querySelector('span')?.textContent === name);
+            });
+
+            // Store for paint mode
+            qpLastTextureUrl  = url;
+            qpLastTextureName = name;
+
+            // Enable paint mode bridge after first texture is selected
+            if (qpPaintMode) quickPicker.paintTap = paintTap;
+        });
+    }
+
+    // ---- Paint mode: apply last texture to newly tapped surfaces ----
+    function paintTap(clientX, clientY) {
+        if (!qpPaintMode || !qpLastTextureUrl) return;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(
+            (clientX / window.innerWidth) * 2 - 1,
+            -(clientY / window.innerHeight) * 2 + 1
+        );
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        if (!intersects.length) return;
+
+        const mesh = intersects[0].object;
+        const idx = detectedMaterials.findIndex(g => g.meshes.includes(mesh));
+        if (idx < 0 || !detectedMaterials[idx].hasTexture) return;
+
+        // Update highlight to new surface
+        clearMeshHighlight();
+        qpTappedMesh = mesh;
+        highlightMesh(mesh);
+
+        // Track change on the painted group
+        const paintedGroup = detectedMaterials[idx];
+        paintedGroup.hasPartialChange = true;
+        if (qpLastTextureName) paintedGroup.matchedName = qpLastTextureName;
+
+        // Apply last selected texture
+        const texLoader = new THREE.TextureLoader();
+        texLoader.load(qpLastTextureUrl, (tex) => {
+            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            tex.minFilter  = THREE.LinearMipmapLinearFilter;
+            tex.magFilter  = THREE.LinearFilter;
+            tex.wrapS      = THREE.RepeatWrapping;
+            tex.wrapT      = THREE.RepeatWrapping;
+            mesh.material.map = tex;
+            mesh.material.color.set(0xffffff);
+            mesh.material.needsUpdate = true;
+        });
+    }
+
+    // Wire bridge so handleSingleTap (init scope) can open the picker
+    quickPicker.open  = openReplaceSheet;
+    quickPicker.close = closeQuickPicker;
 }
 
 // ================================================================
