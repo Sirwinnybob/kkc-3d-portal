@@ -5,57 +5,141 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KKC Showroom - Part Tagger</title>
     <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
-    <link rel="stylesheet" href="/css/tagger.css?v=100">
+    <link rel="stylesheet" href="/css/tagger.css?v=200">
 </head>
 <body>
     <div id="sidebar">
         <h2>Part Tagger</h2>
-        <p class="sidebar-hint">Tag meshes in a showroom GLB to identify which parts belong to each category.</p>
 
-        <div class="sidebar-section">
-            <label>Category:</label>
-            <select id="sel-category"></select>
+        <!-- Mode Tabs -->
+        <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="staging">Staging</button>
+            <button class="mode-tab" data-mode="category">Category</button>
+            <button class="mode-tab" data-mode="doors">Doors</button>
         </div>
-        <div class="sidebar-section">
-            <label>Style:</label>
-            <select id="sel-style"></select>
-        </div>
-        <div class="sidebar-section">
-            <label>File:</label>
-            <select id="sel-file">
-                <option value="">-- Select --</option>
-            </select>
-        </div>
-        <button id="btn-load" class="btn-primary">Load GLB</button>
 
-        <hr>
-
-        <div id="mesh-list-section" style="display:none">
-            <h3>Meshes <span id="mesh-count"></span></h3>
-            <div class="tag-actions">
-                <label>Tag selected as:</label>
-                <select id="tag-assign">
-                    <option value="tagged">Tagged (show in this category)</option>
-                    <option value="ignore">Ignore (hide)</option>
+        <!-- Staging Mode -->
+        <div id="staging-panel" class="mode-panel active">
+            <p class="sidebar-hint">Load a staged GLB, auto-parse by part type, review, then split &amp; deploy to category folders.</p>
+            <div class="sidebar-section">
+                <label>Staged Files:</label>
+                <select id="sel-staging-file">
+                    <option value="">-- Select --</option>
                 </select>
-                <button id="btn-tag-selected" class="btn-small">Apply to Selected</button>
             </div>
-            <div class="tag-legend">
-                <span class="legend-item"><span class="dot tagged"></span> Tagged</span>
-                <span class="legend-item"><span class="dot ignore"></span> Ignore</span>
-                <span class="legend-item"><span class="dot untagged"></span> Untagged</span>
-            </div>
-            <div id="mesh-list"></div>
+            <button id="btn-load-staging" class="btn-primary">Load Staged GLB</button>
 
-            <div class="sidebar-footer">
-                <button id="btn-select-all" class="btn-small">Select All</button>
-                <button id="btn-deselect-all" class="btn-small">Deselect All</button>
+            <div id="staging-actions" style="display:none">
+                <hr>
+                <div class="sidebar-section">
+                    <label>Target Style:</label>
+                    <select id="sel-staging-style">
+                        <option value="face_frame">Face Frame</option>
+                        <option value="full_inset">Full Inset</option>
+                        <option value="frameless">Frameless</option>
+                    </select>
+                </div>
+                <button id="btn-auto-parse" class="btn-primary btn-parse">Auto-Parse by Name</button>
+
+                <div id="parse-summary" style="display:none">
+                    <h3>Parse Summary</h3>
+                    <div id="parse-counts"></div>
+                </div>
+
+                <div class="tag-legend" id="staging-legend"></div>
+
+                <div class="sidebar-section">
+                    <label>Output Name:</label>
+                    <input type="text" id="staging-output-name" placeholder="e.g. shaker" class="text-input">
+                </div>
+
+                <button id="btn-split-deploy" class="btn-primary btn-save">Split &amp; Deploy</button>
+            </div>
+        </div>
+
+        <!-- Category Mode -->
+        <div id="category-panel" class="mode-panel">
+            <p class="sidebar-hint">Tag meshes for a specific showroom category (tagged/ignore).</p>
+            <div class="sidebar-section">
+                <label>Category:</label>
+                <select id="sel-category"></select>
+            </div>
+            <div class="sidebar-section">
+                <label>Style:</label>
+                <select id="sel-style"></select>
+            </div>
+            <div class="sidebar-section">
+                <label>File:</label>
+                <select id="sel-file">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <button id="btn-load" class="btn-primary">Load GLB</button>
+
+            <div id="category-actions" style="display:none">
+                <hr>
+                <div class="tag-legend">
+                    <span class="legend-item"><span class="dot tagged"></span> Tagged</span>
+                    <span class="legend-item"><span class="dot ignore"></span> Ignore</span>
+                    <span class="legend-item"><span class="dot untagged"></span> Untagged</span>
+                </div>
+                <div class="tag-stats" id="tag-stats"></div>
                 <button id="btn-save" class="btn-primary btn-save">Save Tags</button>
+            </div>
+        </div>
+
+        <!-- Doors Refinement Mode -->
+        <div id="doors-panel" class="mode-panel">
+            <p class="sidebar-hint">Sub-categorize door meshes into Doors, Drawer Fronts, Paneled Ends, or Island Backs.</p>
+            <div class="sidebar-section">
+                <label>Style:</label>
+                <select id="sel-doors-style">
+                    <option value="face_frame">Face Frame</option>
+                    <option value="full_inset">Full Inset</option>
+                    <option value="frameless">Frameless</option>
+                </select>
+            </div>
+            <div class="sidebar-section">
+                <label>Doors File:</label>
+                <select id="sel-doors-file">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <button id="btn-load-doors" class="btn-primary">Load Doors GLB</button>
+
+            <div id="doors-actions" style="display:none">
+                <hr>
+                <div class="tag-legend" id="doors-legend"></div>
+                <div class="tag-stats" id="doors-stats"></div>
+                <button id="btn-split-doors" class="btn-primary btn-save">Split &amp; Apply</button>
+            </div>
+        </div>
+
+        <!-- Shared Controls -->
+        <div id="shared-controls" style="display:none">
+            <hr>
+            <div class="shared-footer">
+                <label class="toggle-label">
+                    <input type="checkbox" id="chk-show-hidden">
+                    Show Hidden
+                </label>
+                <span id="mesh-count" class="mesh-count-badge"></span>
             </div>
         </div>
     </div>
 
     <div id="canvas-container"></div>
+
+    <!-- Click Popup -->
+    <div id="mesh-popup" style="display:none">
+        <div class="popup-header">
+            <span class="popup-name"></span>
+            <button class="popup-close">&times;</button>
+        </div>
+        <div class="popup-current-tag"></div>
+        <div class="popup-actions"></div>
+    </div>
+
     <div id="status"><span id="status-text">Select a file to begin</span></div>
 
     <script type="importmap">
@@ -66,6 +150,6 @@
         }
     }
     </script>
-    <script type="module" src="/js/tagger.js?v=100"></script>
+    <script type="module" src="/js/tagger.js?v=200"></script>
 </body>
 </html>

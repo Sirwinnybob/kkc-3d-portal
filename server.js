@@ -22,8 +22,28 @@ const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURE
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 const SHOWROOM_DIR = process.env.SHOWROOM_DIR ? path.resolve(process.env.SHOWROOM_DIR) : path.join(path.dirname(JOBS_DIR), 'Showroom');
-const SHOWROOM_CATEGORIES = ['base', 'doors', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island'];
+const SHOWROOM_CATEGORIES = ['base', 'doors', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor'];
 const SHOWROOM_STYLES = ['face_frame', 'full_inset', 'frameless'];
+const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
+
+// Auto-parse rules for Cabinet Vision mesh naming conventions
+// Order matters: more specific patterns must come first
+const AUTO_PARSE_RULES = [
+    { pattern: /Door_Door/, category: 'doors' },
+    { pattern: /Base_Cabinet_Assembly/, category: 'base' },
+    { pattern: /Upper_Cabinet_Assembly/, category: 'base' },
+    { pattern: /Tall_Cabinet_Assembly/, category: 'base' },
+    { pattern: /Splash_CounterTop/, category: 'counter_top' },
+    { pattern: /CounterTop_CounterTop/, category: 'counter_top' },
+    { pattern: /Wall_Wall/, category: 'wall' },
+    { pattern: /Molding_Molding_DrawerBox/, category: 'drawers' },
+    { pattern: /Molding_Molding/, category: 'crown' },
+    { pattern: /DrawerBox/, category: 'drawers' },
+    { pattern: /Cabinet_Widget/, category: 'case_parts' },
+    { pattern: /Decorative_Window/, category: 'ignore' },
+    { pattern: /^LN_Light/, category: 'ignore' },
+    { pattern: /^PA_|^CVSc/, category: 'ignore' },
+];
 
 if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
 if (!fs.existsSync(TEXTURES_DIR)) fs.mkdirSync(TEXTURES_DIR, { recursive: true });
@@ -1063,6 +1083,7 @@ function ensureShowroomDirs() {
     }
     const configsDir = path.join(SHOWROOM_DIR, 'configs');
     if (!fs.existsSync(configsDir)) fs.mkdirSync(configsDir, { recursive: true });
+    if (!fs.existsSync(STAGING_DIR)) fs.mkdirSync(STAGING_DIR, { recursive: true });
 }
 ensureShowroomDirs();
 
@@ -1259,6 +1280,401 @@ app.get('/api/showroom/meshes/:category/:style/:file', async (req, res) => {
     }
 });
 
+// --- STAGING APIs ---
+
+// Helper: auto-categorize mesh names using Cabinet Vision naming patterns
+function autoCategorizeMeshes(gltf) {
+    const categories = {};
+    if (!gltf.nodes) return categories;
+
+    for (let i = 0; i < gltf.nodes.length; i++) {
+        const node = gltf.nodes[i];
+        if (node.mesh === undefined) continue; // skip non-mesh nodes
+        const name = node.name || `Node_${i}`;
+        let matched = false;
+        for (const rule of AUTO_PARSE_RULES) {
+            if (rule.pattern.test(name)) {
+                categories[name] = rule.category;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) categories[name] = 'ignore';
+    }
+    return categories;
+}
+
+// Helper: extract GLB nodes and build category-specific glTF documents
+async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseName) {
+    const glbBuffer = await fs.promises.readFile(glbPath);
+    const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: path.dirname(glbPath) });
+    const gltf = result.gltf;
+
+    // Group node indices by category
+    const categoryNodes = {};
+    for (let i = 0; i < gltf.nodes.length; i++) {
+        const node = gltf.nodes[i];
+        if (node.mesh === undefined) continue;
+        const name = node.name || `Node_${i}`;
+        const cat = meshCategories[name];
+        if (!cat || cat === 'ignore') continue;
+        if (!categoryNodes[cat]) categoryNodes[cat] = [];
+        categoryNodes[cat].push(i);
+    }
+
+    const results = {};
+
+    for (const [cat, nodeIndices] of Object.entries(categoryNodes)) {
+        // Deep clone the gltf
+        const newGltf = JSON.parse(JSON.stringify(gltf));
+
+        // Collect used resources
+        const usedMeshes = new Set();
+        const usedMaterials = new Set();
+        const keepNodes = new Set(nodeIndices);
+
+        for (const idx of nodeIndices) {
+            const node = newGltf.nodes[idx];
+            if (node.mesh !== undefined) usedMeshes.add(node.mesh);
+        }
+
+        // Find materials from used meshes
+        for (const meshIdx of usedMeshes) {
+            const mesh = newGltf.meshes[meshIdx];
+            if (!mesh || !mesh.primitives) continue;
+            for (const prim of mesh.primitives) {
+                if (prim.material !== undefined) usedMaterials.add(prim.material);
+            }
+        }
+
+        // Build remapping for meshes and materials
+        const meshRemap = {};
+        let newMeshIdx = 0;
+        for (const idx of [...usedMeshes].sort((a, b) => a - b)) {
+            meshRemap[idx] = newMeshIdx++;
+        }
+
+        const matRemap = {};
+        let newMatIdx = 0;
+        for (const idx of [...usedMaterials].sort((a, b) => a - b)) {
+            matRemap[idx] = newMatIdx++;
+        }
+
+        // Build new nodes (only kept ones, flattened as root children)
+        const newNodes = [];
+        const nodeRemap = {};
+        for (const idx of nodeIndices) {
+            nodeRemap[idx] = newNodes.length;
+            const node = { ...newGltf.nodes[idx] };
+            if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
+            node.children = undefined; // flatten hierarchy
+            newNodes.push(node);
+        }
+
+        // Build new meshes with remapped material indices
+        const newMeshes = [];
+        for (const oldIdx of [...usedMeshes].sort((a, b) => a - b)) {
+            const mesh = JSON.parse(JSON.stringify(newGltf.meshes[oldIdx]));
+            for (const prim of mesh.primitives || []) {
+                if (prim.material !== undefined) prim.material = matRemap[prim.material];
+            }
+            newMeshes.push(mesh);
+        }
+
+        // Build new materials
+        const newMaterials = [];
+        for (const oldIdx of [...usedMaterials].sort((a, b) => a - b)) {
+            newMaterials.push(newGltf.materials[oldIdx]);
+        }
+
+        // Update the glTF document
+        newGltf.nodes = newNodes;
+        newGltf.meshes = newMeshes;
+        newGltf.materials = newMaterials;
+        newGltf.scenes = [{ name: `${cat}_scene`, nodes: newNodes.map((_, i) => i) }];
+        newGltf.scene = 0;
+
+        // Convert back to GLB
+        try {
+            const glbResult = await gltfPipeline.gltfToGlb(newGltf);
+            const outputDir = path.join(SHOWROOM_DIR, cat, style);
+            if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+            const outputFile = path.join(outputDir, `${outputBaseName}.glb`);
+            await fs.promises.writeFile(outputFile, glbResult.glb);
+
+            // Also save the full GLB as .full.glb for re-tagging
+            const fullFile = path.join(outputDir, `${outputBaseName}.full.glb`);
+            await fs.promises.copyFile(glbPath, fullFile);
+
+            results[cat] = { file: `${outputBaseName}.glb`, meshCount: nodeIndices.length };
+            console.log(`[Staging] Split ${cat}: ${nodeIndices.length} meshes -> ${outputFile}`);
+        } catch (e) {
+            console.error(`[Staging] Failed to split ${cat}: ${e.message}`);
+            results[cat] = { error: e.message };
+        }
+    }
+
+    return results;
+}
+
+// GET /api/showroom/staging - List staged GLB files
+app.get('/api/showroom/staging', async (req, res) => {
+    try {
+        const files = await fs.promises.readdir(STAGING_DIR);
+        const glbs = files
+            .filter(f => f.toLowerCase().endsWith('.glb'))
+            .map(f => {
+                const baseName = path.basename(f, '.glb');
+                const tagsFile = path.join(STAGING_DIR, `${baseName}.tags.json`);
+                return { file: f, name: baseName.replace(/_/g, ' '), tagged: fs.existsSync(tagsFile) };
+            });
+        res.json({ success: true, files: glbs });
+    } catch (e) {
+        res.status(500).json({ success: false, error: 'Failed to list staging files' });
+    }
+});
+
+// Serve staging GLB files
+app.use('/showroom/staging', express.static(STAGING_DIR, {
+    etag: true, lastModified: true, maxAge: 0, cacheControl: true
+}));
+
+// GET /api/showroom/staging/meshes/:file - Extract mesh names from a staged GLB
+app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
+    const safeFile = path.basename(req.params.file);
+    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
+
+    const filePath = path.join(STAGING_DIR, safeFile);
+    const rel = path.relative(STAGING_DIR, filePath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    try {
+        const glbBuffer = await fs.promises.readFile(filePath);
+        const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: STAGING_DIR });
+        const gltf = result.gltf;
+
+        const meshNames = [];
+        if (gltf.nodes) {
+            for (let i = 0; i < gltf.nodes.length; i++) {
+                const node = gltf.nodes[i];
+                if (node.mesh !== undefined && gltf.meshes && gltf.meshes[node.mesh]) {
+                    meshNames.push(node.name || gltf.meshes[node.mesh].name || `Mesh_${i}`);
+                }
+            }
+        }
+
+        res.json({ success: true, meshes: meshNames });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'File not found' });
+        console.error(`[Staging] Mesh list error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to read mesh names' });
+    }
+});
+
+// POST /api/showroom/staging/parse/:file - Auto-parse a staged GLB by mesh names
+app.post('/api/showroom/staging/parse/:file', async (req, res) => {
+    const safeFile = path.basename(req.params.file);
+    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
+
+    const filePath = path.join(STAGING_DIR, safeFile);
+    const rel = path.relative(STAGING_DIR, filePath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    try {
+        const glbBuffer = await fs.promises.readFile(filePath);
+        const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: STAGING_DIR });
+        const categories = autoCategorizeMeshes(result.gltf);
+
+        // Build summary
+        const summary = {};
+        for (const [name, cat] of Object.entries(categories)) {
+            if (!summary[cat]) summary[cat] = 0;
+            summary[cat]++;
+        }
+
+        res.json({ success: true, meshCategories: categories, summary });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'File not found' });
+        console.error(`[Staging] Parse error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to parse GLB' });
+    }
+});
+
+// POST /api/showroom/staging/tags/:file - Save staging tags
+app.post('/api/showroom/staging/tags/:file', express.json({ limit: '10mb' }), async (req, res) => {
+    const safeFile = path.basename(req.params.file, '.glb');
+    if (!/^[a-zA-Z0-9\-_ ]+$/.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file name' });
+
+    const tagsPath = path.join(STAGING_DIR, `${safeFile}.tags.json`);
+    try {
+        const tags = req.body;
+        if (!tags || typeof tags !== 'object') return res.status(400).json({ success: false, error: 'Invalid tags data' });
+        await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: 'Failed to save tags' });
+    }
+});
+
+// GET /api/showroom/staging/tags/:file - Get staging tags
+app.get('/api/showroom/staging/tags/:file', async (req, res) => {
+    const safeFile = path.basename(req.params.file, '.glb').replace(/\.tags$/, '');
+    const tagsPath = path.join(STAGING_DIR, `${safeFile}.tags.json`);
+    try {
+        const data = await fs.promises.readFile(tagsPath, 'utf8');
+        res.json({ success: true, tags: JSON.parse(data) });
+    } catch (e) {
+        if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Tags not found' });
+        res.status(500).json({ success: false, error: 'Failed to read tags' });
+    }
+});
+
+// POST /api/showroom/staging/split/:file - Split staged GLB into category folders
+app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), async (req, res) => {
+    const safeFile = path.basename(req.params.file);
+    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
+
+    const filePath = path.join(STAGING_DIR, safeFile);
+    const rel = path.relative(STAGING_DIR, filePath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    const { style, meshCategories, outputName } = req.body;
+    if (!style || !SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+    if (!meshCategories || typeof meshCategories !== 'object') return res.status(400).json({ success: false, error: 'Missing mesh categories' });
+
+    const baseName = outputName || path.basename(safeFile, '.glb');
+    if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid output name' });
+
+    try {
+        const results = await splitGlbByCategories(filePath, meshCategories, style, baseName);
+        res.json({ success: true, results });
+    } catch (e) {
+        console.error(`[Staging] Split error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to split GLB' });
+    }
+});
+
+// POST /api/showroom/doors/split - Further split a doors GLB into doors/drawer_fronts/paneled_ends
+app.post('/api/showroom/doors/split', express.json({ limit: '10mb' }), async (req, res) => {
+    const { style, file, meshCategories } = req.body;
+    if (!style || !SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+    if (!file || !/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(file)) return res.status(400).json({ success: false, error: 'Invalid file' });
+    if (!meshCategories || typeof meshCategories !== 'object') return res.status(400).json({ success: false, error: 'Missing mesh categories' });
+
+    const filePath = path.join(SHOWROOM_DIR, 'doors', style, file);
+    const rel = path.relative(SHOWROOM_DIR, filePath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'File not found' });
+
+    const baseName = path.basename(file, '.glb');
+
+    // Map sub-categories to their output folders
+    // doors -> stays in doors/, drawers -> drawers/, paneled_ends -> finished_ends/ (with metadata)
+    const subCatFolderMap = {
+        doors: 'doors',
+        drawer_fronts: 'drawers',
+        paneled_ends: 'finished_ends',
+        island_backs: 'island'
+    };
+
+    try {
+        const results = {};
+        const glbBuffer = await fs.promises.readFile(filePath);
+        const parseResult = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: path.dirname(filePath) });
+        const gltf = parseResult.gltf;
+
+        // Group nodes by sub-category
+        const subCatNodes = {};
+        for (let i = 0; i < gltf.nodes.length; i++) {
+            const node = gltf.nodes[i];
+            if (node.mesh === undefined) continue;
+            const name = node.name || `Node_${i}`;
+            const subCat = meshCategories[name];
+            if (!subCat || subCat === 'ignore') continue;
+            if (!subCatNodes[subCat]) subCatNodes[subCat] = [];
+            subCatNodes[subCat].push(i);
+        }
+
+        for (const [subCat, nodeIndices] of Object.entries(subCatNodes)) {
+            const targetFolder = subCatFolderMap[subCat] || subCat;
+
+            // Clone and filter gltf for this sub-category
+            const newGltf = JSON.parse(JSON.stringify(gltf));
+            const usedMeshes = new Set();
+            const usedMaterials = new Set();
+
+            for (const idx of nodeIndices) {
+                const node = newGltf.nodes[idx];
+                if (node.mesh !== undefined) usedMeshes.add(node.mesh);
+            }
+            for (const meshIdx of usedMeshes) {
+                const mesh = newGltf.meshes[meshIdx];
+                if (!mesh || !mesh.primitives) continue;
+                for (const prim of mesh.primitives) {
+                    if (prim.material !== undefined) usedMaterials.add(prim.material);
+                }
+            }
+
+            const meshRemap = {};
+            let mi = 0;
+            for (const idx of [...usedMeshes].sort((a, b) => a - b)) meshRemap[idx] = mi++;
+
+            const matRemap = {};
+            let mti = 0;
+            for (const idx of [...usedMaterials].sort((a, b) => a - b)) matRemap[idx] = mti++;
+
+            const newNodes = [];
+            for (const idx of nodeIndices) {
+                const node = { ...newGltf.nodes[idx] };
+                if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
+                node.children = undefined;
+                newNodes.push(node);
+            }
+
+            const newMeshes = [];
+            for (const oldIdx of [...usedMeshes].sort((a, b) => a - b)) {
+                const mesh = JSON.parse(JSON.stringify(newGltf.meshes[oldIdx]));
+                for (const prim of mesh.primitives || []) {
+                    if (prim.material !== undefined) prim.material = matRemap[prim.material];
+                }
+                newMeshes.push(mesh);
+            }
+
+            const newMaterials = [];
+            for (const oldIdx of [...usedMaterials].sort((a, b) => a - b)) {
+                newMaterials.push(newGltf.materials[oldIdx]);
+            }
+
+            newGltf.nodes = newNodes;
+            newGltf.meshes = newMeshes;
+            newGltf.materials = newMaterials;
+            newGltf.scenes = [{ name: `${subCat}_scene`, nodes: newNodes.map((_, i) => i) }];
+            newGltf.scene = 0;
+
+            try {
+                const glbResult = await gltfPipeline.gltfToGlb(newGltf);
+                const outputDir = path.join(SHOWROOM_DIR, targetFolder, style);
+                if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+                const outputFile = path.join(outputDir, `${baseName}_${subCat}.glb`);
+                await fs.promises.writeFile(outputFile, glbResult.glb);
+                results[subCat] = { file: `${baseName}_${subCat}.glb`, folder: targetFolder, meshCount: nodeIndices.length };
+                console.log(`[Doors Split] ${subCat}: ${nodeIndices.length} meshes -> ${outputFile}`);
+            } catch (e) {
+                console.error(`[Doors Split] Failed ${subCat}: ${e.message}`);
+                results[subCat] = { error: e.message };
+            }
+        }
+
+        res.json({ success: true, results });
+    } catch (e) {
+        console.error(`[Doors Split] Error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Failed to split doors GLB' });
+    }
+});
+
 // --- ERROR HANDLING ---
 app.use((err, req, res, next) => {
     console.error(`[ERROR] ${err.message}`);
@@ -1301,6 +1717,50 @@ if (require.main === module) {
                      .forEach(f => convertDesign(path.join(dir, f)));
             }
         });
+    });
+
+    // Watch staging folder for DAE files to auto-convert
+    chokidar.watch(STAGING_DIR, {
+        ignoreInitial: true,
+        ignored: [/(\\|\/)\./, '**/*.glb', '**/*.json'],
+        awaitWriteFinish: { stabilityThreshold: 3000, pollInterval: 100 }
+    }).on('add', (fp) => {
+        if (fp.toLowerCase().endsWith('.dae')) {
+            console.log(`[Staging] New DAE detected: ${path.basename(fp)}`);
+            const dir = path.dirname(fp);
+            const inputFilename = path.basename(fp);
+            const baseName = path.basename(fp, path.extname(fp));
+            const outputGlb = `${baseName.replace(/ /g, '_')}.glb`;
+            const finalGlb = path.join(dir, `${baseName}.glb`);
+
+            // Skip if GLB already exists and is newer
+            if (fs.existsSync(finalGlb)) {
+                const daeStat = fs.statSync(fp);
+                const glbStat = fs.statSync(finalGlb);
+                if (glbStat.mtimeMs > daeStat.mtimeMs) {
+                    console.log(`[Staging] GLB already up-to-date for ${baseName}`);
+                    return;
+                }
+            }
+
+            // Reuse the clean + convert pipeline
+            cleanDae(fp).then(() => {
+                const pathPrefix = process.platform === 'win32' ? '.\\' : './';
+                const safeInputPath = `${pathPrefix}${inputFilename}`;
+                const safeOutputPath = `${pathPrefix}${outputGlb}`;
+                execFile(ASSIMP_PATH, ['export', safeInputPath, safeOutputPath, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, async (err, stdout, stderr) => {
+                    if (err) {
+                        console.error(`[Staging] Conversion failed for ${baseName}: ${stderr || err.message}`);
+                    } else {
+                        const genGlb = path.join(dir, outputGlb);
+                        if (outputGlb !== `${baseName}.glb`) {
+                            try { await fs.promises.rename(genGlb, finalGlb); } catch (e) { /* ignore */ }
+                        }
+                        console.log(`[Staging] Converted: ${baseName}.glb`);
+                    }
+                });
+            });
+        }
     });
 
     // Watch textures folder for live changes
