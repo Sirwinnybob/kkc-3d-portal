@@ -1405,7 +1405,7 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
 
             // Also save the full GLB as .full.glb for re-tagging
             const fullFile = path.join(outputDir, `${outputBaseName}.full.glb`);
-            await fs.promises.copyFile(glbPath, fullFile);
+            await fs.promises.writeFile(fullFile, await fs.promises.readFile(glbPath));
 
             results[cat] = { file: `${outputBaseName}.glb`, meshCount: nodeIndices.length };
             console.log(`[Staging] Split ${cat}: ${nodeIndices.length} meshes -> ${outputFile}`);
