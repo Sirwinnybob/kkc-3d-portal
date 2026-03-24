@@ -479,6 +479,20 @@ async function splitDoors() {
     }
 }
 
+// --- CAMERA FRAMING ---
+function frameCameraToModel(model) {
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    const distance = Math.abs(maxDim / Math.sin(fov / 2)) * 0.8;
+    camera.position.set(center.x, center.y + size.y * 0.3, center.z + distance);
+    camera.lookAt(center);
+    controls.target.copy(center);
+    controls.update();
+}
+
 // --- SHARED: GLB Loading ---
 function clearScene() {
     if (loadedModel) { scene.remove(loadedModel); loadedModel = null; }
