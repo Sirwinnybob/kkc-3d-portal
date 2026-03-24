@@ -13,7 +13,7 @@ const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.2";
+const APP_VERSION = "2.1.3";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
