@@ -770,12 +770,31 @@ async function init() {
             const materialList = document.getElementById('material-list');
             const textureGrid = document.getElementById('texture-grid');
             const textureSearch = document.getElementById('texture-search');
+            const clearTextureSearch = document.getElementById('clear-texture-search');
+            const textureSearchEmpty = document.getElementById('texture-search-empty');
             const catalogTitle = document.getElementById('catalog-title');
             const backToMaterialsBtn = document.getElementById('back-to-materials');
 
             let textureCategories = [];
             let currentCategoryTextures = [];
             let isMatchingAll = false;
+
+            // Reset search input and related UI
+            function clearSearch() {
+                if (textureSearch) textureSearch.value = '';
+                if (clearTextureSearch) clearTextureSearch.classList.add('hidden');
+                if (textureSearchEmpty) textureSearchEmpty.classList.add('hidden');
+
+                const thumbs = textureGrid ? textureGrid.querySelectorAll('.texture-thumb') : [];
+                thumbs.forEach(th => th.style.display = '');
+            }
+
+            if (clearTextureSearch) {
+                clearTextureSearch.onclick = () => {
+                    clearSearch();
+                    if (textureSearch) textureSearch.focus();
+                };
+            }
 
             // Insert a "Browse All Categories" button at the top of the texture grid
             function insertBrowseButton() {
@@ -943,6 +962,7 @@ async function init() {
 
             // Select a material and show catalog
             async function selectMaterial(index) {
+                clearSearch();
                 selectedMaterialIndex = index;
                 const mat = detectedMaterials[index];
                 document.getElementById('materials-view').style.display = 'none';
@@ -1035,6 +1055,7 @@ async function init() {
 
             // Show all categories as clickable items
             async function showAllCategories() {
+                clearSearch();
                 try {
                     const resp = await fetch('/api/textures');
                     const data = await resp.json();
@@ -1140,6 +1161,7 @@ async function init() {
 
             // Load textures for a category
             async function loadCategoryTextures(category) {
+                clearSearch();
                 try {
                     const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
                     const data = await resp.json();
@@ -1202,11 +1224,20 @@ async function init() {
             if (textureSearch) {
                 textureSearch.oninput = () => {
                     const q = textureSearch.value.toLowerCase();
+                    if (clearTextureSearch) clearTextureSearch.classList.toggle('hidden', q.length === 0);
+
                     const thumbs = textureGrid.querySelectorAll('.texture-thumb');
+                    let visibleCount = 0;
                     thumbs.forEach(th => {
                         const name = th.querySelector('span')?.innerText?.toLowerCase() || '';
-                        th.style.display = name.includes(q) ? '' : 'none';
+                        const isMatch = name.includes(q);
+                        th.style.display = isMatch ? '' : 'none';
+                        if (isMatch) visibleCount++;
                     });
+
+                    if (textureSearchEmpty) {
+                        textureSearchEmpty.classList.toggle('hidden', visibleCount > 0 || q.length === 0);
+                    }
                 };
             }
 

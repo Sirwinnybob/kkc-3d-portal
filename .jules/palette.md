@@ -9,3 +9,7 @@
 ## 2025-05-22 - Global Escape Key for Modal/Overlay Management
 **Learning:** In complex 3D viewers with multiple overlapping UI layers (tour, help, picker, panels), a global `Escape` key listener is critical for both accessibility and UX intuition. By implementing a prioritized closure logic (closing the topmost layer first) and ensuring active inputs are blurred before closing overlays, we prevent conflicting key behaviors and provide a smooth exit path for users.
 **Action:** Always implement a centralized `Escape` key listener that checks for active overlays in a prioritized order. Ensure any open text inputs are blurred first if they are currently focused to prevent unexpected overlay closure while typing or clearing fields.
+
+## 2025-06-12 - Sticky Search Filters in Categorized Catalogs
+**Learning:** In a multi-category catalog (like the texture library), persistent search filters can lead to a confusing UX where a user navigates to a new category only to see an empty state because their previous search term doesn't match anything in the new context.
+**Action:** Always implement a `clearSearch()` routine that is triggered when navigating between categories or selecting different items (like materials) to ensure the user starts with a clean, unfiltered view in the new context.
