@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 function escapeHtml(unsafe) {
     if (!unsafe || typeof unsafe !== 'string') return unsafe;
@@ -12,7 +17,7 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-let scene, camera, renderer, controls;
+let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
 let loadedModel = null;
 let meshEntries = []; // { name, mesh, tag: 'tagged'|'ignore'|null, selected: false }
 let categoriesData = {};
@@ -23,6 +28,64 @@ const selectedEntries = new Set(); // O(1) tracking of selected meshes
 
 const statusText = document.getElementById('status-text');
 const updateStatus = (msg) => { if (statusText) statusText.innerText = msg; };
+
+const SETTINGS = {
+    exposure:      1.15,
+    saturation:    0.65,
+    contrast:      1.50,
+    lightIntensity: 1.0,
+    gloss:         0.10,
+    colorTemp:     0.5
+};
+
+const KKCShader = {
+    uniforms: {
+        "tDiffuse":    { value: null },
+        "uExposure":   { value: SETTINGS.exposure },
+        "uSaturation": { value: SETTINGS.saturation },
+        "uContrast":   { value: SETTINGS.contrast },
+        "uColorTemp":  { value: SETTINGS.colorTemp }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uExposure;
+        uniform float uSaturation;
+        uniform float uContrast;
+        uniform float uColorTemp;
+        varying vec2 vUv;
+
+        void main() {
+            vec4 tex = texture2D(tDiffuse, vUv);
+            vec3 color = tex.rgb * uExposure;
+            float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+            color = mix(vec3(luma), color, uSaturation);
+
+            // Shadow lift: prevents dark textures from crushing to black at steep angles
+            color = color * 0.92 + 0.08;
+            // Smooth Contrast Curve
+            color = smoothstep(0.5 - (0.5 / uContrast), 0.5 + (0.5 / uContrast), color);
+
+            vec3 warm    = vec3(1.0, 0.9, 0.8);
+            vec3 neutral = vec3(1.0, 1.0, 1.0);
+            vec3 cool    = vec3(0.8, 0.9, 1.0);
+            vec3 tempTint;
+            if (uColorTemp < 0.5) {
+                tempTint = mix(warm, neutral, uColorTemp * 2.0);
+            } else {
+                tempTint = mix(neutral, cool, (uColorTemp - 0.5) * 2.0);
+            }
+            color *= tempTint;
+            gl_FragColor = vec4(color, tex.a);
+        }
+    `
+};
 
 // Category colors for staging mode
 const CATEGORY_COLORS = {
@@ -88,7 +151,8 @@ async function init() {
     scene.background = new THREE.Color(0x111111);
     camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 5000);
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    renderer.setPixelRatio(dpr);
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setClearColor(0x111111);
     container.appendChild(renderer.domElement);
@@ -98,8 +162,20 @@ async function init() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.25;
 
+    // --- POST-PROCESSING ---
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    kkcShader = new ShaderPass(KKCShader);
+    composer.addPass(kkcShader);
+    fxaaPass = new ShaderPass(FXAAShader);
+    fxaaPass.material.uniforms['resolution'].value.x = 1 / (container.clientWidth * dpr);
+    fxaaPass.material.uniforms['resolution'].value.y = 1 / (container.clientHeight * dpr);
+    composer.addPass(fxaaPass);
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
+
     // Lighting (Matching viewer.js)
-    const li = 1.0;
+    const li = SETTINGS.lightIntensity;
     scene.add(new THREE.AmbientLight(0xffffff, li * 1.2));
     const makeCamLight = (intensity, px, py, pz) => {
         const light  = new THREE.DirectionalLight(0xffffff, intensity);
@@ -175,9 +251,15 @@ async function init() {
 
     window.addEventListener('resize', () => {
         const container = document.getElementById('canvas-container');
+        const dpr = renderer.getPixelRatio();
         camera.aspect = container.clientWidth / container.clientHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(container.clientWidth, container.clientHeight);
+        composer.setSize(container.clientWidth, container.clientHeight);
+        if (fxaaPass) {
+            fxaaPass.material.uniforms['resolution'].value.x = 1 / (container.clientWidth * dpr);
+            fxaaPass.material.uniforms['resolution'].value.y = 1 / (container.clientHeight * dpr);
+        }
     });
 
     animate();
@@ -892,7 +974,7 @@ function closePopup() {
 function animate() {
     requestAnimationFrame(animate);
     if (controls) controls.update();
-    if (renderer && scene && camera) renderer.render(scene, camera);
+    if (composer) composer.render();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
