@@ -23,7 +23,7 @@ const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURE
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 const SHOWROOM_DIR = process.env.SHOWROOM_DIR ? path.resolve(process.env.SHOWROOM_DIR) : path.join(path.dirname(JOBS_DIR), 'Showroom');
-const SHOWROOM_CATEGORIES = ['base', 'doors', 'drawer_fronts', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor'];
+const SHOWROOM_CATEGORIES = ['base', 'doors', 'drawer_fronts', 'crown', 'drawers', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
 const SHOWROOM_STYLES = ['face_frame', 'full_inset', 'frameless'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
 
@@ -1065,10 +1065,15 @@ async function convertDesign(filePath, skipTimer = false) {
 // Ensure Showroom directory structure exists
 function ensureShowroomDirs() {
     if (!fs.existsSync(SHOWROOM_DIR)) fs.mkdirSync(SHOWROOM_DIR, { recursive: true });
-    for (const cat of SHOWROOM_CATEGORIES) {
+
+    // Kitchen / Island context
+    const contexts = ['kitchen', 'island'];
+    for (const ctx of contexts) {
         for (const style of SHOWROOM_STYLES) {
-            const dir = path.join(SHOWROOM_DIR, cat, style);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            for (const cat of SHOWROOM_CATEGORIES) {
+                const dir = path.join(SHOWROOM_DIR, ctx, style, cat);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            }
         }
     }
     const configsDir = path.join(SHOWROOM_DIR, 'configs');
@@ -1085,28 +1090,53 @@ app.use('/showroom', express.static(SHOWROOM_DIR, {
     cacheControl: true
 }));
 
-// GET /api/showroom/categories - List categories with available styles and parts
+// Recursive function to scan showroom directory
+async function scanShowroomDir(dirPath) {
+    let result = {};
+    let files = [];
+
+    try {
+        const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                const subDirPath = path.join(dirPath, entry.name);
+                const subResult = await scanShowroomDir(subDirPath);
+                // If the subdirectory contains files or further nested objects, add it
+                if (Object.keys(subResult).length > 0 || Array.isArray(subResult) && subResult.length > 0) {
+                     result[entry.name] = subResult;
+                }
+            } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.glb') && !entry.name.toLowerCase().endsWith('.full.glb')) {
+                const baseName = path.basename(entry.name, '.glb');
+                const tagsFile = path.join(dirPath, `${baseName}.tags.json`);
+                const hasTag = fs.existsSync(tagsFile);
+                files.push({ file: entry.name, name: baseName.replace(/_/g, ' '), tagged: hasTag });
+            }
+        }
+    } catch (e) {
+        return {};
+    }
+
+    if (files.length > 0) {
+        if (Object.keys(result).length > 0) {
+            result['_files'] = files;
+            return result;
+        }
+        return files;
+    }
+    return result;
+}
+
+// GET /api/showroom/categories - List categories with available styles, subcategories and parts
 app.get('/api/showroom/categories', async (req, res) => {
     try {
+        const contexts = ['kitchen', 'island'];
         const result = {};
-        for (const cat of SHOWROOM_CATEGORIES) {
-            result[cat] = {};
-            for (const style of SHOWROOM_STYLES) {
-                const dir = path.join(SHOWROOM_DIR, cat, style);
-                try {
-                    const files = await fs.promises.readdir(dir);
-                    const glbs = files
-                        .filter(f => f.toLowerCase().endsWith('.glb') && !f.toLowerCase().endsWith('.full.glb'))
-                        .map(f => {
-                            const baseName = path.basename(f, '.glb');
-                            const tagsFile = path.join(dir, `${baseName}.tags.json`);
-                            const hasTag = fs.existsSync(tagsFile);
-                            return { file: f, name: baseName.replace(/_/g, ' '), tagged: hasTag };
-                        });
-                    result[cat][style] = glbs;
-                } catch {
-                    result[cat][style] = [];
-                }
+        for(const ctx of contexts) {
+            const ctxDir = path.join(SHOWROOM_DIR, ctx);
+            if(fs.existsSync(ctxDir)) {
+               result[ctx] = await scanShowroomDir(ctxDir);
+            } else {
+               result[ctx] = {};
             }
         }
         res.json({ success: true, categories: result });
@@ -1227,17 +1257,14 @@ app.get('/api/showroom/config/:pin', async (req, res) => {
     }
 });
 
-// GET /api/showroom/meshes/:category/:style/:file - List mesh names in a GLB (for tagger)
-app.get('/api/showroom/meshes/:category/:style/:file', async (req, res) => {
-    const { category, style, file } = req.params;
-
-    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
-    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-
-    const safeFile = path.basename(file);
-    const filePath = path.join(SHOWROOM_DIR, category, style, safeFile);
+// GET /^\/api\/showroom\/meshes\/(.*)$/ - List mesh names in a GLB (for tagger)
+app.get(/^\/api\/showroom\/meshes\/(.*)$/, async (req, res) => {
+    const subpath = req.params[0];
+    const filePath = path.join(SHOWROOM_DIR, subpath);
     const rel = path.relative(SHOWROOM_DIR, filePath);
+
     if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+    if (!subpath.toLowerCase().endsWith('.glb')) return res.status(400).json({ success: false, error: 'Invalid file' });
 
     try {
         const glbBuffer = await fs.promises.readFile(filePath);
@@ -1578,148 +1605,6 @@ app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), a
     } catch (e) {
         console.error(`[Staging] Split error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Failed to split GLB' });
-    }
-});
-
-// POST /api/showroom/doors/split - Further split a doors GLB into doors/drawer_fronts/paneled_ends
-app.post('/api/showroom/doors/split', express.json({ limit: '10mb' }), async (req, res) => {
-    const { style, file, meshCategories } = req.body;
-    if (!style || !SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-    if (!file || !/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(file)) return res.status(400).json({ success: false, error: 'Invalid file' });
-    if (!meshCategories || typeof meshCategories !== 'object') return res.status(400).json({ success: false, error: 'Missing mesh categories' });
-
-    const filePath = path.join(SHOWROOM_DIR, 'doors', style, file);
-    const rel = path.relative(SHOWROOM_DIR, filePath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
-
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'File not found' });
-
-    const baseName = path.basename(file, '.glb');
-
-    // Map sub-categories to their output folders
-    // doors -> stays in doors/, drawers -> drawers/, paneled_ends -> finished_ends/ (with metadata)
-    const subCatFolderMap = {
-        doors: 'doors',
-        drawer_fronts: 'drawers',
-        paneled_ends: 'finished_ends',
-        island_backs: 'island'
-    };
-
-    try {
-        const results = {};
-        const glbBuffer = await fs.promises.readFile(filePath);
-        const parseResult = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: path.dirname(filePath) });
-        const gltf = parseResult.gltf;
-
-        // Group nodes by sub-category
-        const subCatNodes = {};
-        for (let i = 0; i < gltf.nodes.length; i++) {
-            const node = gltf.nodes[i];
-            if (node.mesh === undefined) continue;
-            const name = node.name || `Node_${i}`;
-            const subCat = meshCategories[name];
-            if (!subCat || subCat === 'ignore') continue;
-            if (!subCatNodes[subCat]) subCatNodes[subCat] = [];
-            subCatNodes[subCat].push(i);
-        }
-
-        for (const [subCat, nodeIndices] of Object.entries(subCatNodes)) {
-            const targetFolder = subCatFolderMap[subCat] || subCat;
-
-            // Clone and filter gltf for this sub-category
-            const newGltf = JSON.parse(JSON.stringify(gltf));
-            const usedMeshes = new Set();
-            const usedMaterials = new Set();
-
-            for (const idx of nodeIndices) {
-                const node = newGltf.nodes[idx];
-                if (node.mesh !== undefined) usedMeshes.add(node.mesh);
-            }
-            for (const meshIdx of usedMeshes) {
-                const mesh = newGltf.meshes[meshIdx];
-                if (!mesh || !mesh.primitives) continue;
-                for (const prim of mesh.primitives) {
-                    if (prim.material !== undefined) usedMaterials.add(prim.material);
-                }
-            }
-
-            const meshRemap = {};
-            let mi = 0;
-            for (const idx of [...usedMeshes].sort((a, b) => a - b)) meshRemap[idx] = mi++;
-
-            const matRemap = {};
-            let mti = 0;
-            for (const idx of [...usedMaterials].sort((a, b) => a - b)) matRemap[idx] = mti++;
-
-            const newNodes = [];
-            for (const idx of nodeIndices) {
-                const node = { ...newGltf.nodes[idx] };
-                if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
-                // Standardize node name
-                if (!node.name) node.name = `Node_${idx}`;
-                node.children = undefined;
-                newNodes.push(node);
-            }
-
-            const newMeshes = [];
-            for (const oldIdx of [...usedMeshes].sort((a, b) => a - b)) {
-                const mesh = JSON.parse(JSON.stringify(newGltf.meshes[oldIdx]));
-                for (const prim of mesh.primitives || []) {
-                    if (prim.material !== undefined) prim.material = matRemap[prim.material];
-                }
-                newMeshes.push(mesh);
-            }
-
-            const newMaterials = [];
-            for (const oldIdx of [...usedMaterials].sort((a, b) => a - b)) {
-                newMaterials.push(newGltf.materials[oldIdx]);
-            }
-
-            newGltf.nodes = newNodes;
-            newGltf.meshes = newMeshes;
-            newGltf.materials = newMaterials;
-            newGltf.scenes = [{ name: `${subCat}_scene`, nodes: newNodes.map((_, i) => i) }];
-            newGltf.scene = 0;
-
-            try {
-                // Convert back to GLB (embed textures)
-                const glbResult = await gltfPipeline.gltfToGlb(newGltf, { resourceDirectory: path.dirname(filePath) });
-                const outputDir = path.join(SHOWROOM_DIR, targetFolder, style);
-                if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
-                const outFileName = `${baseName}_${subCat}.glb`;
-                const outputFile = path.join(outputDir, outFileName);
-                await fs.promises.writeFile(outputFile, glbResult.glb);
-
-                // Generate .tags.json for the split sub-category
-                const tags = {
-                    file: outFileName,
-                    category: targetFolder,
-                    style,
-                    extracted: false,
-                    meshTags: {},
-                    taggedMeshes: []
-                };
-                for (const idx of nodeIndices) {
-                    const name = gltf.nodes[idx].name || `Node_${idx}`;
-                    tags.meshTags[name] = 'tagged';
-                    tags.taggedMeshes.push(name);
-                }
-                const tagsPath = path.join(outputDir, `${baseName}_${subCat}.tags.json`);
-                await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
-
-                results[subCat] = { file: outFileName, folder: targetFolder, meshCount: nodeIndices.length };
-                console.log(`[Doors Split] ${subCat}: ${nodeIndices.length} meshes -> ${outputFile}`);
-            } catch (e) {
-                console.error(`[Doors Split] Failed ${subCat}: ${e.message}`);
-                results[subCat] = { error: e.message };
-            }
-        }
-
-        res.json({ success: true, results });
-    } catch (e) {
-        console.error(`[Doors Split] Error: ${e.message}`);
-        res.status(500).json({ success: false, error: 'Failed to split doors GLB' });
     }
 });
 

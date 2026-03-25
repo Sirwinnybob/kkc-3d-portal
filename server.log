@@ -1,0 +1,6 @@
+KKC PORTAL v2.1.3 ACTIVE ON PORT 5021
+GET /admin/tagger.html 200 6276 - 6.339 ms
+GET /css/tagger.css?v=207 200 5854 - 1.506 ms
+GET /js/tagger.js?v=207 200 36970 - 1.299 ms
+GET /api/showroom/categories 200 56 - 26.932 ms
+GET /api/showroom/staging 200 92 - 3.159 ms
