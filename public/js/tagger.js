@@ -275,7 +275,7 @@ async function autoParse() {
         const countsEl = document.getElementById('parse-counts');
         countsEl.innerHTML = Object.entries(data.summary)
             .sort(([, a], [, b]) => b - a)
-            .map(([cat, count]) => `<div class="parse-count-row"><span><span class="dot ${cat}"></span> ${cat.replace(/_/g, ' ')}</span><span class="count-badge">${count}</span></div>`)
+            .map(([cat, count]) => `<div class="parse-count-row"><span><span class="dot ${escapeHtml(cat)}"></span> ${escapeHtml(cat.replace(/_/g, ' '))}</span><span class="count-badge">${escapeHtml(count.toString())}</span></div>`)
             .join('');
 
         // Build legend
@@ -720,17 +720,17 @@ function updateTagStats() {
     if (currentMode === 'staging') {
         const el = document.getElementById('tag-stats');
         if (el) el.innerHTML = Object.entries(counts).map(([k, v]) =>
-            `<div class="parse-count-row"><span><span class="dot ${k}"></span> ${k.replace(/_/g, ' ')}</span><span class="count-badge">${v}</span></div>`
+            `<div class="parse-count-row"><span><span class="dot ${escapeHtml(k)}"></span> ${escapeHtml(k.replace(/_/g, ' '))}</span><span class="count-badge">${escapeHtml(v.toString())}</span></div>`
         ).join('');
     } else if (currentMode === 'doors') {
         const el = document.getElementById('doors-stats');
         if (el) el.innerHTML = Object.entries(counts).map(([k, v]) =>
-            `<div class="parse-count-row"><span><span class="dot ${k}"></span> ${k.replace(/_/g, ' ')}</span><span class="count-badge">${v}</span></div>`
+            `<div class="parse-count-row"><span><span class="dot ${escapeHtml(k)}"></span> ${escapeHtml(k.replace(/_/g, ' '))}</span><span class="count-badge">${escapeHtml(v.toString())}</span></div>`
         ).join('');
     } else {
         const el = document.getElementById('tag-stats');
         if (el) el.innerHTML = Object.entries(counts).map(([k, v]) =>
-            `<div class="parse-count-row"><span>${k.replace(/_/g, ' ')}</span><span class="count-badge">${v}</span></div>`
+            `<div class="parse-count-row"><span>${escapeHtml(k.replace(/_/g, ' '))}</span><span class="count-badge">${escapeHtml(v.toString())}</span></div>`
         ).join('');
     }
 
@@ -742,7 +742,7 @@ function buildLegend(elementId, categories) {
     const el = document.getElementById(elementId);
     if (!el) return;
     el.innerHTML = categories.map(c =>
-        `<span class="legend-item"><span class="dot ${c}"></span> ${c.replace(/_/g, ' ')}</span>`
+        `<span class="legend-item"><span class="dot ${escapeHtml(c)}"></span> ${escapeHtml(c.replace(/_/g, ' '))}</span>`
     ).join('');
 }
 
