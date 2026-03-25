@@ -1028,7 +1028,6 @@ async function processQueue() {
             const genGlb = path.join(dir, outputGlb);
             if (outputGlb !== `${roomName}.glb`) {
                 try {
-                    await fs.promises.access(genGlb);
                     await fs.promises.rename(genGlb, finalGlb);
                 } catch(e) {
                     if (e.code !== 'ENOENT') console.error(`!!! [FAILED] Rename ${roomName}: ${e.message}`);
@@ -1788,7 +1787,7 @@ if (require.main === module) {
         ignoreInitial: true,
         ignored: [/(\\|\/)\./, '**/*.glb', '**/*.json'],
         awaitWriteFinish: { stabilityThreshold: 3000, pollInterval: 100 }
-    }).on('add', (fp) => {
+    }).on('add', async (fp) => {
         if (fp.toLowerCase().endsWith('.dae')) {
             console.log(`[Staging] New DAE detected: ${path.basename(fp)}`);
             const dir = path.dirname(fp);
@@ -1798,13 +1797,17 @@ if (require.main === module) {
             const finalGlb = path.join(dir, `${baseName}.glb`);
 
             // Skip if GLB already exists and is newer
-            if (fs.existsSync(finalGlb)) {
-                const daeStat = fs.statSync(fp);
-                const glbStat = fs.statSync(finalGlb);
+            try {
+                const [daeStat, glbStat] = await Promise.all([
+                    fs.promises.stat(fp),
+                    fs.promises.stat(finalGlb)
+                ]);
                 if (glbStat.mtimeMs > daeStat.mtimeMs) {
                     console.log(`[Staging] GLB already up-to-date for ${baseName}`);
                     return;
                 }
+            } catch (e) {
+                // Ignore stat errors if finalGlb doesn't exist
             }
 
             // Reuse the clean + convert pipeline
