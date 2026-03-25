@@ -192,9 +192,19 @@
                 </div>
             </div>
 
+            <!-- Overlay Selector (Face Frame only) -->
+            <div class="showroom-section" id="overlay-section">
+                <div class="showroom-section-title">Overlay</div>
+                <div class="style-toggle" id="overlay-toggle">
+                    <button data-style="full" class="style-btn active">Full (11/16")</button>
+                    <button data-style="half" class="style-btn">1/2"</button>
+                </div>
+            </div>
+
+
             <!-- Kitchen Part Categories -->
             <div id="kitchen-parts" class="showroom-parts">
-                <div class="part-category" data-category="base">
+                <div class="part-category" data-category="base" style="display: none;">
                     <div class="part-category-label">Base / Case</div>
                     <div class="part-options" data-category="base"></div>
                 </div>
@@ -202,7 +212,11 @@
                     <div class="part-category-label">Doors</div>
                     <div class="part-options" data-category="doors"></div>
                 </div>
-                <div class="part-category" data-category="drawers">
+                <div class="part-category" data-category="drawer_fronts">
+                    <div class="part-category-label">Drawer Fronts</div>
+                    <div class="part-options" data-category="drawer_fronts"></div>
+                </div>
+                <div class="part-category" data-category="drawers" style="display: none;">
                     <div class="part-category-label">Drawers</div>
                     <div class="part-options" data-category="drawers"></div>
                 </div>
@@ -214,19 +228,19 @@
                     <div class="part-category-label">Finished Ends</div>
                     <div class="part-options" data-category="finished_ends"></div>
                 </div>
-                <div class="part-category" data-category="case_parts">
+                <div class="part-category" data-category="case_parts" style="display: none;">
                     <div class="part-category-label">Case Parts</div>
                     <div class="part-options" data-category="case_parts"></div>
                 </div>
-                <div class="part-category" data-category="wall">
+                <div class="part-category" data-category="wall" style="display: none;">
                     <div class="part-category-label">Wall</div>
                     <div class="part-options" data-category="wall"></div>
                 </div>
-                <div class="part-category" data-category="counter_top">
+                <div class="part-category" data-category="counter_top" style="display: none;">
                     <div class="part-category-label">Counter Top</div>
                     <div class="part-options" data-category="counter_top"></div>
                 </div>
-                <div class="part-category" data-category="floor">
+                <div class="part-category" data-category="floor" style="display: none;">
                     <div class="part-category-label">Floor</div>
                     <div class="part-options" data-category="floor"></div>
                 </div>
@@ -243,6 +257,16 @@
                     <button data-style="frameless" class="style-btn">Frameless</button>
                 </div>
             </div>
+
+            <!-- Island Overlay Selector (Face Frame only) -->
+            <div class="showroom-section" id="island-overlay-section">
+                <div class="showroom-section-title">Island Overlay</div>
+                <div class="style-toggle" id="island-overlay-toggle">
+                    <button data-style="full" class="style-btn active">Full (11/16")</button>
+                    <button data-style="half" class="style-btn">1/2"</button>
+                </div>
+            </div>
+
 
             <div id="island-parts" class="showroom-parts">
                 <div class="part-category" data-category="island">

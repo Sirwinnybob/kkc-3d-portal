@@ -22,7 +22,7 @@ const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURE
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 const SHOWROOM_DIR = process.env.SHOWROOM_DIR ? path.resolve(process.env.SHOWROOM_DIR) : path.join(path.dirname(JOBS_DIR), 'Showroom');
-const SHOWROOM_CATEGORIES = ['base', 'doors', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor'];
+const SHOWROOM_CATEGORIES = ['base', 'doors', 'drawer_fronts', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor'];
 const SHOWROOM_STYLES = ['face_frame', 'full_inset', 'frameless'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
 
@@ -39,6 +39,7 @@ const AUTO_PARSE_RULES = [
     { pattern: /Molding_Molding_DrawerBox/, category: 'drawers' },
     { pattern: /Molding_Molding/, category: 'crown' },
     { pattern: /DrawerBox/, category: 'drawers' },
+    { pattern: /DrawerFront/, category: 'drawer_fronts' },
     { pattern: /Cabinet_Widget/, category: 'case_parts' },
     { pattern: /Decorative_Window/, category: 'ignore' },
     { pattern: /^LN_Light/, category: 'ignore' },

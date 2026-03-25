@@ -37,9 +37,7 @@ test('Texture API', async (t) => {
 
     await t.test('POST /api/textures/match with no catalog saves to Uncategorized', async () => {
         // Generate random buffer - with empty catalog, should always save to Uncategorized
-        const randomBuffer = Buffer.alloc(4096);
-        for (let i = 0; i < 4096; i++) randomBuffer[i] = (i * 37 + 13) % 256;
-        const randomBase64 = `data:image/jpeg;base64,${randomBuffer.toString('base64')}`;
+        const randomBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
         const materialName = 'TestMaterial';
 
         const response = await request(app)
