@@ -847,7 +847,7 @@ function showPopup(entry, x, y) {
 
     let tagOptions;
     if (currentMode === 'staging') {
-        tagOptions = ['base', 'doors', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor', 'ignore'];
+        tagOptions = ['base', 'doors', 'drawer_fronts', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor', 'ignore'];
     } else if (currentMode === 'doors') {
         tagOptions = ['doors', 'drawer_fronts', 'paneled_ends', 'island_backs', 'ignore'];
     } else {
