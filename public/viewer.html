@@ -146,10 +146,18 @@
 
     <!-- Quick Texture Picker (tap-to-select) -->
     <div id="quick-picker" role="dialog" aria-modal="true" aria-label="Quick texture picker">
-        <div id="quick-picker-header">
+                <div id="quick-picker-header">
             <button id="qp-categories-back">&#8592; Categories</button>
             <span id="qp-title">Select Texture</span>
-            <button id="qp-close">&#xD7;</button>
+            <div class="qp-actions">
+                <button id="qp-search-btn" title="Search Textures" aria-label="Search">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
+                <button id="qp-close">&#xD7;</button>
+            </div>
         </div>
         <div id="qp-views-container">
             <div id="qp-categories-view">

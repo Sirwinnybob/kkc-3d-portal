@@ -869,9 +869,7 @@ body {
     border-radius: 20px 20px 0 0;
     transform: translateY(100%);
     transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
-    height: 65vh;
-    max-height: 65vh;
-    display: flex;
+    max-display: flex;
     flex-direction: column;
 }
 
@@ -926,7 +924,7 @@ body {
     padding: 0 4px;
 }
 
-#qp-close {
+#qp-close, #qp-search-btn {
     background: none;
     border: 1px solid rgba(255,255,255,0.18);
     border-radius: 8px;
@@ -943,25 +941,32 @@ body {
     font-family: inherit;
 }
 
-#qp-close:hover {
+#qp-close:hover, #qp-search-btn:hover {
     background: rgba(255,255,255,0.1);
     color: #fff;
 }
 
+.qp-actions {
+    display: flex;
+    gap: 8px;
+}
+
+
 /* Views container — clips the horizontal slide animation */
 #qp-views-container {
-    flex: 1;
+    height: 120px;
     position: relative;
     overflow: hidden;
-    min-height: 0;
+    flex-shrink: 0;
 }
 
 /* Categories grid view */
 #qp-categories-view {
     position: absolute;
     inset: 0;
-    overflow-y: auto;
-    padding: 12px 14px 24px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
     overscroll-behavior: contain;
     transform: translateX(0);
     opacity: 1;
@@ -973,7 +978,9 @@ body {
 #qp-textures-view {
     position: absolute;
     inset: 0;
-    padding: 10px 0 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
     overflow: hidden;
     transform: translateX(100%);
     opacity: 0;
@@ -984,25 +991,50 @@ body {
 
 /* Active: textures slide in, categories slide out */
 #qp-views-container.show-textures #qp-categories-view {
-    transform: translateX(-28%);
-    opacity: 0;
-    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    overscroll-behavior: contain;
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
+    will-change: transform;
 }
 
 #qp-views-container.show-textures #qp-textures-view {
-    transform: translateX(0);
-    opacity: 1;
-    pointer-events: auto;
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
+    will-change: transform;
 }
 
 #qp-category-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-direction: row;
     gap: 10px;
+    overflow-x: auto;
+    padding: 0 4px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Hide scrollbar for compact view */
+    height: 100%;
+}
+#qp-category-grid::-webkit-scrollbar {
+    display: none;
 }
 
+
 .qp-category-btn {
-    padding: 18px 12px;
+    padding: 12px 18px;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 12px;
@@ -1013,6 +1045,10 @@ body {
     text-align: center;
     transition: background 0.18s, border-color 0.18s;
     font-family: inherit;
+    white-space: nowrap;
+    height: fit-content;
+    align-self: center;
+    scroll-snap-align: center;
 }
 
 .qp-category-btn:hover,
@@ -1095,9 +1131,39 @@ body {
 @media (max-width: 600px) {
     #tap-replace-inner { padding: 20px 16px 36px; }
     #tap-replace-all-btn, #tap-replace-one-btn { padding: 14px; font-size: 0.95em; }
-    #quick-picker { height: 72vh; max-height: 72vh; }
-    #qp-category-grid { gap: 8px; }
-    .qp-category-btn { padding: 14px 8px; font-size: 0.85em; }
+
+    #qp-category-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 0 4px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Hide scrollbar for compact view */
+    height: 100%;
+}
+#qp-category-grid::-webkit-scrollbar {
+    display: none;
+}
+
+    .qp-category-btn {
+    padding: 12px 18px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: rgba(255,255,255,0.85);
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.18s, border-color 0.18s;
+    font-family: inherit;
+    white-space: nowrap;
+    height: fit-content;
+    align-self: center;
+    scroll-snap-align: center;
+}
 }
 
 /* ─── Product Tour ─── */
