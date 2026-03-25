@@ -894,8 +894,12 @@ async function setupTexturePanel(jobCode, room) {
 
         // In showroom mode, separate kitchen and island
         if (isShowroomMode) {
-            const kitchenVis = visibleMaterials.filter(m => !m.isIsland);
-            const islandVis = visibleMaterials.filter(m => m.isIsland);
+            const kitchenVis = [];
+            const islandVis = [];
+            for (const m of visibleMaterials) {
+                if (m.isIsland) islandVis.push(m);
+                else kitchenVis.push(m);
+            }
 
             if (kitchenVis.length > 0) {
                 const header = document.createElement('div');
