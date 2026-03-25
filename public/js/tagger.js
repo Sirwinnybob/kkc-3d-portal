@@ -236,7 +236,7 @@ async function init() {
     const btnDeselectAll = document.getElementById('btn-deselect-all');
     if (btnDeselectAll) btnDeselectAll.onclick = () => { selectedEntries.forEach(e => toggleSelection(e, false)); };
     const btnSave = document.getElementById('btn-save');
-    if (btnSave) btnSave.onclick = () => saveTags();
+    if (btnSave) btnSave.onclick = () => saveCategoryTags();
 
     // Canvas click
     renderer.domElement.addEventListener('click', onCanvasClick);
@@ -726,61 +726,6 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
     });
 }
 
-/**
- * Initial render of the mesh list. This builds the DOM once per GLB load.
- * We store a reference to the DOM element in each entry for fast updates.
- */
-function renderMeshList() {
-    const list = document.getElementById('mesh-list');
-    list.innerHTML = '';
-
-    const fragment = document.createDocumentFragment();
-
-    meshEntries.forEach((entry) => {
-        const div = document.createElement('div');
-        entry.el = div; // Store reference for fast O(1) updates
-        updateEntryUI(entry);
-
-        div.onclick = (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            toggleSelection(entry, !entry.selected);
-        };
-
-        fragment.appendChild(div);
-    });
-
-    list.appendChild(fragment);
-}
-
-/**
- * Targeted UI update for a single mesh entry.
- * Prevents full list re-renders (O(N) -> O(1)).
- */
-function updateEntryUI(entry) {
-    if (!entry.el) return;
-
-    const dotClass = entry.tag === 'tagged' ? 'tagged' : entry.tag === 'ignore' ? 'ignore' : 'untagged';
-    const tagLabel = entry.tag || 'untagged';
-
-    // Update innerHTML only if tag changed or it's empty
-    if (!entry.el.innerHTML || entry.el.dataset.tag !== (entry.tag || 'null')) {
-        entry.el.innerHTML = `
-            <input type="checkbox">
-            <span class="mesh-dot ${dotClass}"></span>
-            <span class="mesh-name">${escapeHtml(entry.name)}</span>
-            <span class="mesh-tag-label">${escapeHtml(tagLabel)}</span>
-        `;
-        entry.el.dataset.tag = entry.tag || 'null';
-
-        // Re-bind checkbox
-        const cb = entry.el.querySelector('input');
-        cb.onchange = (e) => toggleSelection(entry, e.target.checked);
-    }
-
-    entry.el.className = 'mesh-item' + (entry.selected ? ' selected' : '');
-    entry.el.querySelector('input').checked = entry.selected;
-}
-
 function highlightMesh(mesh, highlight) {
     if (highlight) {
         mesh.material.emissive = new THREE.Color(0x3b82f6);
@@ -850,7 +795,6 @@ function toggleSelection(entry, selected) {
     if (selected) selectedEntries.add(entry);
     else selectedEntries.delete(entry);
 
-    updateEntryUI(entry);
     updateSingleMeshColor(entry);
 }
 
@@ -858,7 +802,6 @@ function tagSelected() {
     const tagValue = document.getElementById('tag-assign').value;
     selectedEntries.forEach(entry => {
         entry.tag = tagValue;
-        updateEntryUI(entry);
         updateSingleMeshColor(entry);
     });
 }
