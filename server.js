@@ -245,12 +245,12 @@ app.get('/api/job/:code/:room/textures', async (req, res) => {
         return res.status(404).json({ success: false, error: 'No texture manifest found' });
     }
 
-    try {
-        const content = await fs.promises.readFile(manifestPath, 'utf8');
-        res.json(JSON.parse(content));
-    } catch (e) {
-        res.status(500).json({ success: false, error: 'Failed to read manifest' });
-    }
+    res.sendFile(manifestPath, (err) => {
+        if (err) {
+            if (res.headersSent) return;
+            res.status(500).json({ success: false, error: 'Failed to read manifest' });
+        }
+    });
 });
 
 // --- TEXTURE CATALOG API ---
@@ -1163,7 +1163,7 @@ app.get('/api/showroom/tags/:category/:style/:file', async (req, res) => {
 
     try {
         const data = await fs.promises.readFile(tagsPath, 'utf8');
-        res.json({ success: true, tags: JSON.parse(data) });
+        res.type('json').send(`{"success":true,"tags":${data}}`);
     } catch (e) {
         if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Tags not found' });
         res.status(500).json({ success: false, error: 'Failed to read tags' });
@@ -1235,7 +1235,7 @@ app.get('/api/showroom/config/:pin', async (req, res) => {
 
     try {
         const data = await fs.promises.readFile(configPath, 'utf8');
-        res.json({ success: true, config: JSON.parse(data) });
+        res.type('json').send(`{"success":true,"config":${data}}`);
     } catch (e) {
         if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Config not found' });
         res.status(500).json({ success: false, error: 'Failed to load config' });
@@ -1564,7 +1564,7 @@ app.get('/api/showroom/staging/tags/:file', async (req, res) => {
     if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
     try {
         const data = await fs.promises.readFile(tagsPath, 'utf8');
-        res.json({ success: true, tags: JSON.parse(data) });
+        res.type('json').send(`{"success":true,"tags":${data}}`);
     } catch (e) {
         if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Tags not found' });
         res.status(500).json({ success: false, error: 'Failed to read tags' });
