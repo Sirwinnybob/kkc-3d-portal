@@ -1185,7 +1185,7 @@ app.post('/api/showroom/config', express.json({ limit: '1mb' }), async (req, res
 
     try {
         const config = req.body;
-        if (!config || typeof config !== 'object') return res.status(400).json({ success: false, error: 'Invalid config' });
+        if (!config || typeof config !== 'object' || Array.isArray(config)) return res.status(400).json({ success: false, error: 'Invalid config' });
 
         // Generate unique 5-digit PIN (10000-99999)
         let pin;

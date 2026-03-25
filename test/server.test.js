@@ -49,3 +49,38 @@ test('Job limits validation tests', async (t) => {
         assert.strictEqual(response.status, 404);
     });
 });
+
+test('POST /api/showroom/config tests', async (t) => {
+    await t.test('returns 400 Bad Request if config is an array', async () => {
+        const response = await request(app)
+            .post('/api/showroom/config')
+            .send(['a', 'b', 'c'])
+            .set('Content-Type', 'application/json');
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.body.success, false);
+        assert.strictEqual(response.body.error, 'Invalid config');
+    });
+
+    await t.test('returns 400 Bad Request if config is null', async () => {
+        const response = await request(app)
+            .post('/api/showroom/config')
+            .send(null)
+            .set('Content-Type', 'application/json');
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.body.success, false);
+        assert.strictEqual(response.body.error, 'Invalid config');
+    });
+
+    await t.test('returns 400 Bad Request if config is not an object (e.g., string)', async () => {
+        const response = await request(app)
+            .post('/api/showroom/config')
+            .send('"just a string"')
+            .set('Content-Type', 'application/json');
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.body.success, false);
+        assert.strictEqual(response.body.error, 'Invalid config');
+    });
+});
