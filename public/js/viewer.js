@@ -1486,7 +1486,8 @@ async function setupTexturePanel(jobCode, room) {
             qpCurrentTextures = data.textures;
             // Prepend similar textures for this material (deduped)
             if (mat && mat.similarTextures && mat.similarTextures.length > 0) {
-                const unique = mat.similarTextures.filter(t => !qpCurrentTextures.some(ct => ct.url === t.url));
+                const existingUrls = new Set(qpCurrentTextures.map(ct => ct.url));
+                const unique = mat.similarTextures.filter(t => !existingUrls.has(t.url));
                 qpCurrentTextures = [...unique, ...qpCurrentTextures];
             }
             renderQpStrip(mat);
