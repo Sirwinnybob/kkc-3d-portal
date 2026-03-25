@@ -313,14 +313,13 @@ async function loadStagingGlb() {
         }
     } catch { /* no existing tags */ }
 
-    let meshIdx = 0;
-    loadGlbFromUrl(glbUrl, (entry) => {
-        // Use server-provided name if available
-        if (serverMeshNames[meshIdx]) {
-            entry.name = serverMeshNames[meshIdx];
-            entry.mesh.name = serverMeshNames[meshIdx];
+    loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
+        // Use exact glTF node index to match server array
+        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        if (serverName) {
+            entry.name = serverName;
+            entry.mesh.name = serverName;
         }
-        meshIdx++;
 
         // Apply existing tags
         if (existingTags && existingTags.meshCategories && existingTags.meshCategories[entry.name]) {
@@ -477,14 +476,12 @@ async function loadCategoryGlb() {
         }
     } catch { /* no existing tags */ }
 
-    let meshIdx = 0;
-    loadGlbFromUrl(glbUrl, (entry) => {
-        // Use server-provided name if available
-        if (serverMeshNames[meshIdx]) {
-            entry.name = serverMeshNames[meshIdx];
-            entry.mesh.name = serverMeshNames[meshIdx];
+    loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
+        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        if (serverName) {
+            entry.name = serverName;
+            entry.mesh.name = serverName;
         }
-        meshIdx++;
 
         if (existingTags && existingTags.meshTags && existingTags.meshTags[entry.name]) {
             entry.tag = existingTags.meshTags[entry.name];
@@ -599,14 +596,12 @@ async function loadDoorsGlb() {
         }
     } catch { /* no existing tags */ }
 
-    let meshIdx = 0;
-    loadGlbFromUrl(glbUrl, (entry) => {
-        // Use server-provided name if available
-        if (serverMeshNames[meshIdx]) {
-            entry.name = serverMeshNames[meshIdx];
-            entry.mesh.name = serverMeshNames[meshIdx];
+    loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
+        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        if (serverName) {
+            entry.name = serverName;
+            entry.mesh.name = serverName;
         }
-        meshIdx++;
 
         if (existingTags && existingTags.meshTags && existingTags.meshTags[entry.name]) {
             entry.tag = existingTags.meshTags[entry.name];
@@ -693,7 +688,12 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
 
         model.traverse((child) => {
             if (child.isMesh) {
-                const name = child.name || `Mesh_${meshEntries.length}`;
+                let originalIndex = meshEntries.length;
+                if (gltf.parser && gltf.parser.associations) {
+                    const assoc = gltf.parser.associations.get(child);
+                    if (assoc && assoc.nodes !== undefined) originalIndex = assoc.nodes;
+                }
+                const name = child.name || `Node_${originalIndex}`;
                 const prevMat = child.material;
                 child.material = new THREE.MeshLambertMaterial({
                     map: prevMat.map,
@@ -705,7 +705,7 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
                 });
 
                 const entry = { name, mesh: child, tag: null, selected: false };
-                if (onEntry) onEntry(entry);
+                if (onEntry) onEntry(entry, originalIndex);
                 meshEntries.push(entry);
                 meshToEntry.set(child, entry);
             }

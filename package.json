@@ -20,5 +20,20 @@
     "jsdom": "^28.1.0",
     "playwright": "^1.58.2",
     "supertest": "^7.2.2"
-  }
+  },
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sirwinnybob/kkc-3d-portal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Sirwinnybob/kkc-3d-portal/issues"
+  },
+  "homepage": "https://github.com/Sirwinnybob/kkc-3d-portal#readme"
 }
