@@ -1261,6 +1261,7 @@ async function setupTexturePanel(jobCode, room) {
     const qpTitle          = document.getElementById('qp-title');
     const qpCategoriesBack = document.getElementById('qp-categories-back');
     const qpClose          = document.getElementById('qp-close');
+    const qpSearchBtn      = document.getElementById('qp-search-btn');
     const qpViewsContainer = document.getElementById('qp-views-container');
     const qpCategoriesView = document.getElementById('qp-categories-view');
     const qpCategoryGrid   = document.getElementById('qp-category-grid');
@@ -1341,6 +1342,14 @@ async function setupTexturePanel(jobCode, room) {
     }
 
     qpClose.addEventListener('click', closeQuickPicker);
+
+    if (qpSearchBtn) {
+        qpSearchBtn.addEventListener('click', () => {
+            closeQuickPicker();
+            const texBtn = document.getElementById('texture-btn');
+            if (texBtn) texBtn.click();
+        });
+    }
 
     // ---- View switching ----
     function showQpCategoriesView() {
