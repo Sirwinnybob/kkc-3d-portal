@@ -109,7 +109,11 @@
             <!-- Catalog View -->
             <div id="catalog-view" style="display:none">
                 <button id="back-to-materials" class="back-btn">&larr; Back to Materials</button>
-                <input type="text" id="texture-search" placeholder="Search textures..." autocomplete="off">
+                <div class="search-container">
+                    <input type="text" id="texture-search" placeholder="Search textures..." autocomplete="off" aria-label="Search textures">
+                    <button id="clear-texture-search" aria-label="Clear search" style="display:none">&times;</button>
+                </div>
+                <div id="texture-search-empty" class="texture-empty-state" style="display:none">No textures match your search.</div>
                 <div id="texture-grid"></div>
             </div>
         </div>

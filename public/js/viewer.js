@@ -874,6 +874,7 @@ async function setupTexturePanel(jobCode, room) {
 
     // Render material list
     function renderMaterialList() {
+        clearSearch(false);
         if (!materialList) return;
         materialList.innerHTML = '';
 
@@ -1153,6 +1154,7 @@ async function setupTexturePanel(jobCode, room) {
 
     // Load textures for a category
     async function loadCategoryTextures(category) {
+        clearSearch(false);
         try {
             const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
             const data = await resp.json();
@@ -1212,15 +1214,37 @@ async function setupTexturePanel(jobCode, room) {
     }
 
     // Search filter
+    const clearSearchBtn = document.getElementById('clear-texture-search');
+    const searchEmptyState = document.getElementById('texture-search-empty');
+
+    function clearSearch(shouldFocus = false) {
+        if (textureSearch) {
+            textureSearch.value = '';
+            textureSearch.dispatchEvent(new Event('input'));
+            if (shouldFocus) textureSearch.focus();
+        }
+    }
+
     if (textureSearch) {
         textureSearch.oninput = () => {
             const q = textureSearch.value.toLowerCase();
             const thumbs = textureGrid.querySelectorAll('.texture-thumb');
+            let visibleCount = 0;
+
             thumbs.forEach(th => {
                 const name = th.querySelector('span')?.innerText?.toLowerCase() || '';
-                th.style.display = name.includes(q) ? '' : 'none';
+                const isVisible = name.includes(q);
+                th.style.display = isVisible ? '' : 'none';
+                if (isVisible) visibleCount++;
             });
+
+            if (clearSearchBtn) clearSearchBtn.style.display = q ? 'flex' : 'none';
+            if (searchEmptyState) searchEmptyState.style.display = (q && visibleCount === 0) ? 'block' : 'none';
         };
+    }
+
+    if (clearSearchBtn) {
+        clearSearchBtn.onclick = () => clearSearch(true);
     }
 
     // ================================================================
