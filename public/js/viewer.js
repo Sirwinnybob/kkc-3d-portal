@@ -1674,8 +1674,14 @@ async function initShowroomMode(pinToLoad) {
 
 
     // Populate initial parts
-    populateKitchenParts();
-    populateIslandParts();
+    await Promise.all([
+        populateKitchenParts(),
+        populateIslandParts()
+    ]);
+
+    if (!pinToLoad) {
+        reframeShowroomCamera();
+    }
 
     // Setup save config button
     if (saveConfigBtn) saveConfigBtn.onclick = saveShowroomConfig;
@@ -1715,7 +1721,8 @@ function setupStyleToggle(elementId, onChange) {
 
 
 
-function populateKitchenParts() {
+async function populateKitchenParts() {
+
     const kitchenCats = ['base', 'doors', 'drawer_fronts', 'drawers', 'crown', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
     const autoLoadCats = ['base', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor']; // Always auto-load these // Always auto-load these
 
@@ -1724,10 +1731,11 @@ function populateKitchenParts() {
         overlaySection.style.display = (kitchenStyle === 'face_frame') ? '' : 'none';
     }
 
-    kitchenCats.forEach(cat => {
+    const promises = kitchenCats.map(cat => {
+
         const selector = `#kitchen-parts .part-options[data-category="${cat}"]`;
         const container = document.querySelector(selector);
-        if (!container) return;
+        if (!container) return Promise.resolve();
 
         let parts = (showroomCategories[cat] && showroomCategories[cat][kitchenStyle]) || [];
 
@@ -1749,18 +1757,21 @@ function populateKitchenParts() {
         const buttons = container.querySelectorAll('.part-option-btn');
         if (buttons.length > 0) {
             const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
-
-            // If it's an auto-load category, or if there's no active part (meaning we just switched styles/overlays)
             if (!hasActive) {
-                buttons[0].click();
+                // Manually trigger the load instead of a synthetic click to capture the Promise
+                const btn = buttons[0];
+                return loadShowroomPart(cat, kitchenStyle, btn.dataset.file, btn);
             }
         }
+        return Promise.resolve();
     });
+    await Promise.all(promises);
 }
 
-function populateIslandParts() {
+async function populateIslandParts() {
+
     const container = document.querySelector(`#island-parts .part-options[data-category="island"]`);
-    if (!container) return;
+    if (!container) return Promise.resolve();
 
     const islandOverlaySection = document.getElementById('island-overlay-section');
     if (islandOverlaySection) {
@@ -1785,9 +1796,11 @@ function populateIslandParts() {
     if (buttons.length > 0) {
         const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
         if (!hasActive) {
-                buttons[0].click();
-            }
+            const btn = buttons[0];
+            return loadShowroomPart('island', islandStyle, btn.dataset.file, btn);
         }
+    }
+    return Promise.resolve();
 }
 function renderPartOptions(container, category, style, parts) {
     container.innerHTML = '';
@@ -1940,8 +1953,7 @@ async function loadShowroomPart(category, style, file, btnEl) {
                 handlePaneledEndSwap(file);
             }
 
-            // Reframe camera around all loaded parts
-            reframeShowroomCamera();
+
 
             if (btnEl) btnEl.classList.remove('loading');
             resolve();
@@ -2131,6 +2143,8 @@ async function loadShowroomConfig(pin) {
             if (pos) camera.position.set(pos[0], pos[1], pos[2]);
             if (tgt) controls.target.set(tgt[0], tgt[1], tgt[2]);
             controls.update();
+        } else {
+            reframeShowroomCamera();
         }
 
         updateStatus('');
