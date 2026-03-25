@@ -1008,7 +1008,7 @@ async function processQueue() {
     isConverting = true;
     const { filePath } = conversionQueue.shift();
     const dir = path.dirname(filePath);
-    const roomName = path.basename(dir);
+    const roomName = path.basename(filePath, '.dae'); // Keep original dae name
     const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
@@ -1047,7 +1047,7 @@ const pendingTimers = new Map();
 async function convertDesign(filePath, skipTimer = false) {
     if (path.extname(filePath).toLowerCase() !== '.dae') return;
     const roomDir = path.dirname(filePath);
-    const roomName = path.basename(roomDir);
+    const roomName = path.basename(filePath, '.dae'); // Keep original dae name
     const glbPath = path.join(roomDir, `${roomName}.glb`);
 
     try {
