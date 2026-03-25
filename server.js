@@ -1008,7 +1008,7 @@ async function processQueue() {
     isConverting = true;
     const { filePath } = conversionQueue.shift();
     const dir = path.dirname(filePath);
-    const roomName = path.basename(dir);
+    const roomName = path.basename(filePath, '.dae'); // Keep original dae name
     const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
@@ -1047,7 +1047,7 @@ const pendingTimers = new Map();
 async function convertDesign(filePath, skipTimer = false) {
     if (path.extname(filePath).toLowerCase() !== '.dae') return;
     const roomDir = path.dirname(filePath);
-    const roomName = path.basename(roomDir);
+    const roomName = path.basename(filePath, '.dae'); // Keep original dae name
     const glbPath = path.join(roomDir, `${roomName}.glb`);
 
     try {
@@ -1446,14 +1446,27 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
 // GET /api/showroom/staging - List staged GLB files
 app.get('/api/showroom/staging', async (req, res) => {
     try {
-        const files = await fs.promises.readdir(STAGING_DIR);
-        const glbs = files
-            .filter(f => f.toLowerCase().endsWith('.glb'))
-            .map(f => {
-                const baseName = path.basename(f, '.glb');
-                const tagsFile = path.join(STAGING_DIR, `${baseName}.tags.json`);
-                return { file: f, name: baseName.replace(/_/g, ' '), tagged: fs.existsSync(tagsFile) };
-            });
+        const findGlbs = async (dir, rootDir) => {
+            const results = [];
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = require('path').join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    results.push(...await findGlbs(fullPath, rootDir));
+                } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                    const relativePath = require('path').relative(rootDir, fullPath).replace(/\\/g, '/');
+                    const baseName = require('path').basename(entry.name, '.glb');
+                    const tagsFile = require('path').join(dir, `${baseName}.tags.json`);
+                    results.push({
+                        file: relativePath,
+                        name: baseName.replace(/_/g, ' '),
+                        tagged: fs.existsSync(tagsFile)
+                    });
+                }
+            }
+            return results;
+        };
+        const glbs = await findGlbs(STAGING_DIR, STAGING_DIR);
         res.json({ success: true, files: glbs });
     } catch (e) {
         res.status(500).json({ success: false, error: 'Failed to list staging files' });
@@ -1467,8 +1480,8 @@ app.use('/showroom/staging', express.static(STAGING_DIR, {
 
 // GET /api/showroom/staging/meshes/:file - Extract mesh names from a staged GLB
 app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
-    const safeFile = path.basename(req.params.file);
-    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
+    const safeFile = req.params.file;
+    if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
 
     const filePath = path.join(STAGING_DIR, safeFile);
     const rel = path.relative(STAGING_DIR, filePath);
@@ -1499,8 +1512,8 @@ app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
 
 // POST /api/showroom/staging/parse/:file - Auto-parse a staged GLB by mesh names
 app.post('/api/showroom/staging/parse/:file', async (req, res) => {
-    const safeFile = path.basename(req.params.file);
-    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
+    const safeFile = req.params.file;
+    if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
 
     const filePath = path.join(STAGING_DIR, safeFile);
     const rel = path.relative(STAGING_DIR, filePath);
@@ -1528,10 +1541,12 @@ app.post('/api/showroom/staging/parse/:file', async (req, res) => {
 
 // POST /api/showroom/staging/tags/:file - Save staging tags
 app.post('/api/showroom/staging/tags/:file', express.json({ limit: '10mb' }), async (req, res) => {
-    const safeFile = path.basename(req.params.file, '.glb');
-    if (!/^[a-zA-Z0-9\-_ ]+$/.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file name' });
+    const safeFile = req.params.file.replace(/\.glb$/i, '');
+    if (!/^[a-zA-Z0-9\-_ \/]+$/.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file name' });
 
     const tagsPath = path.join(STAGING_DIR, `${safeFile}.tags.json`);
+    const rel = path.relative(STAGING_DIR, tagsPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
     try {
         const tags = req.body;
         if (!tags || typeof tags !== 'object') return res.status(400).json({ success: false, error: 'Invalid tags data' });
@@ -1544,8 +1559,10 @@ app.post('/api/showroom/staging/tags/:file', express.json({ limit: '10mb' }), as
 
 // GET /api/showroom/staging/tags/:file - Get staging tags
 app.get('/api/showroom/staging/tags/:file', async (req, res) => {
-    const safeFile = path.basename(req.params.file, '.glb').replace(/\.tags$/, '');
+    const safeFile = req.params.file.replace(/\.glb$/i, '').replace(/\.tags$/i, '');
     const tagsPath = path.join(STAGING_DIR, `${safeFile}.tags.json`);
+    const rel = path.relative(STAGING_DIR, tagsPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
     try {
         const data = await fs.promises.readFile(tagsPath, 'utf8');
         res.json({ success: true, tags: JSON.parse(data) });
@@ -1557,8 +1574,8 @@ app.get('/api/showroom/staging/tags/:file', async (req, res) => {
 
 // POST /api/showroom/staging/split/:file - Split staged GLB into category folders
 app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), async (req, res) => {
-    const safeFile = path.basename(req.params.file);
-    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
+    const safeFile = req.params.file;
+    if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
 
     const filePath = path.join(STAGING_DIR, safeFile);
     const rel = path.relative(STAGING_DIR, filePath);
