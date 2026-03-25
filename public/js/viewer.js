@@ -1783,8 +1783,14 @@ async function loadShowroomPart(category, style, file, btnEl) {
                 if (!child.isMesh) return;
 
                 // Standardize node name for index-based tag matching
-                if (!child.name || child.name.startsWith('Mesh_') || child.name.startsWith('Node_')) {
-                    child.name = `Node_${meshIdx}`;
+                let originalIndex = meshIdx;
+                if (gltf.parser && gltf.parser.associations) {
+                    const assoc = gltf.parser.associations.get(child);
+                    if (assoc && assoc.nodes !== undefined) originalIndex = assoc.nodes;
+                }
+
+                if (!child.name || child.name.startsWith('Mesh_')) {
+                    child.name = `Node_${originalIndex}`;
                 }
                 meshIdx++;
 
