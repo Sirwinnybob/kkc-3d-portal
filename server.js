@@ -39,6 +39,7 @@ const AUTO_PARSE_RULES = [
     { pattern: /Wall_Wall/, category: 'wall' },
     { pattern: /Molding_Molding_DrawerBox/, category: 'drawers' },
     { pattern: /Molding_Molding/, category: 'crown' },
+    { pattern: /DrawerFront/, category: 'drawer_fronts' },
     { pattern: /DrawerBox/, category: 'drawers' },
     { pattern: /Cabinet_Widget/, category: 'case_parts' },
     { pattern: /Decorative_Window/, category: 'ignore' },
