@@ -323,6 +323,16 @@ for (let u = 0; u < DCT_N; u++) {
 }
 
 /**
+ * SWAR population count for 32-bit integers.
+ * Uses unsigned right shift (>>>) for predictable behavior with JavaScript's 32nd bit.
+ */
+const popcount32 = (n) => {
+    n = n - ((n >>> 1) & 0x55555555);
+    n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
+    return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
+};
+
+/**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
  */
@@ -383,26 +393,13 @@ function performDCT(pixels, N) {
 
 // Hamming distance between two hashes
 /**
- * Highly optimized Hamming distance between two 64-bit BigInt hashes.
- * Uses SWAR (SIMD Within A Register) population count algorithm for ~100x speedup.
+ * Highly optimized Hamming distance between two 64-bit hashes pre-split into 32-bit integers.
+ * Uses SWAR (SIMD Within A Register) population count algorithm for extreme speedup.
  */
-function hammingDistance(hash1, hash2) {
-    const diff = hash1 ^ hash2;
-
-    // Split 64-bit BigInt into two 32-bit signed integers for high-performance bitwise ops.
-    // Numbers in Node.js are 64-bit floats, but bitwise operations convert them to 32-bit ints.
-    const low = Number(diff & 0xFFFFFFFFn);
-    const high = Number(diff >> 32n);
-
-    // SWAR population count for 32-bit integers.
-    // Uses unsigned right shift (>>>) for predictable behavior with JavaScript's 32nd bit.
-    const popcount32 = (n) => {
-        n = n - ((n >>> 1) & 0x55555555);
-        n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
-        return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
-    };
-
-    return popcount32(low) + popcount32(high);
+function hammingDistance(h1Low, h1High, h2Low, h2High) {
+    // Bitwise XOR (^) on 32-bit chunks in JS automatically converts to 32-bit signed ints.
+    // We then use unsigned right shift (>>> 0) to ensure popcount32 handles them as unsigned.
+    return popcount32((h1Low ^ h2Low) >>> 0) + popcount32((h1High ^ h2High) >>> 0);
 }
 
 // Build hash index for all textures in the catalog
@@ -439,7 +436,10 @@ async function buildTextureHashIndex() {
                                 file: file,
                                 url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
                                 hidden: isHidden,
-                                hash: hash.toString()
+                                hash: hash.toString(),
+                                // Pre-split 64-bit hash into two 32-bit integers for high-performance comparison
+                                hLow: Number(hash & 0xFFFFFFFFn),
+                                hHigh: Number(hash >> 32n)
                             });
                         } catch (e) {
                             console.error(`[Texture] Hash error for ${file}: ${e.message}`);
@@ -473,6 +473,9 @@ async function buildTextureHashIndex() {
                                         url: canonical.url,   // Return canonical URL
                                         hidden: canonical.hidden,
                                         hash: hash.toString(),
+                                        // Pre-split for performance
+                                        hLow: Number(hash & 0xFFFFFFFFn),
+                                        hHigh: Number(hash >> 32n),
                                         isVariant: true,
                                         variantFile: file
                                     });
@@ -557,7 +560,8 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         // Compute hash for the input image
         const inputHash = await computePhash(imageBuffer);
-        const inputHashStr = inputHash.toString();
+        const inLow = Number(inputHash & 0xFFFFFFFFn);
+        const inHigh = Number(inputHash >> 32n);
 
         // Build/load hash index
         const index = await buildTextureHashIndex();
@@ -569,8 +573,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         for (const [category, textures] of Object.entries(index)) {
             for (const tex of textures) {
-                const catHash = BigInt(tex.hash);
-                const distance = hammingDistance(inputHash, catHash);
+                const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
 
                 // Track absolute best match including hidden ones
                 if (distance < bestDistance) {
@@ -734,12 +737,13 @@ async function extractTexturesFromGlb(glbPath) {
         if (imageData.length === 0) continue;
 
         const hash = await computePhash(imageData);
+        const inLow = Number(hash & 0xFFFFFFFFn);
+        const inHigh = Number(hash >> 32n);
         let isMatched = false;
 
         for (const [category, textures] of Object.entries(index)) {
             for (const tex of textures) {
-                const catHash = BigInt(tex.hash);
-                const distance = hammingDistance(hash, catHash);
+                const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
                 if (distance <= 15) {
                     isMatched = true;
                     break;
@@ -796,12 +800,13 @@ async function extractTexturesFromDaeImages(daeFilePath) {
             try {
                 const buffer = await fs.promises.readFile(srcPath);
                 const hash = await computePhash(buffer);
+                const inLow = Number(hash & 0xFFFFFFFFn);
+                const inHigh = Number(hash >> 32n);
                 let isMatched = false;
 
                 for (const [category, textures] of Object.entries(index)) {
                     for (const tex of textures) {
-                        const catHash = BigInt(tex.hash);
-                        const distance = hammingDistance(hash, catHash);
+                        const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
                         if (distance <= 15) {
                             isMatched = true;
                             break;
@@ -875,14 +880,16 @@ async function generateTextureManifest(glbPath) {
                 if (imageIdx === undefined) continue;
 
                 // Reuse cached hash for this image index
-                let inputHash;
+                let inLow, inHigh;
                 if (imageHashCache.has(imageIdx)) {
-                    inputHash = imageHashCache.get(imageIdx);
+                    ({ inLow, inHigh } = imageHashCache.get(imageIdx));
                 } else {
                     const imageData = getImageData(imageIdx);
                     if (!imageData || imageData.length === 0) continue;
-                    inputHash = await computePhash(imageData);
-                    imageHashCache.set(imageIdx, inputHash);
+                    const inputHash = await computePhash(imageData);
+                    inLow = Number(inputHash & 0xFFFFFFFFn);
+                    inHigh = Number(inputHash >> 32n);
+                    imageHashCache.set(imageIdx, { inLow, inHigh });
                 }
 
                 let bestMatch = null;
@@ -891,8 +898,7 @@ async function generateTextureManifest(glbPath) {
 
                 for (const [category, textures] of Object.entries(libraryIndex)) {
                     for (const tex of textures) {
-                        const catHash = BigInt(tex.hash);
-                        const distance = hammingDistance(inputHash, catHash);
+                        const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
                         if (distance < bestDistance) {
                             bestDistance = distance;
                             bestMatch = { ...tex, category };
