@@ -9,9 +9,44 @@
  * @returns {number[][]}
  */
 function parseIndices(text, stride) {
-    const nums = text.trim().split(/\s+/).map(Number);
+    const len = text.length;
+    let i = 0;
+
+    // Skip leading whitespace
+    while (i < len && text.charCodeAt(i) <= 32) i++;
+
+    // Empty string or whitespace only edge case
+    if (i === len) return [[0]];
+
     const tuples = [];
-    for (let i = 0; i < nums.length; i += stride) tuples.push(nums.slice(i, i + stride));
+    let currentTuple = new Array(stride);
+    let tupleIndex = 0;
+
+    while (i < len) {
+        const start = i;
+        // Find end of current number string
+        while (i < len && text.charCodeAt(i) > 32) i++;
+
+        // Parse and add to current tuple
+        currentTuple[tupleIndex++] = Number(text.substring(start, i));
+
+        // When tuple is full, push to result and start new tuple
+        if (tupleIndex === stride) {
+            tuples.push(currentTuple);
+            currentTuple = new Array(stride);
+            tupleIndex = 0;
+        }
+
+        // Skip whitespace
+        while (i < len && text.charCodeAt(i) <= 32) i++;
+    }
+
+    // Handle any remaining numbers that didn't fill a complete tuple
+    if (tupleIndex > 0) {
+        currentTuple.length = tupleIndex;
+        tuples.push(currentTuple);
+    }
+
     return tuples;
 }
 
