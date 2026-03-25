@@ -54,6 +54,8 @@ let showroomParts = {};       // { category: { group, style, file, tagData } }
 let kitchenMaterials = [];
 let islandMaterials = [];
 let kitchenStyle = 'face_frame';
+let overlayStyle = 'full';
+let islandOverlayStyle = 'full';
 let islandStyle = 'face_frame';
 const MILKY_GRAY = 0xC8C8C8;
 
@@ -1655,6 +1657,16 @@ async function initShowroomMode(pinToLoad) {
         islandStyle = style;
         populateIslandParts();
     });
+    // Setup overlay toggles
+    setupStyleToggle('overlay-toggle', (style) => {
+        overlayStyle = style;
+        populateKitchenParts();
+    });
+    setupStyleToggle('island-overlay-toggle', (style) => {
+        islandOverlayStyle = style;
+        populateIslandParts();
+    });
+
 
     // Populate initial parts
     populateKitchenParts();
@@ -1696,23 +1708,81 @@ function setupStyleToggle(elementId, onChange) {
     });
 }
 
+
+
 function populateKitchenParts() {
-    const kitchenCats = ['base', 'doors', 'drawers', 'crown', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
+    const kitchenCats = ['base', 'doors', 'drawer_fronts', 'drawers', 'crown', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
+    const autoLoadCats = ['base', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor']; // Always auto-load these // Always auto-load these
+
+    const overlaySection = document.getElementById('overlay-section');
+    if (overlaySection) {
+        overlaySection.style.display = (kitchenStyle === 'face_frame') ? '' : 'none';
+    }
+
     kitchenCats.forEach(cat => {
         const selector = `#kitchen-parts .part-options[data-category="${cat}"]`;
         const container = document.querySelector(selector);
         if (!container) return;
-        const parts = (showroomCategories[cat] && showroomCategories[cat][kitchenStyle]) || [];
+
+        let parts = (showroomCategories[cat] && showroomCategories[cat][kitchenStyle]) || [];
+
+        // Filter parts by overlay if applicable (e.g. if the file name specifies overlay)
+        if (kitchenStyle === 'face_frame') {
+            const isFull = overlayStyle === 'full';
+            parts = parts.filter(p => {
+                const lower = p.name.toLowerCase() + p.file.toLowerCase();
+                // If it explicitly mentions the OTHER overlay, filter it out
+                if (isFull && (lower.includes('half') || lower.includes('1_2') || lower.includes('1/2'))) return false;
+                if (!isFull && (lower.includes('full') || lower.includes('11_16') || lower.includes('11/16'))) return false;
+                return true;
+            });
+        }
+
         renderPartOptions(container, cat, kitchenStyle, parts);
+
+        // Auto-load logic
+        const buttons = container.querySelectorAll('.part-option-btn');
+        if (buttons.length > 0) {
+            const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
+
+            // If it's an auto-load category, or if there's no active part (meaning we just switched styles/overlays)
+            if (!hasActive) {
+                buttons[0].click();
+            }
+        }
     });
 }
 
 function populateIslandParts() {
     const container = document.querySelector(`#island-parts .part-options[data-category="island"]`);
     if (!container) return;
-    const parts = (showroomCategories.island && showroomCategories.island[islandStyle]) || [];
+
+    const islandOverlaySection = document.getElementById('island-overlay-section');
+    if (islandOverlaySection) {
+        islandOverlaySection.style.display = (islandStyle === 'face_frame') ? '' : 'none';
+    }
+
+    let parts = (showroomCategories.island && showroomCategories.island[islandStyle]) || [];
+
+    if (islandStyle === 'face_frame') {
+        const isFull = islandOverlayStyle === 'full';
+        parts = parts.filter(p => {
+            const lower = p.name.toLowerCase() + p.file.toLowerCase();
+            if (isFull && (lower.includes('half') || lower.includes('1_2') || lower.includes('1/2'))) return false;
+            if (!isFull && (lower.includes('full') || lower.includes('11_16') || lower.includes('11/16'))) return false;
+            return true;
+        });
+    }
+
     renderPartOptions(container, 'island', islandStyle, parts);
-}
+
+    const buttons = container.querySelectorAll('.part-option-btn');
+    if (buttons.length > 0) {
+        const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
+        if (!hasActive) {
+                buttons[0].click();
+            }
+        }
 
 function renderPartOptions(container, category, style, parts) {
     container.innerHTML = '';
