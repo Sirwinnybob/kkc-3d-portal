@@ -1783,7 +1783,7 @@ function populateIslandParts() {
                 buttons[0].click();
             }
         }
-
+}
 function renderPartOptions(container, category, style, parts) {
     container.innerHTML = '';
     if (parts.length === 0) {
