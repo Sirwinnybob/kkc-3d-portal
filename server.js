@@ -9,6 +9,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
+const { popcount32, hammingDistance } = require('./utils/hash');
 const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
@@ -326,12 +327,6 @@ for (let u = 0; u < DCT_N; u++) {
  * SWAR population count for 32-bit integers.
  * Uses unsigned right shift (>>>) for predictable behavior with JavaScript's 32nd bit.
  */
-const popcount32 = (n) => {
-    n = n - ((n >>> 1) & 0x55555555);
-    n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
-    return (((n + (n >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
-};
-
 /**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
@@ -389,17 +384,6 @@ function performDCT(pixels, N) {
     }
 
     return dct;
-}
-
-// Hamming distance between two hashes
-/**
- * Highly optimized Hamming distance between two 64-bit hashes pre-split into 32-bit integers.
- * Uses SWAR (SIMD Within A Register) population count algorithm for extreme speedup.
- */
-function hammingDistance(h1Low, h1High, h2Low, h2High) {
-    // Bitwise XOR (^) on 32-bit chunks in JS automatically converts to 32-bit signed ints.
-    // We then use unsigned right shift (>>> 0) to ensure popcount32 handles them as unsigned.
-    return popcount32((h1Low ^ h2Low) >>> 0) + popcount32((h1High ^ h2High) >>> 0);
 }
 
 // Build hash index for all textures in the catalog
@@ -1897,3 +1881,5 @@ module.exports = app;
 module.exports.cleanDae = cleanDae;
 module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
 module.exports.SHOWROOM_DIR = SHOWROOM_DIR;
+module.exports.hammingDistance = hammingDistance;
+module.exports.popcount32 = popcount32;
