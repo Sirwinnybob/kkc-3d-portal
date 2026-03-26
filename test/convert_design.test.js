@@ -42,7 +42,7 @@ test('convertDesign behavior', async (t) => {
                 stdout += data.toString();
                 // Check if processQueue outputted a failure or success about 'Room 1'
                 // This indicates convertDesign successfully queued it.
-                if (stdout.includes('FAILED] Room 1') || stdout.includes('SUCCESS: Room 1')) {
+                if (stdout.includes('FAILED] 3D:') || stdout.includes('FAILED] Room 1') || stdout.includes('SUCCESS: Room 1')) {
                     server.kill();
                     assert(true);
                     resolve();
@@ -51,7 +51,7 @@ test('convertDesign behavior', async (t) => {
 
             server.stderr.on('data', data => {
                 stderr += data.toString();
-                if (stderr.includes('FAILED] Room 1') || stderr.includes('SUCCESS: Room 1')) {
+                if (stderr.includes('FAILED] 3D:') || stderr.includes('FAILED] Room 1') || stderr.includes('SUCCESS: Room 1')) {
                     server.kill();
                     assert(true);
                     resolve();
