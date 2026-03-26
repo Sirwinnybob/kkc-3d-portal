@@ -1306,7 +1306,12 @@ app.post('/api/showroom/tags/{*path}', express.json(), async (req, res) => {
 });
 
 // POST /api/showroom/config - Save a showroom configuration with a 5-digit PIN
-app.post('/api/showroom/config', express.json({ limit: '1mb' }), async (req, res) => {
+app.post('/api/showroom/config', express.json({ limit: '1mb' }), (err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).json({ success: false, error: 'Invalid config' });
+    }
+    next();
+}, async (req, res) => {
     const configsDir = path.join(SHOWROOM_DIR, 'configs');
 
     try {
