@@ -3,10 +3,19 @@ const assert = require('node:assert');
 const request = require('supertest');
 const path = require('path');
 const fs = require('fs');
-const app = require('../server');
 
 test('Texture API', async (t) => {
-    const TEXTURES_DIR = path.resolve(__dirname, '../textures');
+    // Before requiring app, mock the TEXTURES_DIR to an isolated path
+    const isolatedTexturesDir = path.join(__dirname, 'mock_textures_api_isolated');
+    if (!fs.existsSync(isolatedTexturesDir)) fs.mkdirSync(isolatedTexturesDir, { recursive: true });
+
+    // We cannot change TEXTURES_DIR dynamically because it's a const in server.js evaluated at require time.
+    // Instead we delete the require cache and re-require the app.
+    process.env.TEXTURES_DIR = isolatedTexturesDir;
+    delete require.cache[require.resolve('../server')];
+    const app = require('../server');
+
+    const TEXTURES_DIR = isolatedTexturesDir;
 
     t.after(() => {
         // Cleanup Uncategorized files created during tests
@@ -19,6 +28,8 @@ test('Texture API', async (t) => {
                 }
             }
         }
+        // Cleanup isolated dir
+        fs.rmSync(isolatedTexturesDir, { recursive: true, force: true });
     });
 
     await t.test('GET /api/textures returns categories (may be empty)', async () => {
@@ -36,6 +47,10 @@ test('Texture API', async (t) => {
     });
 
     await t.test('POST /api/textures/match with no catalog saves to Uncategorized', async () => {
+        if (app.locals.clearTextureCache) app.locals.clearTextureCache();
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         // Generate random buffer - with empty catalog, should always save to Uncategorized
         const randomBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
         const materialName = 'TestMaterial';
