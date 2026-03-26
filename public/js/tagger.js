@@ -280,8 +280,9 @@ async function loadStagingFileList() {
         const data = await resp.json();
         if (!data.success) return;
         const sel = document.getElementById('sel-staging-file');
+        // Security: Prevent DOM-based XSS when interpolating dynamically-loaded file names and paths into innerHTML
         sel.innerHTML = '<option value="">-- Select --</option>' +
-            data.files.map(f => `<option value="${f.file}">${f.name}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
+            data.files.map(f => `<option value="${escapeHtml(f.file)}">${escapeHtml(f.name)}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
     } catch { /* ignore */ }
 }
 
@@ -428,8 +429,9 @@ function updateFileList() {
     const style = document.getElementById('sel-style').value;
     const files = (categoriesData[cat] && categoriesData[cat][style]) || [];
     const selFile = document.getElementById('sel-file');
+    // Security: Prevent DOM-based XSS when interpolating dynamically-loaded file names and paths into innerHTML
     selFile.innerHTML = '<option value="">-- Select --</option>' +
-        files.map(f => `<option value="${f.file}">${f.name}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
+        files.map(f => `<option value="${escapeHtml(f.file)}">${escapeHtml(f.name)}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
 }
 
 async function loadCategoryGlb() {
@@ -556,8 +558,9 @@ function updateDoorsFileList() {
     const style = document.getElementById('sel-doors-style').value;
     const files = (categoriesData['doors'] && categoriesData['doors'][style]) || [];
     const sel = document.getElementById('sel-doors-file');
+    // Security: Prevent DOM-based XSS when interpolating dynamically-loaded file names and paths into innerHTML
     sel.innerHTML = '<option value="">-- Select --</option>' +
-        files.map(f => `<option value="${f.file}">${f.name}</option>`).join('');
+        files.map(f => `<option value="${escapeHtml(f.file)}">${escapeHtml(f.name)}</option>`).join('');
 }
 
 async function loadDoorsGlb() {
