@@ -70,7 +70,7 @@ hr { border: none; border-top: 1px solid #333; margin: 16px 0; }
 .dot.wall { background: #607D8B; }
 .dot.counter_top { background: #FFC107; }
 .dot.floor { background: #8BC34A; }
-.dot.drawer_fronts { background: #9C27B0; }
+.dot.drawer_fronts { background: #7B1FA2; }
 .dot.paneled_ends { background: #00BCD4; }
 .dot.island_backs { background: #E91E63; }
 .dot.paneled_end_replaceable { background: #FFD600; }
@@ -151,6 +151,41 @@ hr { border: none; border-top: 1px solid #333; margin: 16px 0; }
     border-color: #dc3545; color: #dc3545;
 }
 .popup-actions button.btn-hide:hover { background: rgba(220,53,69,0.2); }
+
+/* Context toggle group */
+.toggle-group {
+    display: flex; gap: 6px; margin-top: 4px;
+}
+.toggle-btn {
+    flex: 1; padding: 7px 6px;
+    border: 1px solid #444; border-radius: 6px;
+    background: #222; color: #999; cursor: pointer;
+    font-size: 0.82em; font-weight: 600; text-align: center;
+    transition: all 0.2s;
+}
+.toggle-btn:hover { background: #2a2a3e; color: #ccc; }
+.toggle-btn.active { background: #007bff; color: #fff; border-color: #007bff; }
+
+/* Per-category setting rows */
+.cat-setting-row {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 6px; padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.cat-check-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.82em; cursor: pointer; min-width: 120px;
+}
+.cat-check-label input[type="checkbox"] { cursor: pointer; }
+.cat-sub-sel, .text-input-sm {
+    flex: 1; min-width: 80px; max-width: 130px;
+    padding: 4px 6px; border-radius: 5px;
+    border: 1px solid #444; background: #222; color: #eee;
+    font-size: 0.78em;
+}
+.cat-note {
+    font-size: 0.7em; color: #777; font-style: italic;
+}
 
 /* Responsive */
 @media (max-width: 700px) {

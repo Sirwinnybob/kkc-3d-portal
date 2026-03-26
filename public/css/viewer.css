@@ -1373,6 +1373,11 @@ body {
 .part-options-empty {
     font-size: 0.78em; color: #666; font-style: italic; padding: 4px 0;
 }
+.part-sub-label {
+    width: 100%; font-size: 0.72em; color: #888; text-transform: uppercase;
+    letter-spacing: 0.8px; font-weight: 600; padding: 4px 0 2px;
+    border-top: 1px solid rgba(255,255,255,0.05); margin-top: 2px;
+}
 
 /* Showroom toggle button (left side) */
 #showroom-btn {

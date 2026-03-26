@@ -14,7 +14,7 @@ const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.3";
+const APP_VERSION = "2.1.4";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -23,8 +23,22 @@ const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURE
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 const SHOWROOM_DIR = process.env.SHOWROOM_DIR ? path.resolve(process.env.SHOWROOM_DIR) : path.join(path.dirname(JOBS_DIR), 'Showroom');
-const SHOWROOM_CATEGORIES = ['base', 'doors', 'drawer_fronts', 'crown', 'drawers', 'finished_ends', 'case_parts', 'island', 'wall', 'counter_top', 'floor'];
+const SHOWROOM_CONTEXTS = ['kitchen', 'island'];
 const SHOWROOM_STYLES = ['face_frame', 'full_inset', 'frameless'];
+const SHOWROOM_OVERLAYS = ['full_overlay', 'half_overlay'];
+// Categories that live UNDER an overlay folder (only face_frame has overlays)
+const OVERLAY_CATEGORIES = ['doors', 'drawer_fronts'];
+// Categories that live directly under the style folder (NOT under overlay)
+const NON_OVERLAY_CATEGORIES = ['finished_ends'];
+// Categories that sit directly under the context root (no style nesting)
+const DIRECT_CATEGORIES = ['base', 'crown', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor'];
+// Sub-categories for specific categories
+const SUB_CATEGORIES = {
+    doors: ['shaker', 'slab'],
+    finished_ends: ['flat', 'paneled']
+};
+// Grain directions (only slab doors have grain)
+const GRAIN_DIRS = ['horizontal', 'vertical'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
 
 // Auto-parse rules for Cabinet Vision mesh naming conventions
@@ -1068,17 +1082,75 @@ async function convertDesign(filePath, skipTimer = false) {
 // --- SHOWROOM APIs ---
 
 // Ensure Showroom directory structure exists
+// Layout: Showroom/context/style/[overlay]/category/subCategory/[grain]
+//         Showroom/context/directCategory/
 function ensureShowroomDirs() {
-    if (!fs.existsSync(SHOWROOM_DIR)) fs.mkdirSync(SHOWROOM_DIR, { recursive: true });
-    for (const cat of SHOWROOM_CATEGORIES) {
+    const mk = (d) => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); };
+    mk(SHOWROOM_DIR);
+    mk(path.join(SHOWROOM_DIR, 'configs'));
+    mk(STAGING_DIR);
+
+    for (const ctx of SHOWROOM_CONTEXTS) {
+        // Direct categories (no style nesting)
+        for (const cat of DIRECT_CATEGORIES) {
+            mk(path.join(SHOWROOM_DIR, ctx, cat));
+        }
+
         for (const style of SHOWROOM_STYLES) {
-            const dir = path.join(SHOWROOM_DIR, cat, style);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const styleDir = path.join(SHOWROOM_DIR, ctx, style);
+
+            if (style === 'face_frame') {
+                // Overlay categories go inside overlay folders
+                for (const overlay of SHOWROOM_OVERLAYS) {
+                    for (const cat of OVERLAY_CATEGORIES) {
+                        const catDir = path.join(styleDir, overlay, cat);
+                        if (SUB_CATEGORIES[cat]) {
+                            for (const sub of SUB_CATEGORIES[cat]) {
+                                if (cat === 'doors' && sub === 'slab') {
+                                    for (const grain of GRAIN_DIRS) {
+                                        mk(path.join(catDir, sub, grain));
+                                    }
+                                } else {
+                                    mk(path.join(catDir, sub));
+                                }
+                            }
+                        } else {
+                            mk(catDir);
+                        }
+                    }
+                }
+                // Non-overlay categories go directly under style (finished_ends)
+                for (const cat of NON_OVERLAY_CATEGORIES) {
+                    const catDir = path.join(styleDir, cat);
+                    if (SUB_CATEGORIES[cat]) {
+                        for (const sub of SUB_CATEGORIES[cat]) {
+                            mk(path.join(catDir, sub));
+                        }
+                    } else {
+                        mk(catDir);
+                    }
+                }
+            } else {
+                // Non-face-frame styles: all cats go directly under style (no overlays)
+                for (const cat of [...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES]) {
+                    const catDir = path.join(styleDir, cat);
+                    if (SUB_CATEGORIES[cat]) {
+                        for (const sub of SUB_CATEGORIES[cat]) {
+                            if (cat === 'doors' && sub === 'slab') {
+                                for (const grain of GRAIN_DIRS) {
+                                    mk(path.join(catDir, sub, grain));
+                                }
+                            } else {
+                                mk(path.join(catDir, sub));
+                            }
+                        }
+                    } else {
+                        mk(catDir);
+                    }
+                }
+            }
         }
     }
-    const configsDir = path.join(SHOWROOM_DIR, 'configs');
-    if (!fs.existsSync(configsDir)) fs.mkdirSync(configsDir, { recursive: true });
-    if (!fs.existsSync(STAGING_DIR)) fs.mkdirSync(STAGING_DIR, { recursive: true });
 }
 ensureShowroomDirs();
 
@@ -1090,66 +1162,105 @@ app.use('/showroom', express.static(SHOWROOM_DIR, {
     cacheControl: true
 }));
 
-// GET /api/showroom/categories - List categories with available styles and parts
+// Helper: list GLB files in a directory
+async function listGlbs(dir) {
+    try {
+        const files = await fs.promises.readdir(dir);
+        return files
+            .filter(f => f.toLowerCase().endsWith('.glb') && !f.toLowerCase().endsWith('.full.glb'))
+            .map(f => {
+                const baseName = path.basename(f, '.glb');
+                const tagsFile = path.join(dir, `${baseName}.tags.json`);
+                return { file: f, name: baseName.replace(/_/g, ' '), tagged: fs.existsSync(tagsFile) };
+            });
+    } catch { return []; }
+}
+
+// Helper: build nested tree for a category with sub-categories and grain
+async function buildCatTree(catDir, cat) {
+    const subs = SUB_CATEGORIES[cat];
+    if (!subs) {
+        return { files: await listGlbs(catDir) };
+    }
+    const tree = {};
+    for (const sub of subs) {
+        const subDir = path.join(catDir, sub);
+        if (cat === 'doors' && sub === 'slab') {
+            tree[sub] = {};
+            for (const grain of GRAIN_DIRS) {
+                tree[sub][grain] = { files: await listGlbs(path.join(subDir, grain)) };
+            }
+        } else {
+            tree[sub] = { files: await listGlbs(subDir) };
+        }
+    }
+    return tree;
+}
+
+// GET /api/showroom/categories - Deeply nested hierarchy
 app.get('/api/showroom/categories', async (req, res) => {
     try {
         const result = {};
-        for (const cat of SHOWROOM_CATEGORIES) {
-            result[cat] = {};
+        for (const ctx of SHOWROOM_CONTEXTS) {
+            result[ctx] = {};
+            // Direct categories
+            for (const cat of DIRECT_CATEGORIES) {
+                result[ctx][cat] = { files: await listGlbs(path.join(SHOWROOM_DIR, ctx, cat)) };
+            }
+            // Style-nested categories
             for (const style of SHOWROOM_STYLES) {
-                const dir = path.join(SHOWROOM_DIR, cat, style);
-                try {
-                    const files = await fs.promises.readdir(dir);
-                    const glbs = files
-                        .filter(f => f.toLowerCase().endsWith('.glb') && !f.toLowerCase().endsWith('.full.glb'))
-                        .map(f => {
-                            const baseName = path.basename(f, '.glb');
-                            const tagsFile = path.join(dir, `${baseName}.tags.json`);
-                            const hasTag = fs.existsSync(tagsFile);
-                            return { file: f, name: baseName.replace(/_/g, ' '), tagged: hasTag };
-                        });
-                    result[cat][style] = glbs;
-                } catch {
-                    result[cat][style] = [];
+                result[ctx][style] = {};
+                if (style === 'face_frame') {
+                    for (const overlay of SHOWROOM_OVERLAYS) {
+                        result[ctx][style][overlay] = {};
+                        for (const cat of OVERLAY_CATEGORIES) {
+                            result[ctx][style][overlay][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, overlay, cat), cat);
+                        }
+                    }
+                    for (const cat of NON_OVERLAY_CATEGORIES) {
+                        result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
+                    }
+                } else {
+                    for (const cat of [...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES]) {
+                        result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
+                    }
                 }
             }
         }
         res.json({ success: true, categories: result });
     } catch (e) {
+        console.error(`[Showroom] Categories error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Failed to list showroom categories' });
     }
 });
 
-// GET /api/showroom/part/:category/:style/:file - Serve GLB URL for a showroom part
-app.get('/api/showroom/part/:category/:style/:file', (req, res) => {
-    const { category, style, file } = req.params;
+// Helper: safely resolve a deep showroom path (prevents traversal)
+function safeShowroomPath(...segments) {
+    const resolved = path.join(SHOWROOM_DIR, ...segments);
+    const rel = path.relative(SHOWROOM_DIR, resolved);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+    return resolved;
+}
 
-    // Validate inputs
-    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
-    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-    if (!/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(file)) return res.status(400).json({ success: false, error: 'Invalid file' });
+// GET /api/showroom/part/{*path} - Serve GLB URL for a showroom part at any depth
+app.get('/api/showroom/part/{*path}', (req, res) => {
+    const deepPath = req.params.path;
+    if (!deepPath || !/\.glb$/i.test(deepPath)) return res.status(400).json({ success: false, error: 'Invalid path' });
 
-    const safeFile = path.basename(file);
-    const filePath = path.join(SHOWROOM_DIR, category, style, safeFile);
-    const rel = path.relative(SHOWROOM_DIR, filePath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
-
+    const filePath = safeShowroomPath(deepPath);
+    if (!filePath) return res.status(403).json({ success: false, error: 'Forbidden' });
     if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'Part not found' });
 
-    res.json({ success: true, url: `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(safeFile)}` });
+    res.json({ success: true, url: `/showroom/${deepPath}` });
 });
 
-// GET /api/showroom/tags/:category/:style/:file - Get tags for a showroom part
-app.get('/api/showroom/tags/:category/:style/:file', async (req, res) => {
-    const { category, style, file } = req.params;
-
-    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
-    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-
-    const baseName = path.basename(file, '.glb').replace(/\.tags$/, '');
-    const tagsPath = path.join(SHOWROOM_DIR, category, style, `${baseName}.tags.json`);
-    const rel = path.relative(SHOWROOM_DIR, tagsPath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+// GET /api/showroom/tags/{*path} - Get tags for a showroom part at any depth
+app.get('/api/showroom/tags/{*path}', async (req, res) => {
+    const deepPath = req.params.path;
+    const baseName = path.basename(deepPath, '.glb').replace(/\.tags$/, '');
+    const dir = path.dirname(deepPath);
+    const tagsPath = safeShowroomPath(dir, `${baseName}.tags.json`);
+    if (!tagsPath) return res.status(403).json({ success: false, error: 'Forbidden' });
 
     try {
         const data = await fs.promises.readFile(tagsPath, 'utf8');
@@ -1160,19 +1271,15 @@ app.get('/api/showroom/tags/:category/:style/:file', async (req, res) => {
     }
 });
 
-// POST /api/showroom/tags/:category/:style/:file - Save tags for a showroom part
-app.post('/api/showroom/tags/:category/:style/:file', express.json(), async (req, res) => {
-    const { category, style, file } = req.params;
-
-    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
-    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-
-    const baseName = path.basename(file, '.glb');
+// POST /api/showroom/tags/{*path} - Save tags for a showroom part at any depth
+app.post('/api/showroom/tags/{*path}', express.json(), async (req, res) => {
+    const deepPath = req.params.path;
+    const baseName = path.basename(deepPath, '.glb');
     if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid file name' });
 
-    const tagsPath = path.join(SHOWROOM_DIR, category, style, `${baseName}.tags.json`);
-    const rel = path.relative(SHOWROOM_DIR, tagsPath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+    const dir = path.dirname(deepPath);
+    const tagsPath = safeShowroomPath(dir, `${baseName}.tags.json`);
+    if (!tagsPath) return res.status(403).json({ success: false, error: 'Forbidden' });
 
     try {
         const tags = req.body;
@@ -1232,17 +1339,13 @@ app.get('/api/showroom/config/:pin', async (req, res) => {
     }
 });
 
-// GET /api/showroom/meshes/:category/:style/:file - List mesh names in a GLB (for tagger)
-app.get('/api/showroom/meshes/:category/:style/:file', async (req, res) => {
-    const { category, style, file } = req.params;
+// GET /api/showroom/meshes/{*path} - List mesh names in a GLB at any depth (for tagger)
+app.get('/api/showroom/meshes/{*path}', async (req, res) => {
+    const deepPath = req.params.path;
+    if (!deepPath || !/\.glb$/i.test(deepPath)) return res.status(400).json({ success: false, error: 'Invalid path' });
 
-    if (!SHOWROOM_CATEGORIES.includes(category)) return res.status(400).json({ success: false, error: 'Invalid category' });
-    if (!SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-
-    const safeFile = path.basename(file);
-    const filePath = path.join(SHOWROOM_DIR, category, style, safeFile);
-    const rel = path.relative(SHOWROOM_DIR, filePath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
+    const filePath = safeShowroomPath(deepPath);
+    if (!filePath) return res.status(403).json({ success: false, error: 'Forbidden' });
 
     try {
         const glbBuffer = await fs.promises.readFile(filePath);
@@ -1299,9 +1402,57 @@ function autoCategorizeMeshes(gltf) {
     return categories;
 }
 
+function sanitizeGlbForPipeline(glbBuffer) {
+    try {
+        const magic = glbBuffer.readUInt32LE(0);
+        if (magic !== 0x46546C67) return glbBuffer;
+        
+        const jsonChunkLength = glbBuffer.readUInt32LE(12);
+        const jsonString = glbBuffer.toString('utf8', 20, 20 + jsonChunkLength);
+        const gltf = JSON.parse(jsonString);
+        let modified = false;
+        
+        if (gltf.images) {
+            for (const img of gltf.images) {
+                if (img.uri && !img.uri.startsWith('data:')) {
+                    img.uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+                    modified = true;
+                }
+            }
+        }
+        if (!modified) return glbBuffer;
+        
+        let newJsonString = JSON.stringify(gltf);
+        let newJsonLength = Buffer.byteLength(newJsonString, 'utf8');
+        const padding = (4 - (newJsonLength % 4)) % 4;
+        for (let i = 0; i < padding; i++) newJsonString += ' ';
+        newJsonLength += padding;
+        
+        const binChunkOffset = 20 + jsonChunkLength;
+        const binData = glbBuffer.length > binChunkOffset ? glbBuffer.slice(binChunkOffset) : Buffer.alloc(0);
+        
+        const newTotalLength = 20 + newJsonLength + binData.length;
+        const newBuffer = Buffer.alloc(newTotalLength);
+        
+        newBuffer.writeUInt32LE(0x46546C67, 0);
+        newBuffer.writeUInt32LE(2, 4);
+        newBuffer.writeUInt32LE(newTotalLength, 8);
+        
+        newBuffer.writeUInt32LE(newJsonLength, 12);
+        newBuffer.writeUInt32LE(0x4E4F534A, 16);
+        newBuffer.write(newJsonString, 20, newJsonLength, 'utf8');
+        
+        if (binData.length > 0) binData.copy(newBuffer, 20 + newJsonLength);
+        
+        return newBuffer;
+    } catch { return glbBuffer; }
+}
+
 // Helper: extract GLB nodes and build category-specific glTF documents
-async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseName) {
-    const glbBuffer = await fs.promises.readFile(glbPath);
+// destinations maps category name -> relative path inside SHOWROOM_DIR
+async function splitGlbByCategories(glbPath, meshCategories, destinations, outputBaseName) {
+    let glbBuffer = await fs.promises.readFile(glbPath);
+    glbBuffer = sanitizeGlbForPipeline(glbBuffer);
     const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: path.dirname(glbPath) });
     const gltf = result.gltf;
 
@@ -1320,13 +1471,24 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
     const results = {};
 
     for (const [cat, nodeIndices] of Object.entries(categoryNodes)) {
+        // Resolve destination path for this category
+        const destRelPath = destinations[cat];
+        if (!destRelPath) {
+            console.warn(`[Staging] No destination path for category '${cat}', skipping`);
+            continue;
+        }
+        const outputDir = safeShowroomPath(destRelPath);
+        if (!outputDir) {
+            results[cat] = { error: 'Forbidden destination path' };
+            continue;
+        }
+
         // Deep clone the gltf
         const newGltf = JSON.parse(JSON.stringify(gltf));
 
         // Collect used resources
         const usedMeshes = new Set();
         const usedMaterials = new Set();
-        const keepNodes = new Set(nodeIndices);
 
         for (const idx of nodeIndices) {
             const node = newGltf.nodes[idx];
@@ -1362,7 +1524,6 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
             nodeRemap[idx] = newNodes.length;
             const node = { ...newGltf.nodes[idx] };
             if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
-            // Standardize node name
             if (!node.name) node.name = `Node_${idx}`;
             node.children = undefined; // flatten hierarchy
             newNodes.push(node);
@@ -1394,7 +1555,6 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
         // Convert back to GLB (embed textures)
         try {
             const glbResult = await gltfPipeline.gltfToGlb(newGltf, { resourceDirectory: path.dirname(glbPath) });
-            const outputDir = path.join(SHOWROOM_DIR, cat, style);
             if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
             const outputFile = path.join(outputDir, `${outputBaseName}.glb`);
@@ -1408,7 +1568,7 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
             const tags = {
                 file: `${outputBaseName}.glb`,
                 category: cat,
-                style,
+                destPath: destRelPath,
                 extracted: false,
                 meshTags: {},
                 taggedMeshes: []
@@ -1421,7 +1581,7 @@ async function splitGlbByCategories(glbPath, meshCategories, style, outputBaseNa
             const tagsPath = path.join(outputDir, `${outputBaseName}.tags.json`);
             await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
 
-            results[cat] = { file: `${outputBaseName}.glb`, meshCount: nodeIndices.length };
+            results[cat] = { file: `${outputBaseName}.glb`, destPath: destRelPath, meshCount: nodeIndices.length };
             console.log(`[Staging] Split ${cat}: ${nodeIndices.length} meshes -> ${outputFile}`);
         } catch (e) {
             console.error(`[Staging] Failed to split ${cat}: ${e.message}`);
@@ -1478,8 +1638,9 @@ app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
 
     try {
         const glbBuffer = await fs.promises.readFile(filePath);
-        const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: STAGING_DIR });
-        const gltf = result.gltf;
+        const chunkLength = glbBuffer.readUInt32LE(12);
+        const jsonString = glbBuffer.toString('utf8', 20, 20 + chunkLength);
+        const gltf = JSON.parse(jsonString);
 
         const meshNames = [];
         if (gltf.nodes) {
@@ -1509,9 +1670,13 @@ app.post('/api/showroom/staging/parse/:file', async (req, res) => {
     if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
 
     try {
+        console.log('[Staging] Parsing file:', filePath);
         const glbBuffer = await fs.promises.readFile(filePath);
-        const result = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: STAGING_DIR });
-        const categories = autoCategorizeMeshes(result.gltf);
+        const chunkLength = glbBuffer.readUInt32LE(12);
+        const jsonString = glbBuffer.toString('utf8', 20, 20 + chunkLength);
+        const gltf = JSON.parse(jsonString);
+        
+        const categories = autoCategorizeMeshes(gltf);
 
         // Build summary
         const summary = {};
@@ -1561,7 +1726,9 @@ app.get('/api/showroom/staging/tags/:file', async (req, res) => {
     }
 });
 
-// POST /api/showroom/staging/split/:file - Split staged GLB into category folders
+// POST /api/showroom/staging/split/:file - Split staged GLB into deep showroom hierarchy
+// Payload: { context, style, overlay?, meshCategories, categorySettings?, outputName? }
+// categorySettings maps category -> { subCategory?, grain? } for per-category overrides
 app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), async (req, res) => {
     const safeFile = req.params.file;
     if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
@@ -1570,161 +1737,62 @@ app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), a
     const rel = path.relative(STAGING_DIR, filePath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
 
-    const { style, meshCategories, outputName } = req.body;
+    const { context, style, overlay, meshCategories, categorySettings, outputName } = req.body;
+    if (!context || !SHOWROOM_CONTEXTS.includes(context)) return res.status(400).json({ success: false, error: 'Invalid context' });
     if (!style || !SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
+    if (style === 'face_frame' && overlay && !SHOWROOM_OVERLAYS.includes(overlay)) return res.status(400).json({ success: false, error: 'Invalid overlay' });
     if (!meshCategories || typeof meshCategories !== 'object') return res.status(400).json({ success: false, error: 'Missing mesh categories' });
 
     const baseName = outputName || path.basename(safeFile, '.glb');
     if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid output name' });
 
+    // Build destination paths for each unique category in meshCategories
+    const destinations = {};
+    const settings = categorySettings || {};
+    const uniqueCats = [...new Set(Object.values(meshCategories).filter(c => c !== 'ignore'))];
+
+    for (const cat of uniqueCats) {
+        const catSettings = settings[cat] || {};
+        let destParts;
+
+        if (DIRECT_CATEGORIES.includes(cat)) {
+            // Direct categories: context/category
+            destParts = [context, cat];
+        } else if (NON_OVERLAY_CATEGORIES.includes(cat)) {
+            // Non-overlay categories (finished_ends): context/style/category[/subCategory]
+            destParts = [context, style, cat];
+            if (catSettings.subCategory && SUB_CATEGORIES[cat]?.includes(catSettings.subCategory)) {
+                destParts.push(catSettings.subCategory);
+            }
+        } else if (OVERLAY_CATEGORIES.includes(cat)) {
+            if (style === 'face_frame' && overlay) {
+                // Overlay categories: context/style/overlay/category[/subCategory[/grain]]
+                destParts = [context, style, overlay, cat];
+            } else {
+                // Non-face-frame: context/style/category[/subCategory[/grain]]
+                destParts = [context, style, cat];
+            }
+            if (catSettings.subCategory && SUB_CATEGORIES[cat]?.includes(catSettings.subCategory)) {
+                destParts.push(catSettings.subCategory);
+                // Grain only for slab doors
+                if (cat === 'doors' && catSettings.subCategory === 'slab' && catSettings.grain && GRAIN_DIRS.includes(catSettings.grain)) {
+                    destParts.push(catSettings.grain);
+                }
+            }
+        } else {
+            // Unknown category - fall back to context/cat
+            destParts = [context, cat];
+        }
+
+        destinations[cat] = destParts.join('/');
+    }
+
     try {
-        const results = await splitGlbByCategories(filePath, meshCategories, style, baseName);
+        const results = await splitGlbByCategories(filePath, meshCategories, destinations, baseName);
         res.json({ success: true, results });
     } catch (e) {
         console.error(`[Staging] Split error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Failed to split GLB' });
-    }
-});
-
-// POST /api/showroom/doors/split - Further split a doors GLB into doors/drawer_fronts/paneled_ends
-app.post('/api/showroom/doors/split', express.json({ limit: '10mb' }), async (req, res) => {
-    const { style, file, meshCategories } = req.body;
-    if (!style || !SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
-    if (!file || !/^[a-zA-Z0-9\-_ ]+\.glb$/i.test(file)) return res.status(400).json({ success: false, error: 'Invalid file' });
-    if (!meshCategories || typeof meshCategories !== 'object') return res.status(400).json({ success: false, error: 'Missing mesh categories' });
-
-    const filePath = path.join(SHOWROOM_DIR, 'doors', style, file);
-    const rel = path.relative(SHOWROOM_DIR, filePath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
-
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'File not found' });
-
-    const baseName = path.basename(file, '.glb');
-
-    // Map sub-categories to their output folders
-    // doors -> stays in doors/, drawers -> drawers/, paneled_ends -> finished_ends/ (with metadata)
-    const subCatFolderMap = {
-        doors: 'doors',
-        drawer_fronts: 'drawers',
-        paneled_ends: 'finished_ends',
-        island_backs: 'island'
-    };
-
-    try {
-        const results = {};
-        const glbBuffer = await fs.promises.readFile(filePath);
-        const parseResult = await gltfPipeline.glbToGltf(glbBuffer, { resourceDirectory: path.dirname(filePath) });
-        const gltf = parseResult.gltf;
-
-        // Group nodes by sub-category
-        const subCatNodes = {};
-        for (let i = 0; i < gltf.nodes.length; i++) {
-            const node = gltf.nodes[i];
-            if (node.mesh === undefined) continue;
-            const name = node.name || `Node_${i}`;
-            const subCat = meshCategories[name];
-            if (!subCat || subCat === 'ignore') continue;
-            if (!subCatNodes[subCat]) subCatNodes[subCat] = [];
-            subCatNodes[subCat].push(i);
-        }
-
-        for (const [subCat, nodeIndices] of Object.entries(subCatNodes)) {
-            const targetFolder = subCatFolderMap[subCat] || subCat;
-
-            // Clone and filter gltf for this sub-category
-            const newGltf = JSON.parse(JSON.stringify(gltf));
-            const usedMeshes = new Set();
-            const usedMaterials = new Set();
-
-            for (const idx of nodeIndices) {
-                const node = newGltf.nodes[idx];
-                if (node.mesh !== undefined) usedMeshes.add(node.mesh);
-            }
-            for (const meshIdx of usedMeshes) {
-                const mesh = newGltf.meshes[meshIdx];
-                if (!mesh || !mesh.primitives) continue;
-                for (const prim of mesh.primitives) {
-                    if (prim.material !== undefined) usedMaterials.add(prim.material);
-                }
-            }
-
-            const meshRemap = {};
-            let mi = 0;
-            for (const idx of [...usedMeshes].sort((a, b) => a - b)) meshRemap[idx] = mi++;
-
-            const matRemap = {};
-            let mti = 0;
-            for (const idx of [...usedMaterials].sort((a, b) => a - b)) matRemap[idx] = mti++;
-
-            const newNodes = [];
-            for (const idx of nodeIndices) {
-                const node = { ...newGltf.nodes[idx] };
-                if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
-                // Standardize node name
-                if (!node.name) node.name = `Node_${idx}`;
-                node.children = undefined;
-                newNodes.push(node);
-            }
-
-            const newMeshes = [];
-            for (const oldIdx of [...usedMeshes].sort((a, b) => a - b)) {
-                const mesh = JSON.parse(JSON.stringify(newGltf.meshes[oldIdx]));
-                for (const prim of mesh.primitives || []) {
-                    if (prim.material !== undefined) prim.material = matRemap[prim.material];
-                }
-                newMeshes.push(mesh);
-            }
-
-            const newMaterials = [];
-            for (const oldIdx of [...usedMaterials].sort((a, b) => a - b)) {
-                newMaterials.push(newGltf.materials[oldIdx]);
-            }
-
-            newGltf.nodes = newNodes;
-            newGltf.meshes = newMeshes;
-            newGltf.materials = newMaterials;
-            newGltf.scenes = [{ name: `${subCat}_scene`, nodes: newNodes.map((_, i) => i) }];
-            newGltf.scene = 0;
-
-            try {
-                // Convert back to GLB (embed textures)
-                const glbResult = await gltfPipeline.gltfToGlb(newGltf, { resourceDirectory: path.dirname(filePath) });
-                const outputDir = path.join(SHOWROOM_DIR, targetFolder, style);
-                if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
-                const outFileName = `${baseName}_${subCat}.glb`;
-                const outputFile = path.join(outputDir, outFileName);
-                await fs.promises.writeFile(outputFile, glbResult.glb);
-
-                // Generate .tags.json for the split sub-category
-                const tags = {
-                    file: outFileName,
-                    category: targetFolder,
-                    style,
-                    extracted: false,
-                    meshTags: {},
-                    taggedMeshes: []
-                };
-                for (const idx of nodeIndices) {
-                    const name = gltf.nodes[idx].name || `Node_${idx}`;
-                    tags.meshTags[name] = 'tagged';
-                    tags.taggedMeshes.push(name);
-                }
-                const tagsPath = path.join(outputDir, `${baseName}_${subCat}.tags.json`);
-                await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
-
-                results[subCat] = { file: outFileName, folder: targetFolder, meshCount: nodeIndices.length };
-                console.log(`[Doors Split] ${subCat}: ${nodeIndices.length} meshes -> ${outputFile}`);
-            } catch (e) {
-                console.error(`[Doors Split] Failed ${subCat}: ${e.message}`);
-                results[subCat] = { error: e.message };
-            }
-        }
-
-        res.json({ success: true, results });
-    } catch (e) {
-        console.error(`[Doors Split] Error: ${e.message}`);
-        res.status(500).json({ success: false, error: 'Failed to split doors GLB' });
     }
 });
 

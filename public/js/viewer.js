@@ -1721,46 +1721,107 @@ function setupStyleToggle(elementId, onChange) {
 
 
 
-async function populateKitchenParts() {
+// ── Constants mirroring server.js ──────────────────────────────────────────
+// Must stay in sync with server.js:
+//   OVERLAY_CATEGORIES    = ['doors', 'drawer_fronts']
+//   NON_OVERLAY_CATEGORIES = ['finished_ends']  (sub-cats: flat, paneled)
+//   DIRECT_CATEGORIES     = ['base', 'crown', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor']
+const OVERLAY_CATEGORIES_V    = ['doors', 'drawer_fronts'];
+const NON_OVERLAY_CATEGORIES_V = ['finished_ends'];
+const DIRECT_CATEGORIES_V     = ['base', 'crown', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor'];
+const KITCHEN_CATS = [...DIRECT_CATEGORIES_V, ...OVERLAY_CATEGORIES_V, ...NON_OVERLAY_CATEGORIES_V];
+const ISLAND_CATS  = [...DIRECT_CATEGORIES_V, ...OVERLAY_CATEGORIES_V, ...NON_OVERLAY_CATEGORIES_V];
 
-    const kitchenCats = ['base', 'doors', 'drawer_fronts', 'drawers', 'crown', 'finished_ends', 'case_parts', 'wall', 'counter_top', 'floor'];
-    const autoLoadCats = ['base', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor']; // Always auto-load these // Always auto-load these
-
-    const overlaySection = document.getElementById('overlay-section');
-    if (overlaySection) {
-        overlaySection.style.display = (kitchenStyle === 'face_frame') ? '' : 'none';
+// Flatten a category tree node into flat entries for part buttons.
+// prefix: relative URL prefix up to (not incl.) the filename.
+function flattenCatTree(node, prefix) {
+    if (!node) return [];
+    if (Array.isArray(node.files)) {
+        return node.files.map(f => ({
+            label: f.name, file: f.file,
+            deepPath: `${prefix}/${f.file}`, subLabel: null
+        }));
     }
+    const entries = [];
+    for (const [key, child] of Object.entries(node)) {
+        if (!child) continue;
+        if (Array.isArray(child.files)) {
+            child.files.forEach(f => entries.push({
+                label: f.name, file: f.file,
+                deepPath: `${prefix}/${key}/${f.file}`,
+                subLabel: key.replace(/_/g, ' ')
+            }));
+        } else if (typeof child === 'object') {
+            // Two levels: slab → long/cross
+            for (const [grain, leaf] of Object.entries(child)) {
+                if (leaf && Array.isArray(leaf.files)) {
+                    leaf.files.forEach(f => entries.push({
+                        label: f.name, file: f.file,
+                        deepPath: `${prefix}/${key}/${grain}/${f.file}`,
+                        subLabel: `${key.replace(/_/g,' ')} – ${grain}`
+                    }));
+                }
+            }
+        }
+    }
+    return entries;
+}
 
-    const promises = kitchenCats.map(cat => {
+// Resolve a cat node + URL prefix from the categories tree.
+// Returns { node, prefix } or null if no data exists.
+function resolveCatNode(catData, cat, style, overlay) {
+    if (!catData) return null;
+    // Direct categories live at ctx root level
+    if (DIRECT_CATEGORIES_V.includes(cat)) {
+        return catData[cat] ? { node: catData[cat], prefix: cat } : null;
+    }
+    if (!style) return null;
+    if (style === 'face_frame') {
+        // Overlay categories: ctx/face_frame/<overlay>/<cat>
+        if (OVERLAY_CATEGORIES_V.includes(cat)) {
+            const ov = overlay || 'full_overlay';
+            const node = catData[style]?.[ov]?.[cat];
+            return node ? { node, prefix: `${style}/${ov}/${cat}` } : null;
+        }
+        // Non-overlay categories: ctx/face_frame/<cat>
+        if (NON_OVERLAY_CATEGORIES_V.includes(cat)) {
+            const node = catData[style]?.[cat];
+            return node ? { node, prefix: `${style}/${cat}` } : null;
+        }
+    } else {
+        // frameless / full_inset: overlay doesn't apply
+        const node = catData[style]?.[cat];
+        return node ? { node, prefix: `${style}/${cat}` } : null;
+    }
+    return null;
+}
 
-        const selector = `#kitchen-parts .part-options[data-category="${cat}"]`;
-        const container = document.querySelector(selector);
+async function populateContextParts(ctx, panelId, style, overlay) {
+    const catData = showroomCategories?.[ctx];
+    const categories = ctx === 'kitchen' ? KITCHEN_CATS : ISLAND_CATS;
+
+    const overlaySection = document.getElementById(
+        ctx === 'kitchen' ? 'overlay-section' : 'island-overlay-section'
+    );
+    if (overlaySection) overlaySection.style.display = (style === 'face_frame') ? '' : 'none';
+
+    const promises = categories.map(cat => {
+        const container = document.querySelector(`#${panelId} .part-options[data-category="${cat}"]`);
+        const catWrapper = document.querySelector(`#${panelId} .part-category[data-category="${cat}"]`);
         if (!container) return Promise.resolve();
 
-        let parts = (showroomCategories[cat] && showroomCategories[cat][kitchenStyle]) || [];
+        const resolved = resolveCatNode(catData, cat, style, overlay);
+        const entries  = resolved ? flattenCatTree(resolved.node, `${ctx}/${resolved.prefix}`) : [];
 
-        // Filter parts by overlay if applicable (e.g. if the file name specifies overlay)
-        if (kitchenStyle === 'face_frame') {
-            const isFull = overlayStyle === 'full';
-            parts = parts.filter(p => {
-                const lower = p.name.toLowerCase() + p.file.toLowerCase();
-                // If it explicitly mentions the OTHER overlay, filter it out
-                if (isFull && (lower.includes('half') || lower.includes('1_2') || lower.includes('1/2'))) return false;
-                if (!isFull && (lower.includes('full') || lower.includes('11_16') || lower.includes('11/16'))) return false;
-                return true;
-            });
-        }
+        if (catWrapper) catWrapper.style.display = entries.length > 0 ? '' : 'none';
+        renderPartOptions(container, cat, ctx, entries);
 
-        renderPartOptions(container, cat, kitchenStyle, parts);
-
-        // Auto-load logic
         const buttons = container.querySelectorAll('.part-option-btn');
         if (buttons.length > 0) {
             const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
             if (!hasActive) {
-                // Manually trigger the load instead of a synthetic click to capture the Promise
                 const btn = buttons[0];
-                return loadShowroomPart(cat, kitchenStyle, btn.dataset.file, btn);
+                return loadShowroomPart(cat, ctx, btn.dataset.deeppath, btn);
             }
         }
         return Promise.resolve();
@@ -1768,152 +1829,103 @@ async function populateKitchenParts() {
     await Promise.all(promises);
 }
 
-async function populateIslandParts() {
-
-    const container = document.querySelector(`#island-parts .part-options[data-category="island"]`);
-    if (!container) return Promise.resolve();
-
-    const islandOverlaySection = document.getElementById('island-overlay-section');
-    if (islandOverlaySection) {
-        islandOverlaySection.style.display = (islandStyle === 'face_frame') ? '' : 'none';
-    }
-
-    let parts = (showroomCategories.island && showroomCategories.island[islandStyle]) || [];
-
-    if (islandStyle === 'face_frame') {
-        const isFull = islandOverlayStyle === 'full';
-        parts = parts.filter(p => {
-            const lower = p.name.toLowerCase() + p.file.toLowerCase();
-            if (isFull && (lower.includes('half') || lower.includes('1_2') || lower.includes('1/2'))) return false;
-            if (!isFull && (lower.includes('full') || lower.includes('11_16') || lower.includes('11/16'))) return false;
-            return true;
-        });
-    }
-
-    renderPartOptions(container, 'island', islandStyle, parts);
-
-    const buttons = container.querySelectorAll('.part-option-btn');
-    if (buttons.length > 0) {
-        const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
-        if (!hasActive) {
-            const btn = buttons[0];
-            return loadShowroomPart('island', islandStyle, btn.dataset.file, btn);
-        }
-    }
-    return Promise.resolve();
+async function populateKitchenParts() {
+    const ov = overlayStyle === 'full' ? 'full_overlay' : 'half_overlay';
+    await populateContextParts('kitchen', 'kitchen-parts', kitchenStyle, ov);
 }
-function renderPartOptions(container, category, style, parts) {
+
+async function populateIslandParts() {
+    const ov = islandOverlayStyle === 'full' ? 'full_overlay' : 'half_overlay';
+    await populateContextParts('island', 'island-parts', islandStyle, ov);
+}
+
+function renderPartOptions(container, category, ctx, entries) {
     container.innerHTML = '';
-    if (parts.length === 0) {
+    if (entries.length === 0) {
         const span = document.createElement('span');
         span.className = 'part-options-empty';
         span.textContent = 'No parts available';
         container.appendChild(span);
         return;
     }
-    parts.forEach(part => {
+    let lastSubLabel = undefined;
+    entries.forEach(entry => {
+        if (entry.subLabel !== null && entry.subLabel !== lastSubLabel) {
+            const lbl = document.createElement('div');
+            lbl.className = 'part-sub-label';
+            lbl.textContent = entry.subLabel;
+            container.appendChild(lbl);
+            lastSubLabel = entry.subLabel;
+        }
         const btn = document.createElement('button');
         btn.className = 'part-option-btn';
-        btn.textContent = part.name;
-        btn.dataset.file = part.file;
+        btn.textContent = entry.label;
+        btn.dataset.deeppath = entry.deepPath;
 
-        // Check if already active
-        const current = showroomParts[category];
-        if (current && current.file === part.file && current.style === style) {
-            btn.classList.add('active');
-        }
+        const current = showroomParts[`${ctx}/${category}`];
+        if (current && current.deepPath === entry.deepPath) btn.classList.add('active');
 
-        btn.onclick = () => loadShowroomPart(category, style, part.file, btn);
+        btn.onclick = () => loadShowroomPart(category, ctx, entry.deepPath, btn);
         container.appendChild(btn);
     });
 }
 
-async function loadShowroomPart(category, style, file, btnEl) {
-    if (!renderer) return;
+async function loadShowroomPart(category, ctx, deepPath, btnEl) {
+    if (!renderer || !deepPath) return;
+    const partKey = `${ctx}/${category}`;
+
     if (btnEl) {
-        // Deactivate siblings
         btnEl.parentElement.querySelectorAll('.part-option-btn').forEach(b => b.classList.remove('active'));
         btnEl.classList.add('active', 'loading');
     }
 
-    // Remove previous part for this category
-    if (showroomParts[category]) {
-        // If removing finished_ends, restore hidden base meshes
-        if (category === 'finished_ends') {
-            restoreBasePaneledEndMeshes();
-        }
-        scene.remove(showroomParts[category].group);
-        // Remove materials from tracking
+    if (showroomParts[partKey]) {
+        if (category === 'finished_ends') restoreBasePaneledEndMeshes(ctx);
+        scene.remove(showroomParts[partKey].group);
         const oldMeshes = new Set();
-        showroomParts[category].group.traverse(c => { if (c.isMesh) oldMeshes.add(c); });
+        showroomParts[partKey].group.traverse(c => { if (c.isMesh) oldMeshes.add(c); });
         detectedMaterials = detectedMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
-        kitchenMaterials = kitchenMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
-        islandMaterials = islandMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
-        delete showroomParts[category];
+        kitchenMaterials  = kitchenMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
+        islandMaterials   = islandMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
+        delete showroomParts[partKey];
     }
 
-    // Load tags
     let tagData = null;
     try {
-        const tagsResp = await fetch(`/api/showroom/tags/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`);
-        if (tagsResp.ok) {
-            const td = await tagsResp.json();
-            if (td.success) tagData = td.tags;
-        }
+        const tagsResp = await fetch(`/api/showroom/tags/${deepPath}`);
+        if (tagsResp.ok) { const td = await tagsResp.json(); if (td.success) tagData = td.tags; }
     } catch { /* no tags */ }
 
-    // Load GLB
-    const glbUrl = `/showroom/${encodeURIComponent(category)}/${encodeURIComponent(style)}/${encodeURIComponent(file)}`;
+    const glbUrl = `/showroom/${deepPath}`;
     const loader = new GLTFLoader();
-
-    // Ensure background is correct
     if (scene) scene.background = new THREE.Color(0x111111);
+    const isIsland = (ctx === 'island');
 
     return new Promise((resolve) => {
         loader.load(glbUrl, (gltf) => {
             const group = gltf.scene;
             const materialMap = new Map();
-            const isIsland = (category === 'island');
-
             let meshIdx = 0;
             group.traverse((child) => {
                 if (!child.isMesh) return;
-
-                // Standardize node name for index-based tag matching
                 let originalIndex = meshIdx;
-                if (gltf.parser && gltf.parser.associations) {
+                if (gltf.parser?.associations) {
                     const assoc = gltf.parser.associations.get(child);
                     if (assoc && assoc.nodes !== undefined) originalIndex = assoc.nodes;
                 }
-
-                if (!child.name || child.name.startsWith('Mesh_')) {
-                    child.name = `Node_${originalIndex}`;
-                }
+                if (!child.name || child.name.startsWith('Mesh_')) child.name = `Node_${originalIndex}`;
                 meshIdx++;
 
-                // Tag-based visibility: hide meshes not tagged for this category
-                if (tagData && tagData.taggedMeshes) {
-                    const meshName = child.name || '';
-                    if (!tagData.taggedMeshes.includes(meshName)) {
-                        child.visible = false;
-                        return;
-                    }
+                if (tagData?.taggedMeshes && !tagData.taggedMeshes.includes(child.name)) {
+                    child.visible = false; return;
                 }
 
                 const prevMat = child.material;
                 const hasTexture = !!prevMat.map;
-
-                // Check if texture should be stripped (not in Hidden folder)
-                // In showroom mode, strip ALL textures to milky gray
-                // Hidden textures are identified post-matching, so for now strip all
                 child.material = new THREE.MeshLambertMaterial({
-                    color: MILKY_GRAY,
-                    side: THREE.DoubleSide,
-                    polygonOffset: true,
-                    polygonOffsetFactor: 1,
-                    polygonOffsetUnits: 1
+                    color: MILKY_GRAY, side: THREE.DoubleSide,
+                    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
                 });
-
                 if (hasTexture) {
                     const texSrc = prevMat.map?.image?.src || prevMat.map?.uuid || `tex_${materialMap.size}`;
                     if (materialMap.has(texSrc)) {
@@ -1921,16 +1933,10 @@ async function loadShowroomPart(category, style, file, btnEl) {
                     } else {
                         materialMap.set(texSrc, {
                             name: prevMat.name || child.name || `Material_${materialMap.size}`,
-                            material: child.material,
-                            meshes: [child],
-                            hasTexture: true,
-                            originalMap: null, // stripped
-                            originalColor: new THREE.Color(MILKY_GRAY),
-                            matchedName: null,
-                            originalMatchedName: null,
-                            isHidden: false,
-                            isIsland: isIsland,
-                            showroomCategory: category
+                            material: child.material, meshes: [child], hasTexture: true,
+                            originalMap: null, originalColor: new THREE.Color(MILKY_GRAY),
+                            matchedName: null, originalMatchedName: null, isHidden: false,
+                            isIsland, showroomCategory: category
                         });
                     }
                 }
@@ -1938,27 +1944,18 @@ async function loadShowroomPart(category, style, file, btnEl) {
 
             const newMaterials = Array.from(materialMap.values());
             detectedMaterials.push(...newMaterials);
-            if (isIsland) {
-                islandMaterials.push(...newMaterials);
-            } else {
-                kitchenMaterials.push(...newMaterials);
-            }
+            if (isIsland) islandMaterials.push(...newMaterials);
+            else kitchenMaterials.push(...newMaterials);
 
             scene.add(group);
-            showroomParts[category] = { group, style, file, tagData };
+            showroomParts[partKey] = { group, deepPath, ctx, category, tagData };
 
-            // Paneled ends: when loading a finished_ends part that is a paneled end,
-            // hide the base cabinet meshes marked as paneled_end_replaceable
-            if (category === 'finished_ends') {
-                handlePaneledEndSwap(file);
-            }
-
-
+            if (category === 'finished_ends') handlePaneledEndSwap(ctx, deepPath);
 
             if (btnEl) btnEl.classList.remove('loading');
             resolve();
         }, undefined, (err) => {
-            console.error(`Failed to load showroom part: ${category}/${style}/${file}`, err);
+            console.error(`[Showroom] Failed to load /showroom/${deepPath}`, err);
             if (btnEl) btnEl.classList.remove('loading');
             resolve();
         });
@@ -1967,19 +1964,10 @@ async function loadShowroomPart(category, style, file, btnEl) {
 
 // --- PANELED END REPLACEMENT LOGIC ---
 
-function handlePaneledEndSwap(finishedEndsFile) {
-    // Check if this is a paneled end file (from doors split)
-    const isPaneledEnd = /_paneled_ends\.glb$/i.test(finishedEndsFile);
-    if (!isPaneledEnd) {
-        // Loading plain finished ends — restore any hidden base meshes
-        restoreBasePaneledEndMeshes();
-        return;
-    }
-
-    // It's a paneled end — hide the base cabinet's replaceable meshes
-    const basePart = showroomParts['base'];
-    if (!basePart || !basePart.tagData || !basePart.tagData.paneledEndReplacements) return;
-
+function handlePaneledEndSwap(ctx, deepPath) {
+    if (!/paneled/i.test(deepPath)) { restoreBasePaneledEndMeshes(ctx); return; }
+    const basePart = showroomParts[`${ctx}/base`];
+    if (!basePart?.tagData?.paneledEndReplacements) return;
     const replaceableNames = new Set(basePart.tagData.paneledEndReplacements);
     basePart.group.traverse(child => {
         if (child.isMesh && replaceableNames.has(child.name)) {
@@ -1989,8 +1977,8 @@ function handlePaneledEndSwap(finishedEndsFile) {
     });
 }
 
-function restoreBasePaneledEndMeshes() {
-    const basePart = showroomParts['base'];
+function restoreBasePaneledEndMeshes(ctx) {
+    const basePart = showroomParts[`${ctx}/base`];
     if (!basePart) return;
     basePart.group.traverse(child => {
         if (child.isMesh && child.userData._hiddenByPaneledEnd) {
@@ -1999,6 +1987,9 @@ function restoreBasePaneledEndMeshes() {
         }
     });
 }
+
+
+
 
 function reframeShowroomCamera() {
     const box = new THREE.Box3();
@@ -2041,10 +2032,11 @@ async function saveShowroomConfig() {
         }
     };
 
-    // Record selected parts
-    for (const [cat, part] of Object.entries(showroomParts)) {
-        const section = cat === 'island' ? config.island : config.kitchen;
-        section.parts[cat] = { style: part.style, file: part.file };
+    // Record selected parts ( partKey = "ctx/category" )
+    for (const [partKey, part] of Object.entries(showroomParts)) {
+        const [ctx, cat] = partKey.split('/');
+        const section = ctx === 'island' ? config.island : config.kitchen;
+        section.parts[partKey] = { deepPath: part.deepPath };
     }
 
     // Record texture/color assignments
@@ -2116,8 +2108,11 @@ async function loadShowroomConfig(pin) {
         // Load parts
         const loadPromises = [];
         const allParts = { ...(config.kitchen?.parts || {}), ...(config.island?.parts || {}) };
-        for (const [cat, partInfo] of Object.entries(allParts)) {
-            loadPromises.push(loadShowroomPart(cat, partInfo.style, partInfo.file, null));
+        for (const [partKey, partInfo] of Object.entries(allParts)) {
+            const [ctx, cat] = partKey.split('/');
+            if (partInfo.deepPath) {
+                loadPromises.push(loadShowroomPart(cat, ctx, partInfo.deepPath, null));
+            }
         }
         await Promise.all(loadPromises);
 

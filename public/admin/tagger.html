@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KKC Showroom - Part Tagger</title>
     <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
-    <link rel="stylesheet" href="/css/tagger.css?v=207">
+    <link rel="stylesheet" href="/css/tagger.css?v=209">
 </head>
 <body>
     <div id="sidebar">
@@ -15,12 +15,11 @@
         <div class="mode-tabs">
             <button class="mode-tab active" data-mode="staging">Staging</button>
             <button class="mode-tab" data-mode="category">Category</button>
-            <button class="mode-tab" data-mode="doors">Doors</button>
         </div>
 
         <!-- Staging Mode -->
         <div id="staging-panel" class="mode-panel active">
-            <p class="sidebar-hint">Load a staged GLB, auto-parse by part type, review, then split &amp; deploy to category folders.</p>
+            <p class="sidebar-hint">Load a staged GLB, auto-parse by part type, configure targets, then split &amp; deploy.</p>
             <div class="sidebar-section">
                 <label>Staged Files:</label>
                 <select id="sel-staging-file">
@@ -31,14 +30,31 @@
 
             <div id="staging-actions" style="display:none">
                 <hr>
+                <!-- Context + Style -->
                 <div class="sidebar-section">
-                    <label>Target Style:</label>
+                    <label>Context:</label>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active" data-context="kitchen" id="ctx-kitchen">Kitchen</button>
+                        <button class="toggle-btn" data-context="island" id="ctx-island">Island</button>
+                    </div>
+                </div>
+                <div class="sidebar-section">
+                    <label>Style:</label>
                     <select id="sel-staging-style">
                         <option value="face_frame">Face Frame</option>
                         <option value="full_inset">Full Inset</option>
                         <option value="frameless">Frameless</option>
                     </select>
                 </div>
+                <!-- Overlay (face_frame only) -->
+                <div class="sidebar-section" id="overlay-section" style="display:none">
+                    <label>Overlay:</label>
+                    <select id="sel-staging-overlay">
+                        <option value="full_overlay">Full Overlay</option>
+                        <option value="half_overlay">Half Overlay</option>
+                    </select>
+                </div>
+
                 <button id="btn-auto-parse" class="btn-primary btn-parse">Auto-Parse by Name</button>
 
                 <div id="parse-summary" style="display:none">
@@ -48,7 +64,14 @@
 
                 <div class="tag-legend" id="staging-legend"></div>
 
-                <div class="sidebar-section">
+                <!-- Per-category settings: shown after parse -->
+                <div id="category-settings" style="display:none">
+                    <hr>
+                    <p class="sidebar-hint" style="margin-bottom:8px">Configure destination for each detected category:</p>
+                    <div id="category-rows"></div>
+                </div>
+
+                <div class="sidebar-section" style="margin-top:12px">
                     <label>Output Name:</label>
                     <input type="text" id="staging-output-name" placeholder="e.g. shaker" class="text-input">
                 </div>
@@ -59,15 +82,52 @@
 
         <!-- Category Mode -->
         <div id="category-panel" class="mode-panel">
-            <p class="sidebar-hint">Tag meshes for a specific showroom category (tagged/ignore).</p>
+            <p class="sidebar-hint">Load and re-tag meshes for a specific showroom path.</p>
+
+            <!-- Context -->
             <div class="sidebar-section">
-                <label>Category:</label>
-                <select id="sel-category"></select>
+                <label>Context:</label>
+                <select id="cat-sel-context">
+                    <option value="kitchen">Kitchen</option>
+                    <option value="island">Island</option>
+                </select>
             </div>
+            <!-- Style -->
             <div class="sidebar-section">
                 <label>Style:</label>
-                <select id="sel-style"></select>
+                <select id="cat-sel-style">
+                    <option value="face_frame">Face Frame</option>
+                    <option value="full_inset">Full Inset</option>
+                    <option value="frameless">Frameless</option>
+                </select>
             </div>
+            <!-- Overlay (face_frame only) -->
+            <div class="sidebar-section" id="cat-overlay-section" style="display:none">
+                <label>Overlay:</label>
+                <select id="cat-sel-overlay">
+                    <option value="full_overlay">Full Overlay</option>
+                    <option value="half_overlay">Half Overlay</option>
+                </select>
+            </div>
+            <!-- Category -->
+            <div class="sidebar-section">
+                <label>Category:</label>
+                <select id="cat-sel-category"></select>
+            </div>
+            <!-- Sub-category -->
+            <div class="sidebar-section" id="cat-subcategory-section" style="display:none">
+                <label>Sub-Category:</label>
+                <select id="cat-sel-subcategory"></select>
+            </div>
+            <!-- Grain (slab doors only) -->
+            <div class="sidebar-section" id="cat-grain-section" style="display:none">
+                <label>Grain:</label>
+                <select id="cat-sel-grain">
+                    <option value="horizontal">Horizontal</option>
+                    <option value="vertical">Vertical</option>
+                </select>
+            </div>
+            <!-- File -->
             <div class="sidebar-section">
                 <label>File:</label>
                 <select id="sel-file">
@@ -85,33 +145,6 @@
                 </div>
                 <div class="tag-stats" id="tag-stats"></div>
                 <button id="btn-save" class="btn-primary btn-save">Save Tags</button>
-            </div>
-        </div>
-
-        <!-- Doors Refinement Mode -->
-        <div id="doors-panel" class="mode-panel">
-            <p class="sidebar-hint">Sub-categorize door meshes into Doors, Drawer Fronts, Paneled Ends, or Island Backs.</p>
-            <div class="sidebar-section">
-                <label>Style:</label>
-                <select id="sel-doors-style">
-                    <option value="face_frame">Face Frame</option>
-                    <option value="full_inset">Full Inset</option>
-                    <option value="frameless">Frameless</option>
-                </select>
-            </div>
-            <div class="sidebar-section">
-                <label>Doors File:</label>
-                <select id="sel-doors-file">
-                    <option value="">-- Select --</option>
-                </select>
-            </div>
-            <button id="btn-load-doors" class="btn-primary">Load Doors GLB</button>
-
-            <div id="doors-actions" style="display:none">
-                <hr>
-                <div class="tag-legend" id="doors-legend"></div>
-                <div class="tag-stats" id="doors-stats"></div>
-                <button id="btn-split-doors" class="btn-primary btn-save">Split &amp; Apply</button>
             </div>
         </div>
 
@@ -150,6 +183,6 @@
         }
     }
     </script>
-    <script type="module" src="/js/tagger.js?v=207"></script>
+    <script type="module" src="/js/tagger.js?v=209"></script>
 </body>
 </html>
