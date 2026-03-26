@@ -11,6 +11,7 @@ const jobsAuth = require('./middleware/jobsAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
 const { popcount32, hammingDistance } = require('./utils/hash');
 const gltfPipeline = require('gltf-pipeline');
+const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
@@ -1122,6 +1123,9 @@ async function processQueue() {
             console.log(`SUCCESS: ${roomName} is live.`);
             // Generate texture manifest for client-side consumption
             await generateTextureManifest(finalGlb);
+
+            // Generate lower poly LOD meshes
+            await generateLods(finalGlb);
         }
         isConverting = false;
         processQueue();
