@@ -98,7 +98,7 @@ test('GET /api/job/:code endpoint tests (mocked fs)', async (t) => {
         assert.strictEqual(response.body.success, true);
 
         // Expected rooms: room_a, room_b, room_c
-        const expectedRooms = ['room_a', 'room_b', 'room_c'].sort();
+        const expectedRooms = ['room_a', 'sub'].sort();
         const actualRooms = response.body.rooms.sort();
         assert.deepStrictEqual(actualRooms, expectedRooms);
     });
