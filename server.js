@@ -545,6 +545,7 @@ async function buildTextureHashIndex() {
         }
 
         textureHashCache = index;
+        app.locals.clearTextureCache = () => { textureHashCache = null; };
         textureHashCacheTime = Date.now();
         textureHashInProgress = null;
         return index;
@@ -670,6 +671,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
             matched: !!isMatched,
             bestMatch: isMatched ? {
                 name: bestMatch.name,
+                file: bestMatch.file,
                 url: bestMatch.url,
                 urlMedium: bestMatch.urlMedium,
                 urlLow: bestMatch.urlLow,
@@ -991,6 +993,7 @@ async function generateTextureManifest(glbPath) {
                     matched: isMatched,
                     bestMatch: isMatched ? {
                         name: bestMatch.name,
+                        file: bestMatch.file,
                         url: bestMatch.url,
                         urlMedium: bestMatch.urlMedium,
                         urlLow: bestMatch.urlLow,
