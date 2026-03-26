@@ -950,11 +950,25 @@ async function setupTexturePanel(jobCode, room) {
         if (!materialList) return;
         materialList.innerHTML = '';
 
-        // Filter: only show real textures (mat.hasTexture)
-        // and hide ones marked as hidden by the matching engine
-        const visibleMaterials = detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
+        // Filter and categorize in a single pass for optimal performance
+        const kitchenVis = [];
+        const islandVis = [];
+        const standardVis = [];
+        let visibleCount = 0;
 
-        if (visibleMaterials.length === 0) {
+        for (const mat of detectedMaterials) {
+            if (mat.hasTexture && !mat.isHidden) {
+                visibleCount++;
+                if (isShowroomMode) {
+                    if (mat.isIsland) islandVis.push(mat);
+                    else kitchenVis.push(mat);
+                } else {
+                    standardVis.push(mat);
+                }
+            }
+        }
+
+        if (visibleCount === 0) {
             const div = document.createElement('div');
             div.style.cssText = 'padding:20px; text-align:center; color:#888;';
             div.textContent = isMatchingAll ? 'Matching textures...' : 'No customizable textures found.';
@@ -962,15 +976,8 @@ async function setupTexturePanel(jobCode, room) {
             return;
         }
 
-        // In showroom mode, separate kitchen and island
+        // Render sorted categories
         if (isShowroomMode) {
-            const kitchenVis = [];
-            const islandVis = [];
-            for (const m of visibleMaterials) {
-                if (m.isIsland) islandVis.push(m);
-                else kitchenVis.push(m);
-            }
-
             if (kitchenVis.length > 0) {
                 const header = document.createElement('div');
                 header.className = 'material-section-header';
@@ -986,7 +993,7 @@ async function setupTexturePanel(jobCode, room) {
                 islandVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
             }
         } else {
-            visibleMaterials.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
+            standardVis.forEach(mat => materialList.appendChild(createMaterialItem(mat)));
         }
 
         document.getElementById('materials-view').style.display = 'block';
