@@ -260,6 +260,7 @@ app.get('/api/job/:code/:room/textures', async (req, res) => {
 // Perceptual hash cache
 let textureHashCache = null;
 let textureHashCacheTime = 0;
+let textureHashInProgress = null;
 const HASH_CACHE_TTL = 60000; // 1 minute
 
 /**
@@ -394,94 +395,98 @@ async function buildTextureHashIndex() {
         return textureHashCache;
     }
 
-    const index = {};
+    if (textureHashInProgress) return textureHashInProgress;
 
-    try {
-        const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.isDirectory() && entry.name !== 'Uncategorized') {
+    textureHashInProgress = (async () => {
+        const index = {};
+        try {
+            const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
+
+            // Process categories in parallel
+            await Promise.all(entries.map(async (entry) => {
+                if (!entry.isDirectory() || entry.name === 'Uncategorized') return;
+
                 const categoryPath = path.join(TEXTURES_DIR, entry.name);
                 const isHidden = entry.name === 'Hidden';
                 const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
-                index[entry.name] = [];
+                const categoryTextures = [];
 
-                // 1. Process main textures first
-                for (const item of items) {
-                    if (item.isDirectory()) continue;
+                // 1. Process main textures first in parallel
+                await Promise.all(items.map(async (item) => {
+                    if (item.isDirectory()) return;
                     const file = item.name;
-                    if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+                    if (file === 'Thumbs.db' || file.startsWith('.')) return;
                     const ext = path.extname(file).toLowerCase();
-                    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-                        try {
-                            const filePath = path.join(categoryPath, file);
-                            const buffer = await fs.promises.readFile(filePath);
-                            const hash = await computePhash(buffer);
-                            index[entry.name].push({
-                                name: path.basename(file, ext),
-                                file: file,
-                                url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
-                                hidden: isHidden,
-                                hash: hash.toString(),
-                                // Pre-split 64-bit hash into two 32-bit integers for high-performance comparison
-                                hLow: Number(hash & 0xFFFFFFFFn),
-                                hHigh: Number(hash >> 32n)
-                            });
-                        } catch (e) {
-                            console.error(`[Texture] Hash error for ${file}: ${e.message}`);
-                        }
-                    }
-                }
+                    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
 
-                // 2. Process variant hashes in the 'hashes/' sub-folder
+                    try {
+                        const filePath = path.join(categoryPath, file);
+                        const buffer = await fs.promises.readFile(filePath);
+                        const hash = await computePhash(buffer);
+                        categoryTextures.push({
+                            name: path.basename(file, ext),
+                            file: file,
+                            url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
+                            hidden: isHidden,
+                            hash: hash.toString(),
+                            hLow: Number(hash & 0xFFFFFFFFn),
+                            hHigh: Number(hash >> 32n)
+                        });
+                    } catch (e) {
+                        console.error(`[Texture] Hash error for ${file}: ${e.message}`);
+                    }
+                }));
+
+                index[entry.name] = categoryTextures;
+
+                // 2. Process variant hashes in the 'hashes/' sub-folder in parallel (once main textures are indexed)
                 const hashFolderPath = path.join(categoryPath, 'hashes');
                 if (fs.existsSync(hashFolderPath)) {
                     const variantFiles = await fs.promises.readdir(hashFolderPath);
-                    for (const file of variantFiles) {
-                        if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+                    await Promise.all(variantFiles.map(async (file) => {
+                        if (file === 'Thumbs.db' || file.startsWith('.')) return;
                         const ext = path.extname(file).toLowerCase();
-                        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-                            try {
-                                const filePath = path.join(hashFolderPath, file);
-                                const buffer = await fs.promises.readFile(filePath);
-                                const hash = await computePhash(buffer);
+                        if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
 
-                                // Identify canonical texture by stripping "_N" suffix (e.g., "Wild Cherry_1.jpg" -> "Wild Cherry")
-                                let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
+                        try {
+                            const filePath = path.join(hashFolderPath, file);
+                            const buffer = await fs.promises.readFile(filePath);
+                            const hash = await computePhash(buffer);
+                            let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
+                            const canonical = index[entry.name].find(t => t.name === canonicalName);
 
-                                // Find the canonical entry in the index (must match name exactly)
-                                const canonical = index[entry.name].find(t => t.name === canonicalName);
-
-                                if (canonical) {
-                                    index[entry.name].push({
-                                        name: canonical.name, // Return canonical name
-                                        file: canonical.file, // Return canonical file
-                                        url: canonical.url,   // Return canonical URL
-                                        hidden: canonical.hidden,
-                                        hash: hash.toString(),
-                                        // Pre-split for performance
-                                        hLow: Number(hash & 0xFFFFFFFFn),
-                                        hHigh: Number(hash >> 32n),
-                                        isVariant: true,
-                                        variantFile: file
-                                    });
-                                } else {
-                                    console.warn(`[Texture] Variant ${file} found but no canonical texture '${canonicalName}' exists in ${entry.name}.`);
-                                }
-                            } catch (e) {
-                                console.error(`[Texture] Variant hash error for ${file}: ${e.message}`);
+                            if (canonical) {
+                                index[entry.name].push({
+                                    name: canonical.name,
+                                    file: canonical.file,
+                                    url: canonical.url,
+                                    hidden: canonical.hidden,
+                                    hash: hash.toString(),
+                                    hLow: Number(hash & 0xFFFFFFFFn),
+                                    hHigh: Number(hash >> 32n),
+                                    isVariant: true,
+                                    variantFile: file
+                                });
+                            } else {
+                                console.warn(`[Texture] Variant ${file} found but no canonical texture '${canonicalName}' exists in ${entry.name}.`);
                             }
+                        } catch (e) {
+                            console.error(`[Texture] Variant hash error for ${file}: ${e.message}`);
                         }
-                    }
+                    }));
                 }
-            }
+            }));
+        } catch (e) {
+            console.error(`[Texture] Index build error: ${e.message}`);
         }
-    } catch (e) {
-        console.error(`[Texture] Index build error: ${e.message}`);
-    }
 
-    textureHashCache = index;
-    textureHashCacheTime = now;
-    return index;
+        textureHashCache = index;
+        textureHashCacheTime = Date.now();
+        textureHashInProgress = null;
+        return index;
+    })();
+
+    return textureHashInProgress;
 }
 
 // GET /api/textures - List all categories
@@ -771,16 +776,16 @@ async function extractTexturesFromDaeImages(daeFilePath) {
     const files = await fs.promises.readdir(imagesDir);
     let extracted = 0;
 
-    for (const file of files) {
+    await Promise.all(files.map(async (file) => {
         // Skip Thumbs.db and system files
-        if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+        if (file === 'Thumbs.db' || file.startsWith('.')) return;
         const ext = path.extname(file).toLowerCase();
         if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
             const srcPath = path.join(imagesDir, file);
             const destPath = path.join(uncategorizedDir, file);
 
             // Avoid duplicates
-            if (fs.existsSync(destPath)) continue;
+            if (fs.existsSync(destPath)) return;
 
             try {
                 const buffer = await fs.promises.readFile(srcPath);
@@ -811,7 +816,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
                 console.error(`[DAE Texture] Error processing ${file}: ${e.message}`);
             }
         }
-    }
+    }));
 
     if (extracted > 0) {
         textureHashCache = null; // Invalidate cache since new textures were added
@@ -854,15 +859,15 @@ async function generateTextureManifest(glbPath) {
             return Buffer.from(glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + bufferView.byteLength));
         };
 
-        for (const gltfMat of gltf.materials) {
+        await Promise.all(gltf.materials.map(async (gltfMat) => {
             try {
                 const matName = gltfMat.name || '';
                 const pbr = gltfMat.pbrMetallicRoughness;
-                if (!pbr || !pbr.baseColorTexture) continue;
+                if (!pbr || !pbr.baseColorTexture) return;
 
                 const textureIdx = pbr.baseColorTexture.index;
                 const imageIdx = gltf.textures && gltf.textures[textureIdx] ? gltf.textures[textureIdx].source : undefined;
-                if (imageIdx === undefined) continue;
+                if (imageIdx === undefined) return;
 
                 // Reuse cached hash for this image index
                 let inLow, inHigh;
@@ -870,7 +875,7 @@ async function generateTextureManifest(glbPath) {
                     ({ inLow, inHigh } = imageHashCache.get(imageIdx));
                 } else {
                     const imageData = getImageData(imageIdx);
-                    if (!imageData || imageData.length === 0) continue;
+                    if (!imageData || imageData.length === 0) return;
                     const inputHash = await computePhash(imageData);
                     inLow = Number(inputHash & 0xFFFFFFFFn);
                     inHigh = Number(inputHash >> 32n);
@@ -909,7 +914,7 @@ async function generateTextureManifest(glbPath) {
             } catch (e) {
                 console.error(`[Texture Manifest] Error processing material "${gltfMat.name}": ${e.message}`);
             }
-        }
+        }));
 
         // Write sidecar JSON
         const manifestPath = glbPath.replace(/\.glb$/i, '.textures.json');
