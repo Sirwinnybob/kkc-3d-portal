@@ -1422,8 +1422,9 @@ body {
 #pin-modal {
     position: fixed; inset: 0; z-index: 10000;
     background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
-    display: flex; align-items: center; justify-content: center;
+    display: none; align-items: center; justify-content: center;
 }
+#pin-modal.show { display: flex; }
 .pin-modal-content {
     background: #1a1a2e; border-radius: 16px; padding: 30px;
     text-align: center; max-width: 360px; width: 90%;
@@ -1445,6 +1446,31 @@ body {
     cursor: pointer; font-size: 0.95em;
 }
 .pin-modal-btn:hover { background: #5b4bd5; }
+
+.pin-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+.pin-modal-btn.secondary {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ccc;
+}
+
+.pin-modal-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.pin-modal-btn.copied {
+    background: #28a745 !important;
+    color: #fff !important;
+    border-color: #28a745 !important;
+}
 
 /* Showroom Material Sections */
 .material-section-header {

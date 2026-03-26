@@ -200,6 +200,11 @@ async function init() {
         const tour = document.getElementById('product-tour');
         if (tour?.classList.contains('show')) return document.getElementById('tour-skip')?.click();
         if (helpModal?.classList.contains('show')) return toggleHelp(false);
+        const pinModal = document.getElementById('pin-modal');
+        if (pinModal?.classList.contains('show')) {
+            pinModal.classList.remove('show');
+            return;
+        }
         if (document.getElementById('quick-picker')?.classList.contains('show')) return quickPicker.close?.();
         const sheet = document.getElementById('tap-replace-sheet');
         if (sheet?.classList.contains('show')) {
@@ -1686,11 +1691,41 @@ async function initShowroomMode(pinToLoad) {
     // Setup save config button
     if (saveConfigBtn) saveConfigBtn.onclick = saveShowroomConfig;
 
-    // PIN modal close
+    // PIN modal actions
     const pinModalClose = document.getElementById('pin-modal-close');
+    const pinModal = document.getElementById('pin-modal');
     if (pinModalClose) pinModalClose.onclick = () => {
-        document.getElementById('pin-modal').style.display = 'none';
+        pinModal.classList.remove('show');
     };
+
+    if (pinModal) {
+        pinModal.onclick = (e) => {
+            if (e.target === pinModal) {
+                pinModal.classList.remove('show');
+            }
+        };
+    }
+
+    const copyPinBtn = document.getElementById('copy-pin-btn');
+    if (copyPinBtn) {
+        copyPinBtn.onclick = async () => {
+            const pin = document.getElementById('pin-display').textContent;
+            if (!pin || pin === '-----') return;
+            try {
+                await navigator.clipboard.writeText(pin);
+                const originalText = copyPinBtn.textContent;
+                copyPinBtn.textContent = 'Copied!';
+                copyPinBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyPinBtn.textContent = originalText;
+                    copyPinBtn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy PIN:', err);
+                updateStatus('Failed to copy PIN', true);
+            }
+        };
+    }
 
     // Setup texture panel for showroom (reuse existing)
     setupTexturePanel(null, null);
@@ -2076,7 +2111,7 @@ async function saveShowroomConfig() {
             const pinModal = document.getElementById('pin-modal');
             const pinDisplay = document.getElementById('pin-display');
             if (pinDisplay) pinDisplay.textContent = data.pin;
-            if (pinModal) pinModal.style.display = '';
+            if (pinModal) pinModal.classList.add('show');
             updateStatus('Configuration saved!');
             setTimeout(() => updateStatus(''), 3000);
         } else {

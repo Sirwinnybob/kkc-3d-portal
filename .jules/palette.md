@@ -9,3 +9,7 @@
 ## 2025-05-22 - Global Escape Key for Modal/Overlay Management
 **Learning:** In complex 3D viewers with multiple overlapping UI layers (tour, help, picker, panels), a global `Escape` key listener is critical for both accessibility and UX intuition. By implementing a prioritized closure logic (closing the topmost layer first) and ensuring active inputs are blurred before closing overlays, we prevent conflicting key behaviors and provide a smooth exit path for users.
 **Action:** Always implement a centralized `Escape` key listener that checks for active overlays in a prioritized order. Ensure any open text inputs are blurred first if they are currently focused to prevent unexpected overlay closure while typing or clearing fields.
+
+## 2025-05-23 - Class-based Visibility vs Inline Styles for Global Listeners
+**Learning:** Managing modal visibility with inline `style.display = 'none'` can break global event listeners (like Escape key handlers) that check `element.style.display !== 'none'`. If an element is hidden via a CSS stylesheet, `element.style.display` returns an empty string, which evaluates as "not none" and can lead to early returns or incorrect state logic.
+**Action:** Standardize on class-based visibility (e.g., `classList.toggle('show')`) for all modals and overlays. This allows reliable state checking via `classList.contains('show')` and keeps the UI state synchronized with CSS.

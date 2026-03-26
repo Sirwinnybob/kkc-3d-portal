@@ -37,7 +37,7 @@
         <button id="help-btn" class="ui-panel" aria-label="Help">?</button>
     </div>
 
-    <div id="status">
+    <div id="status" role="status" aria-live="polite">
         <span class="status-spin"></span>
         <span id="status-text">Initializing 3D...</span>
     </div>
@@ -307,13 +307,16 @@
     </button>
 
     <!-- PIN Display Modal -->
-    <div id="pin-modal" role="dialog" aria-modal="true" style="display:none">
+    <div id="pin-modal" role="dialog" aria-modal="true">
         <div class="pin-modal-content">
             <h3>Configuration Saved!</h3>
             <p>Your unique PIN:</p>
             <div id="pin-display" class="pin-code">-----</div>
             <p class="pin-hint">Share this PIN to let others view your exact configuration. It will also appear in screenshots.</p>
-            <button id="pin-modal-close" class="pin-modal-btn">Got it</button>
+            <div class="pin-modal-actions">
+                <button id="copy-pin-btn" class="pin-modal-btn secondary">Copy PIN</button>
+                <button id="pin-modal-close" class="pin-modal-btn">Got it</button>
+            </div>
         </div>
     </div>
 
