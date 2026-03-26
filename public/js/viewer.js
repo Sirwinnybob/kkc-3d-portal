@@ -1043,7 +1043,8 @@ async function setupTexturePanel(jobCode, room) {
         if (mat.bestCategory) {
             await loadCategoryTextures(mat.bestCategory);
             if (mat.similarTextures && mat.similarTextures.length > 0) {
-                const uniqueSimilar = mat.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
+                const existingUrls = new Set(currentCategoryTextures.map(ct => ct.url));
+                const uniqueSimilar = mat.similarTextures.filter(t => !existingUrls.has(t.url));
                 currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
                 renderTextureGrid();
                 insertBrowseButton();
@@ -1112,7 +1113,8 @@ async function setupTexturePanel(jobCode, room) {
                 await loadCategoryTextures(data.bestCategory);
                 if (data.similarTextures && data.similarTextures.length > 0) {
                     // Prepend similar matches at top (preserve their real names)
-                    const uniqueSimilar = data.similarTextures.filter(t => !currentCategoryTextures.some(ct => ct.url === t.url));
+                    const existingUrls = new Set(currentCategoryTextures.map(ct => ct.url));
+                    const uniqueSimilar = data.similarTextures.filter(t => !existingUrls.has(t.url));
                     currentCategoryTextures = [...uniqueSimilar, ...currentCategoryTextures];
                 }
                 renderTextureGrid();
