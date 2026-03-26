@@ -1365,7 +1365,7 @@ app.post('/api/showroom/tags/{*path}', express.json(), async (req, res) => {
 
     try {
         const tags = req.body;
-        if (!tags || typeof tags !== 'object') return res.status(400).json({ success: false, error: 'Invalid tags data' });
+        if (!tags || typeof tags !== 'object' || Array.isArray(tags)) return res.status(400).json({ success: false, error: 'Invalid tags data' });
         await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
         res.json({ success: true });
     } catch (e) {
@@ -1790,7 +1790,7 @@ app.post('/api/showroom/staging/tags/:file', express.json({ limit: '10mb' }), as
     if (rel.startsWith('..') || path.isAbsolute(rel)) return res.status(403).json({ success: false, error: 'Forbidden' });
     try {
         const tags = req.body;
-        if (!tags || typeof tags !== 'object') return res.status(400).json({ success: false, error: 'Invalid tags data' });
+        if (!tags || typeof tags !== 'object' || Array.isArray(tags)) return res.status(400).json({ success: false, error: 'Invalid tags data' });
         await fs.promises.writeFile(tagsPath, JSON.stringify(tags, null, 2), 'utf8');
         res.json({ success: true });
     } catch (e) {
@@ -1828,7 +1828,7 @@ app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), a
     if (!context || !SHOWROOM_CONTEXTS.includes(context)) return res.status(400).json({ success: false, error: 'Invalid context' });
     if (!style || !SHOWROOM_STYLES.includes(style)) return res.status(400).json({ success: false, error: 'Invalid style' });
     if (style === 'face_frame' && overlay && !SHOWROOM_OVERLAYS.includes(overlay)) return res.status(400).json({ success: false, error: 'Invalid overlay' });
-    if (!meshCategories || typeof meshCategories !== 'object') return res.status(400).json({ success: false, error: 'Missing mesh categories' });
+    if (!meshCategories || typeof meshCategories !== 'object' || Array.isArray(meshCategories)) return res.status(400).json({ success: false, error: 'Missing mesh categories' });
 
     const baseName = outputName || path.basename(safeFile, '.glb');
     if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid output name' });
