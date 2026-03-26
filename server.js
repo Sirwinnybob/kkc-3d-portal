@@ -153,7 +153,13 @@ app.get('/api/job/:code', async (req, res) => {
             if (entry.isDirectory()) {
                 return findGlbs(fullPath);
             } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                rooms.push(path.basename(entry.name, '.glb'));
+                // If the file is directly in the job directory, use the filename (without .glb).
+                // If it's in a subfolder, use the immediate parent folder's name.
+                if (dir === jobPath) {
+                    rooms.push(path.basename(entry.name, '.glb'));
+                } else {
+                    rooms.push(path.basename(dir));
+                }
             }
         });
         await Promise.all(promises);
@@ -193,8 +199,12 @@ app.get('/api/job/:code/:room', (req, res) => {
                 const dirent = entries[i];
                 if (dirent.isDirectory()) {
                     dirs.push(path.join(dir, dirent.name));
-                } else if (dirent.name.toLowerCase() === `${safeRoom.toLowerCase()}.glb`) {
-                    return path.join(dir, dirent.name);
+                } else if (dirent.name.toLowerCase().endsWith('.glb')) {
+                    const isRoot = dir === jobPath;
+                    const matchName = isRoot ? path.basename(dirent.name, '.glb') : path.basename(dir);
+                    if (matchName.toLowerCase() === safeRoom.toLowerCase()) {
+                        return path.join(dir, dirent.name);
+                    }
                 }
             }
 
@@ -244,8 +254,12 @@ app.get('/api/job/:code/:room/textures', async (req, res) => {
             for (const dirent of entries) {
                 if (dirent.isDirectory()) {
                     dirs.push(path.join(dir, dirent.name));
-                } else if (dirent.name.toLowerCase() === `${safeRoom.toLowerCase()}.textures.json`) {
-                    return path.join(dir, dirent.name);
+                } else if (dirent.name.toLowerCase().endsWith('.textures.json')) {
+                    const isRoot = dir === jobPath;
+                    const matchName = isRoot ? path.basename(dirent.name, '.textures.json') : path.basename(dir);
+                    if (matchName.toLowerCase() === safeRoom.toLowerCase()) {
+                        return path.join(dir, dirent.name);
+                    }
                 }
             }
             for (const d of dirs) {
