@@ -25,6 +25,10 @@ let selectedMaterialIndex = -1;
 let loadedModel = null;
 
 // Surface Highlight state
+// LOD cache and tracking
+const textureCache = new Map(); // url -> THREE.Texture
+let lastLodCheckTime = 0;
+
 let highlightedMesh = null;
 let highlightOriginalEmissive = null;
 
@@ -369,6 +373,29 @@ async function init() {
         const outputPass = new OutputPass();
         composer.addPass(outputPass);
 
+        // --- LOD THRESHOLDS ---
+        window.lodHighThreshold = 500;
+        window.lodMediumThreshold = 2000;
+        const lodHighSlider = document.getElementById('lod-high-slider');
+        const lodHighVal    = document.getElementById('lod-high-val');
+        const lodMediumSlider = document.getElementById('lod-medium-slider');
+        const lodMediumVal  = document.getElementById('lod-medium-val');
+
+        if (lodHighSlider && lodHighVal) {
+            lodHighSlider.oninput = () => {
+                const v = parseInt(lodHighSlider.value);
+                lodHighVal.innerText = v;
+                window.lodHighThreshold = v;
+            };
+        }
+        if (lodMediumSlider && lodMediumVal) {
+            lodMediumSlider.oninput = () => {
+                const v = parseInt(lodMediumSlider.value);
+                lodMediumVal.innerText = v;
+                window.lodMediumThreshold = v;
+            };
+        }
+
         // --- SENSITIVITY SLIDER ---
         const sensSlider = document.getElementById('sens-slider');
         const sensVal    = document.getElementById('sens-val');
@@ -537,6 +564,39 @@ async function init() {
         const cameraBtn = document.getElementById('camera-btn');
         if (cameraBtn) {
             cameraBtn.onclick = async () => {
+                updateStatus("Enhancing Textures...");
+
+                // Force high-res textures before rendering
+                window.forceHighResRender = true;
+                const loadPromises = [];
+                const texLoader = new THREE.TextureLoader();
+
+                detectedMaterials.forEach(matGroup => {
+                    if (matGroup.hasTexture && !matGroup.isColor && matGroup.urlHigh && matGroup.currentLODUrl !== matGroup.urlHigh) {
+                        loadPromises.push(new Promise(resolve => {
+                            if (textureCache.has(matGroup.urlHigh)) {
+                                const tex = textureCache.get(matGroup.urlHigh);
+                                matGroup.meshes.forEach(m => { m.material.map = tex; m.material.needsUpdate = true; });
+                                matGroup.currentLODUrl = matGroup.urlHigh;
+                                resolve();
+                            } else {
+                                texLoader.load(matGroup.urlHigh, (tex) => {
+                                    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                    tex.minFilter  = THREE.LinearMipmapLinearFilter;
+                                    tex.magFilter  = THREE.LinearFilter;
+                                    tex.wrapS      = THREE.RepeatWrapping;
+                                    tex.wrapT      = THREE.RepeatWrapping;
+                                    textureCache.set(matGroup.urlHigh, tex);
+                                    matGroup.meshes.forEach(m => { m.material.map = tex; m.material.needsUpdate = true; });
+                                    matGroup.currentLODUrl = matGroup.urlHigh;
+                                    resolve();
+                                }, undefined, resolve); // resolve on error to not block render
+                            }
+                        }));
+                    }
+                });
+
+                await Promise.all(loadPromises);
                 updateStatus("Rendering Photo...");
 
                 // Save original state
@@ -688,6 +748,10 @@ async function init() {
 
                 updateStatus("Photo Saved");
                 setTimeout(() => updateStatus(""), 3000);
+
+                // Restore dynamic LOD
+                window.forceHighResRender = false;
+                lastLodCheckTime = 0; // force immediate check
             };
         }
 
@@ -842,6 +906,12 @@ async function setupTexturePanel(jobCode, room) {
                             mat.bestCategory = entry.bestCategory;
                             mat.similarTextures = entry.similarTextures;
                             mat.isHidden = !!entry.isHidden;
+                            if (entry.bestMatch) {
+                                mat.urlHigh = entry.bestMatch.url;
+                                mat.urlMedium = entry.bestMatch.urlMedium;
+                                mat.urlLow = entry.bestMatch.urlLow;
+                                mat.currentLODUrl = mat.urlHigh;
+                            }
                         } else {
                             mat.matchedName = null;
                             mat.isHidden = false;
@@ -1012,6 +1082,12 @@ async function setupTexturePanel(jobCode, room) {
             mat.bestCategory = data.bestCategory;
             mat.similarTextures = data.similarTextures;
             mat.isHidden = !!data.isHidden;
+            if (data.bestMatch) {
+                mat.urlHigh = data.bestMatch.url;
+                mat.urlMedium = data.bestMatch.urlMedium;
+                mat.urlLow = data.bestMatch.urlLow;
+                mat.currentLODUrl = mat.urlHigh;
+            }
         } else {
             mat.matchedName = null;
             mat.isHidden = false;
@@ -1184,13 +1260,13 @@ async function setupTexturePanel(jobCode, room) {
             btn.className = 'texture-thumb';
             btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
             btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
-            btn.onclick = () => previewTexture(tex.url, tex.name);
+            btn.onclick = () => previewTexture(tex.url, tex.name, tex.urlMedium, tex.urlLow);
             textureGrid.appendChild(btn);
         });
     }
 
     // Preview texture on selected material (applies to all meshes in group)
-    function previewTexture(url, name) {
+    function previewTexture(url, name, urlMedium, urlLow) {
         if (selectedMaterialIndex < 0) return;
         const matGroup = detectedMaterials[selectedMaterialIndex];
         const texLoader = new THREE.TextureLoader();
@@ -1203,12 +1279,21 @@ async function setupTexturePanel(jobCode, room) {
             // Apply to all meshes sharing this material
             matGroup.meshes.forEach(mesh => {
                 mesh.material.map = newTex;
-                // Use white color so texture renders at true brightness
                 mesh.material.color.set(0xffffff);
                 mesh.material.needsUpdate = true;
             });
+            // Update LOD tracking info on group
+            matGroup.urlHigh = url;
+            matGroup.urlMedium = urlMedium;
+            matGroup.urlLow = urlLow;
+            matGroup.currentLODUrl = url; // assume high on first apply
             // Update the displayed name so the material list reflects the new texture
             if (name) matGroup.matchedName = name;
+
+            matGroup.urlHigh = url;
+            matGroup.urlMedium = urlMedium;
+            matGroup.urlLow = urlLow;
+            matGroup.currentLODUrl = url;
         });
     }
 
@@ -1511,7 +1596,7 @@ async function setupTexturePanel(jobCode, room) {
             btn.className = 'qp-tex-item';
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
             btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
-            btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name));
+            btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name, tex.urlMedium, tex.urlLow));
             qpTextureStrip.appendChild(btn);
         });
 
@@ -1525,7 +1610,7 @@ async function setupTexturePanel(jobCode, room) {
     }
 
     // ---- Apply texture ----
-    function applyQpTexture(url, name) {
+    function applyQpTexture(url, name, urlMedium, urlLow) {
         if (qpMatGroupIndex < 0) return;
         const matGroup  = detectedMaterials[qpMatGroupIndex];
         const texLoader = new THREE.TextureLoader();
@@ -2216,6 +2301,69 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
+
+    // Dynamic Texture LOD check (throttled to 500ms)
+    const now = Date.now();
+    if (camera && scene && (now - lastLodCheckTime > 500) && detectedMaterials.length > 0) {
+        lastLodCheckTime = now;
+        const camPos = camera.position;
+
+        // Use global thresholds set by sliders, or defaults
+        const tHigh = window.lodHighThreshold || 500;
+        const tMed = window.lodMediumThreshold || 2000;
+
+        detectedMaterials.forEach(matGroup => {
+            if (!matGroup.hasTexture || matGroup.isColor || window.forceHighResRender) return;
+
+            // Only swap if we have LOD URLs stored on the group
+            if (!matGroup.urlLow && !matGroup.urlMedium) return;
+
+            // Use the first mesh in the group to determine distance
+            if (matGroup.meshes.length > 0) {
+                const mesh = matGroup.meshes[0];
+                if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+                const center = mesh.geometry.boundingSphere.center.clone();
+                mesh.localToWorld(center);
+                const dist = camPos.distanceTo(center);
+
+                let targetUrl = matGroup.urlHigh; // Default to high
+                if (dist > tMed) targetUrl = matGroup.urlLow || matGroup.urlMedium || matGroup.urlHigh;
+                else if (dist > tHigh) targetUrl = matGroup.urlMedium || matGroup.urlHigh;
+
+                if (targetUrl && matGroup.currentLODUrl !== targetUrl) {
+                    matGroup.currentLODUrl = targetUrl;
+
+                    // Load from cache or fetch
+                    if (textureCache.has(targetUrl)) {
+                        const cachedTex = textureCache.get(targetUrl);
+                        matGroup.meshes.forEach(m => {
+                            m.material.map = cachedTex;
+                            m.material.needsUpdate = true;
+                        });
+                    } else {
+                        const loader = new THREE.TextureLoader();
+                        loader.load(targetUrl, (tex) => {
+                            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                            tex.minFilter  = THREE.LinearMipmapLinearFilter;
+                            tex.magFilter  = THREE.LinearFilter;
+                            tex.wrapS      = THREE.RepeatWrapping;
+                            tex.wrapT      = THREE.RepeatWrapping;
+                            textureCache.set(targetUrl, tex);
+
+                            // Make sure distance hasn't caused another swap while loading
+                            if (matGroup.currentLODUrl === targetUrl) {
+                                matGroup.meshes.forEach(m => {
+                                    m.material.map = tex;
+                                    m.material.needsUpdate = true;
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+        });
+    }
+
     if (zoomVelocity !== 0 && camera && controls) {
         const direction = new THREE.Vector3();
         camera.getWorldDirection(direction);

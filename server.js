@@ -14,12 +14,13 @@ const gltfPipeline = require('gltf-pipeline');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.4";
+const APP_VERSION = "2.1.6";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
 const JOBS_DIR = process.env.JOBS_DIR ? path.resolve(process.env.JOBS_DIR) : path.join(__dirname, 'jobs');
 const TEXTURES_DIR = process.env.TEXTURES_DIR ? path.resolve(process.env.TEXTURES_DIR) : path.join(path.dirname(JOBS_DIR), 'textures');
+const LOD_DIR = path.join(TEXTURES_DIR, 'Hidden', 'LOD');
 const ASSIMP_PATH = process.platform === 'win32' ? 'assimp.exe' : 'assimp';
 const GLASS_TRANSPARENCY = parseFloat(process.env.GLASS_TRANSPARENCY) || 0.8;
 const SHOWROOM_DIR = process.env.SHOWROOM_DIR ? path.resolve(process.env.SHOWROOM_DIR) : path.join(path.dirname(JOBS_DIR), 'Showroom');
@@ -63,6 +64,7 @@ const AUTO_PARSE_RULES = [
 
 if (!fs.existsSync(JOBS_DIR)) fs.mkdirSync(JOBS_DIR, { recursive: true });
 if (!fs.existsSync(TEXTURES_DIR)) fs.mkdirSync(TEXTURES_DIR, { recursive: true });
+if (!fs.existsSync(LOD_DIR)) fs.mkdirSync(LOD_DIR, { recursive: true });
 
 // --- MIDDLEWARE ---
 app.set('trust proxy', 1);
@@ -437,17 +439,50 @@ async function buildTextureHashIndex() {
                         const filePath = path.join(categoryPath, file);
                         const buffer = await fs.promises.readFile(filePath);
                         const hash = await computePhash(buffer);
+
+                        let urlMedium = null;
+                        let urlLow = null;
+
+                        if (!isHidden) {
+                            // Generate LODs
+                            const lodCatDir = path.join(LOD_DIR, entry.name);
+                            if (!fs.existsSync(lodCatDir)) fs.mkdirSync(lodCatDir, { recursive: true });
+
+                            const nameOnly = path.basename(file, ext);
+                            const medPath = path.join(lodCatDir, `${nameOnly}_medium${ext}`);
+                            const lowPath = path.join(lodCatDir, `${nameOnly}_low${ext}`);
+
+                            // Create medium if doesn't exist
+                            if (!fs.existsSync(medPath)) {
+                                await sharp(buffer)
+                                    .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+                                    .toFile(medPath);
+                            }
+
+                            // Create low if doesn't exist
+                            if (!fs.existsSync(lowPath)) {
+                                await sharp(buffer)
+                                    .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
+                                    .toFile(lowPath);
+                            }
+
+                            urlMedium = `/textures/Hidden/LOD/${encodeURIComponent(entry.name)}/${encodeURIComponent(nameOnly + '_medium' + ext)}`;
+                            urlLow = `/textures/Hidden/LOD/${encodeURIComponent(entry.name)}/${encodeURIComponent(nameOnly + '_low' + ext)}`;
+                        }
+
                         categoryTextures.push({
                             name: path.basename(file, ext),
                             file: file,
                             url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
+                            urlMedium: urlMedium,
+                            urlLow: urlLow,
                             hidden: isHidden,
                             hash: hash.toString(),
                             hLow: Number(hash & 0xFFFFFFFFn),
                             hHigh: Number(hash >> 32n)
                         });
                     } catch (e) {
-                        console.error(`[Texture] Hash error for ${file}: ${e.message}`);
+                        console.error(`[Texture] Hash/LOD error for ${file}: ${e.message}`);
                     }
                 }));
 
@@ -533,10 +568,16 @@ app.get('/api/textures/:category', async (req, res) => {
         const files = await fs.promises.readdir(categoryPath);
         const textures = files
             .filter(f => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(f).toLowerCase()))
-            .map(f => ({
-                name: path.basename(f, path.extname(f)),
-                url: `/textures/${encodeURIComponent(category)}/${encodeURIComponent(f)}`
-            }));
+            .map(f => {
+                const ext = path.extname(f);
+                const nameOnly = path.basename(f, ext);
+                return {
+                    name: nameOnly,
+                    url: `/textures/${encodeURIComponent(category)}/${encodeURIComponent(f)}`,
+                    urlMedium: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_medium' + ext)}`,
+                    urlLow: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_low' + ext)}`
+                };
+            });
         res.json({ success: true, category, textures });
     } catch (e) {
         if (e.code === 'ENOENT') return res.status(404).json({ success: false, error: 'Category not found' });
@@ -612,11 +653,25 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         res.json({
             success: true,
             matched: !!isMatched,
-            bestMatch: isMatched ? bestMatch : null,
+            bestMatch: isMatched ? {
+                name: bestMatch.name,
+                url: bestMatch.url,
+                urlMedium: bestMatch.urlMedium,
+                urlLow: bestMatch.urlLow,
+                category: bestMatch.category,
+                hidden: bestMatch.hidden
+            } : null,
             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
             isHidden: isMatched && bestMatch && bestMatch.hidden,
             distance: bestDistance,
-            similarTextures: allMatches.slice(0, 12)
+            similarTextures: allMatches.slice(0, 12).map(t => ({
+                name: t.name,
+                url: t.url,
+                urlMedium: t.urlMedium,
+                urlLow: t.urlLow,
+                category: t.category,
+                distance: t.distance
+            }))
         });
     } catch (e) {
         console.error(`[Texture] Match error: ${e.message}`);
@@ -919,11 +974,24 @@ async function generateTextureManifest(glbPath) {
                 // Key by material name — client matches via prevMat.name
                 manifest.materials[matName] = {
                     matched: isMatched,
-                    bestMatch: isMatched ? { name: bestMatch.name, url: bestMatch.url, category: bestMatch.category } : null,
+                    bestMatch: isMatched ? {
+                        name: bestMatch.name,
+                        url: bestMatch.url,
+                        urlMedium: bestMatch.urlMedium,
+                        urlLow: bestMatch.urlLow,
+                        category: bestMatch.category
+                    } : null,
                     bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
                     isHidden: isMatched && bestMatch && !!bestMatch.hidden,
                     distance: bestDistance,
-                    similarTextures: allMatches.slice(0, 12).map(t => ({ name: t.name, url: t.url, category: t.category, distance: t.distance }))
+                    similarTextures: allMatches.slice(0, 12).map(t => ({
+                        name: t.name,
+                        url: t.url,
+                        urlMedium: t.urlMedium,
+                        urlLow: t.urlLow,
+                        category: t.category,
+                        distance: t.distance
+                    }))
                 };
             } catch (e) {
                 console.error(`[Texture Manifest] Error processing material "${gltfMat.name}": ${e.message}`);
@@ -1895,8 +1963,21 @@ if (require.main === module) {
         ignored: [/(\\|\/)\./, '**/Thumbs.db'],
         awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 }
     }).on('all', async (event, fp) => {
+        // Skip changes inside the LOD directory to avoid infinite loops
+        if (fp.includes(path.join('Hidden', 'LOD'))) return;
+
         console.log(`[Texture] ${event}: ${fp}`);
         textureHashCache = null; // Invalidate cache on any change
+
+        if (event === 'unlink') {
+            const ext = path.extname(fp);
+            const nameOnly = path.basename(fp, ext);
+            const category = path.basename(path.dirname(fp));
+            const medPath = path.join(LOD_DIR, category, `${nameOnly}_medium${ext}`);
+            const lowPath = path.join(LOD_DIR, category, `${nameOnly}_low${ext}`);
+            try { if (fs.existsSync(medPath)) fs.unlinkSync(medPath); } catch (e) {}
+            try { if (fs.existsSync(lowPath)) fs.unlinkSync(lowPath); } catch (e) {}
+        }
 
         // Auto re-scan jobs after textures are organized (debounced)
         if (['add', 'unlink', 'addDir', 'unlinkDir'].includes(event)) {
