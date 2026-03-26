@@ -7,11 +7,15 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/extensions": "^4.3.0",
+    "@gltf-transform/functions": "^4.3.0",
     "chokidar": "^5.0.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.1",
     "gltf-pipeline": "^4.3.0",
     "helmet": "^8.1.0",
+    "meshoptimizer": "^1.0.1",
     "morgan": "^1.10.1",
     "sharp": "^0.34.5"
   },
