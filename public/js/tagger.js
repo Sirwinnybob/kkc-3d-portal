@@ -36,6 +36,7 @@ const DIRECT_CATEGORIES = ['base', 'crown', 'drawers', 'case_parts', 'wall', 'co
 const ALL_STYLE_CATEGORIES = [...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES];
 const SUB_CATEGORIES = {
     doors: ['shaker', 'slab'],
+    drawer_fronts: ['shaker', 'slab'],
     finished_ends: ['flat', 'paneled']
 };
 const GRAIN_DIRS = ['horizontal', 'vertical'];
@@ -286,7 +287,7 @@ function updateCatGrainVisibility() {
     const cat = document.getElementById('cat-sel-category').value;
     const sub = document.getElementById('cat-sel-subcategory')?.value;
     // Grain only for slab doors
-    const needsGrain = cat === 'doors' && sub === 'slab';
+    const needsGrain = (cat === 'doors' || cat === 'drawer_fronts') && sub === 'slab';
     document.getElementById('cat-grain-section').style.display = needsGrain ? 'block' : 'none';
 }
 
@@ -442,7 +443,7 @@ function buildCategorySettingsRows(summary) {
             row.appendChild(subSel);
 
             // Grain select (only for doors/slab)
-            if (cat === 'doors') {
+            if (cat === 'doors' || cat === 'drawer_fronts') {
                 const grainSel = document.createElement('select');
                 grainSel.className = 'cat-sub-sel text-input-sm';
                 grainSel.id = `cat-grain-${cat}`;
@@ -592,7 +593,7 @@ function buildDeepPath(context, style, overlay, cat, subCat, grain) {
         parts.push(cat);
         if (subCat) {
             parts.push(subCat);
-            if (grain && cat === 'doors' && subCat === 'slab') parts.push(grain);
+            if (grain && (cat === 'doors' || cat === 'drawer_fronts') && subCat === 'slab') parts.push(grain);
         }
     }
     return parts.join('/');
@@ -620,7 +621,7 @@ function updateCategoryFileList() {
         pathKeys.push(cat);
         if (subCat && SUB_CATEGORIES[cat]) {
             pathKeys.push(subCat);
-            if (grain && cat === 'doors' && subCat === 'slab') pathKeys.push(grain);
+            if (grain && (cat === 'doors' || cat === 'drawer_fronts') && subCat === 'slab') pathKeys.push(grain);
         }
     }
 
