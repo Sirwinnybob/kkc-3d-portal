@@ -1779,6 +1779,34 @@ async function initShowroomMode(pinToLoad) {
         document.getElementById('pin-modal').style.display = 'none';
     };
 
+    // PIN Copy Button
+    const copyPinBtn = document.getElementById('copy-pin-btn');
+    const pinDisplay = document.getElementById('pin-display');
+    if (copyPinBtn && pinDisplay) {
+        const originalSvg = copyPinBtn.innerHTML;
+        let copyTimeout = null;
+
+        copyPinBtn.onclick = () => {
+            const pin = pinDisplay.textContent;
+            navigator.clipboard.writeText(pin).then(() => {
+                if (copyTimeout) clearTimeout(copyTimeout);
+                copyPinBtn.classList.add('copied');
+                copyPinBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                `;
+                copyTimeout = setTimeout(() => {
+                    copyPinBtn.classList.remove('copied');
+                    copyPinBtn.innerHTML = originalSvg;
+                    copyTimeout = null;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy PIN:', err);
+            });
+        };
+    }
+
     // Setup texture panel for showroom (reuse existing)
     setupTexturePanel(null, null);
 
