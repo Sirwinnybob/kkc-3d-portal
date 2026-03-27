@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 const chokidar = require('chokidar');
 const helmet = require('helmet');
@@ -1397,7 +1398,8 @@ app.post('/api/showroom/config', express.json({ limit: '1mb' }), (err, req, res,
         let pin;
         let attempts = 0;
         do {
-            pin = String(10000 + Math.floor(Math.random() * 90000));
+            // Security: Use cryptographically secure RNG for PINs instead of predictable Math.random
+            pin = String(crypto.randomInt(10000, 100000));
             attempts++;
             if (attempts > 100) return res.status(500).json({ success: false, error: 'Could not generate unique PIN' });
         } while (fs.existsSync(path.join(configsDir, `${pin}.json`)));

@@ -15,3 +15,7 @@
 **Vulnerability:** The `/api/job/:code/:room` endpoint properly validated the `code` parameter but omitted the same regex and length validation checks for the `room` parameter. While a path traversal validation existed (`if (relRoom.startsWith('..'))`), an attacker could still supply abnormally long strings or unexpected formats.
 **Learning:** Input validation must be consistently applied to all URL parameters. Relying only on backend path resolution logic to catch malicious inputs is incomplete defense-in-depth and leaves the application open to potential ReDoS or uncontrolled resource consumption.
 **Prevention:** Always validate every segment of user input at the route-entry level, using both length restrictions (`room.length > 100`) and format enforcing regexes (`/^[a-zA-Z0-9\-_ ]+$/`).
+## 2024-03-27 - [Fix Weak Random Number Generation]
+**Vulnerability:** Weak random number generation using `Math.random()` to generate secure 5-digit PINs for showroom configs.
+**Learning:** `Math.random()` is predictable and not cryptographically secure, which means malicious actors could potentially guess PINs if they determine the seed or PRNG state. This is especially risky for short, numeric pins (like 5 digits).
+**Prevention:** Always use cryptographically secure random number generators (CSPRNG), such as `crypto.randomInt()`, when generating tokens, keys, passwords, or PINs.
