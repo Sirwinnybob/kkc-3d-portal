@@ -1436,12 +1436,45 @@ body {
 }
 .pin-modal-content h3 { color: #28a745; margin-bottom: 10px; }
 .pin-modal-content p { color: #aaa; font-size: 0.9em; margin-bottom: 12px; }
+.pin-display-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 12px 0;
+}
 .pin-code {
     font-size: 2.5em; font-weight: bold; color: #fff;
     letter-spacing: 8px; padding: 16px;
     background: rgba(108,92,231,0.15); border-radius: 12px;
-    margin: 12px 0;
     font-family: 'Courier New', monospace;
+    flex: 1;
+}
+.copy-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    color: rgba(255,255,255,0.8);
+    width: 54px;
+    height: 64px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.copy-btn:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: #3b82f6;
+    color: #fff;
+}
+.copy-btn:active {
+    transform: scale(0.92);
+}
+.copy-btn.copied {
+    background: #28a745;
+    border-color: #28a745;
+    color: #fff;
 }
 .pin-hint { font-size: 0.78em !important; color: #777 !important; margin-top: 8px; }
 .pin-modal-btn {
