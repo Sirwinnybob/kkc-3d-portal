@@ -1357,7 +1357,8 @@ async function setupTexturePanel(jobCode, room) {
     const qpTitle          = document.getElementById('qp-title');
     const qpCategoriesBack = document.getElementById('qp-categories-back');
     const qpClose          = document.getElementById('qp-close');
-    const qpSearchBtn      = document.getElementById('qp-search-btn');
+    const qpSearchInput    = document.getElementById('qp-search-input');
+    const qpClearSearch    = document.getElementById('qp-clear-search');
     const qpViewsContainer = document.getElementById('qp-views-container');
     const qpCategoriesView = document.getElementById('qp-categories-view');
     const qpCategoryGrid   = document.getElementById('qp-category-grid');
@@ -1439,13 +1440,49 @@ async function setupTexturePanel(jobCode, room) {
 
     qpClose.addEventListener('click', closeQuickPicker);
 
-    if (qpSearchBtn) {
-        qpSearchBtn.addEventListener('click', () => {
-            closeQuickPicker();
-            const texBtn = document.getElementById('texture-btn');
-            if (texBtn) texBtn.click();
+    if (qpSearchInput) {
+        qpSearchInput.addEventListener('input', () => {
+            const q = qpSearchInput.value.toLowerCase();
+            if (qpClearSearch) qpClearSearch.style.display = q ? 'block' : 'none';
+
+            // Search textures within the active view
+            const isTexturesView = qpViewsContainer.classList.contains('show-textures');
+            if (isTexturesView) {
+                const thumbs = qpTextureStrip.querySelectorAll('.qp-tex-item');
+                thumbs.forEach(th => {
+                    const name = th.querySelector('span')?.textContent?.toLowerCase() || '';
+                    th.style.display = name.includes(q) ? '' : 'none';
+                });
+            } else {
+                const cats = qpCategoryGrid.querySelectorAll('.qp-category-btn');
+                cats.forEach(btn => {
+                    const name = btn.textContent.toLowerCase() || '';
+                    btn.style.display = name.includes(q) ? '' : 'none';
+                });
+            }
         });
     }
+
+    if (qpClearSearch) {
+        qpClearSearch.addEventListener('click', () => {
+            if (qpSearchInput) {
+                qpSearchInput.value = '';
+                qpSearchInput.dispatchEvent(new Event('input'));
+                qpSearchInput.focus();
+            }
+        });
+    }
+
+    // Reset search when opening quick picker
+    const originalOpenQuickPicker = openQuickPicker;
+    openQuickPicker = async function() {
+        if (qpSearchInput) {
+            qpSearchInput.value = '';
+            qpSearchInput.dispatchEvent(new Event('input'));
+        }
+        await originalOpenQuickPicker();
+    };
+
 
     // ---- View switching ----
     function showQpCategoriesView() {

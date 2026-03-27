@@ -997,8 +997,9 @@ body {
     align-items: center;
     padding: 0 10px;
     overscroll-behavior: contain;
-    transform: translateX(0);
-    opacity: 1;
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
     transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
     will-change: transform;
 }
@@ -1010,9 +1011,9 @@ body {
     display: flex;
     align-items: center;
     overflow: hidden;
-    transform: translateX(100%);
-    opacity: 0;
-    pointer-events: none;
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
     transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease;
     will-change: transform;
 }
