@@ -27,6 +27,7 @@ let loadedModel = null;
 // Surface Highlight state
 // LOD cache and tracking
 const textureCache = new Map(); // url -> THREE.Texture
+const _lodVec = new THREE.Vector3();
 let lastLodCheckTime = 0;
 
 let highlightedMesh = null;
@@ -997,8 +998,7 @@ async function setupTexturePanel(jobCode, room) {
         const btn = document.createElement('button');
         btn.className = 'material-item';
 
-        let previewHtml = '';
-        if (mat.hasTexture && mat.material.map && mat.material.map.image) {
+        if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
             try {
                 const img = mat.material.map.image;
                 const canvas = document.createElement('canvas');
@@ -1006,15 +1006,16 @@ async function setupTexturePanel(jobCode, room) {
                 canvas.height = 64;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, 64, 64);
-                previewHtml = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
+                mat.previewCache = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
             } catch {
-                previewHtml = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
             }
-        } else {
+        } else if (!mat.previewCache) {
             const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-            previewHtml = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+            mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
         }
 
+        const previewHtml = mat.previewCache;
         const displayName = mat.matchedName || mat.name;
         btn.innerHTML = `
             <div class="material-item-left">
@@ -1083,6 +1084,7 @@ async function setupTexturePanel(jobCode, room) {
             mat.bestCategory = data.bestCategory;
             mat.similarTextures = data.similarTextures;
             mat.isHidden = !!data.isHidden;
+            mat.previewCache = null;
             if (data.bestMatch) {
                 mat.urlHigh = data.bestMatch.url;
                 mat.urlMedium = data.bestMatch.urlMedium;
@@ -1291,6 +1293,7 @@ async function setupTexturePanel(jobCode, room) {
             matGroup.currentLODUrl = url; // assume high on first apply
             // Update the displayed name so the material list reflects the new texture
             if (name) matGroup.matchedName = name;
+            matGroup.previewCache = null;
 
             matGroup.urlHigh = url;
             matGroup.urlMedium = urlMedium;
@@ -2352,9 +2355,9 @@ function animate() {
             if (matGroup.meshes.length > 0) {
                 const mesh = matGroup.meshes[0];
                 if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-                const center = mesh.geometry.boundingSphere.center.clone();
-                mesh.localToWorld(center);
-                const dist = camPos.distanceTo(center);
+                _lodVec.copy(mesh.geometry.boundingSphere.center);
+                mesh.localToWorld(_lodVec);
+                const dist = camPos.distanceTo(_lodVec);
 
                 let targetUrl = matGroup.urlHigh; // Default to high
                 if (dist > tMed) targetUrl = matGroup.urlLow || matGroup.urlMedium || matGroup.urlHigh;
