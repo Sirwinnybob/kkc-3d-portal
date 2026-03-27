@@ -5,3 +5,7 @@
 ## 2025-05-22 - [O(N³) vs O(N⁴) 2D DCT]
 **Learning:** The naive 2D Discrete Cosine Transform (DCT) implementation is O(N⁴) due to nested loops over (u, v) and (x, y). Because the DCT is a separable transform, it can be computed as two 1D passes (rows then columns), reducing complexity to O(N³). In Node.js, for a fixed N=32, this reduction combined with precomputed cosine tables and scaling factors resulted in a ~100x speedup (28ms down to 0.28ms per operation).
 **Action:** When implementing mathematical transforms (DCT, FFT, etc.), always look for separability or symmetry properties to reduce dimensionality and leverage precomputed lookup tables for fixed-size inputs.
+
+## 2025-05-29 - [Avoiding toDataURL in Render Loops]
+**Learning:** Calling `canvas.toDataURL()` is a synchronous, blocking operation that requires a GPU-to-CPU readback and image encoding. In this application, generating material previews using `toDataURL()` during UI list rendering created significant jank when the material library or catalog was opened. Caching the resulting HTML/DataURL string on the material group object reduced "Materials" panel open time from ~200ms to <10ms for complex scenes.
+**Action:** Never call `toDataURL()` or similar heavy encoding/readback operations inside UI render functions or high-frequency loops. Always cache the result and invalidate it only when the underlying data (texture/color) changes.
