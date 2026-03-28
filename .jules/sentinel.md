@@ -19,3 +19,8 @@
 **Vulnerability:** Weak random number generation using `Math.random()` to generate secure 5-digit PINs for showroom configs.
 **Learning:** `Math.random()` is predictable and not cryptographically secure, which means malicious actors could potentially guess PINs if they determine the seed or PRNG state. This is especially risky for short, numeric pins (like 5 digits).
 **Prevention:** Always use cryptographically secure random number generators (CSPRNG), such as `crypto.randomInt()`, when generating tokens, keys, passwords, or PINs.
+
+## 2024-05-28 - DOM-based XSS Vulnerability in Staging File Names
+**Vulnerability:** In `public/js/tagger.js`, the names of staged files (`f.file`, `f.name`) fetched from the server were directly interpolated into an HTML string using `.innerHTML` without sanitization. An attacker who is able to upload a crafted file (e.g. `<img src=x onerror=alert(1)>.glb`) could execute arbitrary JavaScript in the context of the admin tagger.
+**Learning:** Even when data originates from the backend filesystem (like file names), if it's ultimately derived from user input or external sources, it must be treated as untrusted in the frontend.
+**Prevention:** Always use `escapeHtml()` when interpolating any dynamic string data into an HTML template string assigned via `.innerHTML`, or use native safer DOM APIs like `document.createElement` and `textContent`.

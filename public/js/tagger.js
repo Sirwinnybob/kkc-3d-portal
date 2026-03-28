@@ -301,7 +301,7 @@ async function loadStagingFileList() {
         if (!data.success) return;
         const sel = document.getElementById('sel-staging-file');
         sel.innerHTML = '<option value="">-- Select --</option>' +
-            data.files.map(f => `<option value="${f.file}">${f.name}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
+            data.files.map(f => `<option value="${escapeHtml(f.file)}">${escapeHtml(f.name)}${f.tagged ? ' (tagged)' : ''}</option>`).join('');
     } catch { /* ignore */ }
 }
 
