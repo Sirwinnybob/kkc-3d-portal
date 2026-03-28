@@ -1429,11 +1429,25 @@ body {
     position: fixed; inset: 0; z-index: 10000;
     background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
     display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s;
+}
+#pin-modal.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 .pin-modal-content {
     background: #1a1a2e; border-radius: 16px; padding: 30px;
     text-align: center; max-width: 360px; width: 90%;
     border: 1px solid rgba(255,255,255,0.1);
+    transform: scale(0.9) translateY(10px);
+    transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1);
+}
+#pin-modal.show .pin-modal-content {
+    transform: scale(1) translateY(0);
 }
 .pin-modal-content h3 { color: #28a745; margin-bottom: 10px; }
 .pin-modal-content p { color: #aaa; font-size: 0.9em; margin-bottom: 12px; }
@@ -1469,6 +1483,11 @@ body {
     border-color: #3b82f6;
     color: #fff;
 }
+.copy-btn:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    background: rgba(255,255,255,0.15);
+}
 .copy-btn:active {
     transform: scale(0.92);
 }
@@ -1482,8 +1501,14 @@ body {
     margin-top: 16px; padding: 12px 32px; border: none; border-radius: 8px;
     background: #6c5ce7; color: #fff; font-weight: bold;
     cursor: pointer; font-size: 0.95em;
+    transition: background 0.2s, transform 0.1s;
 }
 .pin-modal-btn:hover { background: #5b4bd5; }
+.pin-modal-btn:active { transform: scale(0.96); }
+.pin-modal-btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
 
 /* Showroom Material Sections */
 .material-section-header {
