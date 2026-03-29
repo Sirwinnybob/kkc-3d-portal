@@ -1429,11 +1429,25 @@ body {
     position: fixed; inset: 0; z-index: 10000;
     background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
     display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s;
+}
+#pin-modal.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 .pin-modal-content {
     background: #1a1a2e; border-radius: 16px; padding: 30px;
     text-align: center; max-width: 360px; width: 90%;
     border: 1px solid rgba(255,255,255,0.1);
+    transform: scale(0.88) translateY(10px);
+    transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1);
+}
+#pin-modal.show .pin-modal-content {
+    transform: scale(1) translateY(0);
 }
 .pin-modal-content h3 { color: #28a745; margin-bottom: 10px; }
 .pin-modal-content p { color: #aaa; font-size: 0.9em; margin-bottom: 12px; }
