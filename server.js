@@ -16,7 +16,7 @@ const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.6";
+const APP_VERSION = "2.1.7";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -1579,21 +1579,21 @@ async function splitGlbByCategories(glbPath, meshCategories, destinations, outpu
             continue;
         }
 
-        // Deep clone the gltf
-        const newGltf = JSON.parse(JSON.stringify(gltf));
+        // Optimized shallow clone for performance (avoid JSON.parse overhead)
+        const newGltf = { ...gltf };
 
         // Collect used resources
         const usedMeshes = new Set();
         const usedMaterials = new Set();
 
         for (const idx of nodeIndices) {
-            const node = newGltf.nodes[idx];
+            const node = gltf.nodes[idx];
             if (node.mesh !== undefined) usedMeshes.add(node.mesh);
         }
 
         // Find materials from used meshes
         for (const meshIdx of usedMeshes) {
-            const mesh = newGltf.meshes[meshIdx];
+            const mesh = gltf.meshes[meshIdx];
             if (!mesh || !mesh.primitives) continue;
             for (const prim of mesh.primitives) {
                 if (prim.material !== undefined) usedMaterials.add(prim.material);
@@ -1618,7 +1618,8 @@ async function splitGlbByCategories(glbPath, meshCategories, destinations, outpu
         const nodeRemap = {};
         for (const idx of nodeIndices) {
             nodeRemap[idx] = newNodes.length;
-            const node = { ...newGltf.nodes[idx] };
+            // Use shallow clone of node because we modify its properties (mesh, children)
+            const node = { ...gltf.nodes[idx] };
             if (node.mesh !== undefined) node.mesh = meshRemap[node.mesh];
             if (!node.name) node.name = `Node_${idx}`;
             node.children = undefined; // flatten hierarchy
@@ -1628,17 +1629,23 @@ async function splitGlbByCategories(glbPath, meshCategories, destinations, outpu
         // Build new meshes with remapped material indices
         const newMeshes = [];
         for (const oldIdx of [...usedMeshes].sort((a, b) => a - b)) {
-            const mesh = JSON.parse(JSON.stringify(newGltf.meshes[oldIdx]));
-            for (const prim of mesh.primitives || []) {
+            const oldMesh = gltf.meshes[oldIdx];
+            // Shallow clone mesh and its primitives to prevent modifying the original glTF.
+            // Using fallback for primitives to handle potentially malformed inputs.
+            const mesh = {
+                ...oldMesh,
+                primitives: (oldMesh.primitives || []).map(p => ({ ...p }))
+            };
+            for (const prim of mesh.primitives) {
                 if (prim.material !== undefined) prim.material = matRemap[prim.material];
             }
             newMeshes.push(mesh);
         }
 
-        // Build new materials
+        // Build new materials (no clone needed as we don't modify them here)
         const newMaterials = [];
         for (const oldIdx of [...usedMaterials].sort((a, b) => a - b)) {
-            newMaterials.push(newGltf.materials[oldIdx]);
+            newMaterials.push(gltf.materials[oldIdx]);
         }
 
         // Update the glTF document
