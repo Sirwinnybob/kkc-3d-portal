@@ -205,6 +205,12 @@ async function init() {
         const tour = document.getElementById('product-tour');
         if (tour?.classList.contains('show')) return document.getElementById('tour-skip')?.click();
         if (helpModal?.classList.contains('show')) return toggleHelp(false);
+        if (document.getElementById('pin-modal')?.classList.contains('show')) {
+            return document.getElementById('pin-modal-close')?.click();
+        }
+        if (document.getElementById('showroom-panel')?.classList.contains('show')) {
+            return document.getElementById('showroom-panel-close')?.click();
+        }
         if (document.getElementById('quick-picker')?.classList.contains('show')) return quickPicker.close?.();
         const sheet = document.getElementById('tap-replace-sheet');
         if (sheet?.classList.contains('show')) {
@@ -1765,10 +1771,17 @@ async function initShowroomMode(pinToLoad) {
             showroomPanel.classList.toggle('show');
             const isVisible = showroomPanel.classList.contains('show');
             showroomBtn.setAttribute('aria-expanded', isVisible.toString());
+            if (isVisible) {
+                const panelClose = document.getElementById('showroom-panel-close');
+                if (panelClose) panelClose.focus();
+            }
         };
     }
     const panelClose = document.getElementById('showroom-panel-close');
-    if (panelClose) panelClose.onclick = () => showroomPanel.classList.remove('show');
+    if (panelClose) panelClose.onclick = () => {
+        showroomPanel.classList.remove('show');
+        if (showroomBtn) showroomBtn.focus();
+    };
 
     // Fetch showroom categories
     try {
@@ -1816,7 +1829,8 @@ async function initShowroomMode(pinToLoad) {
     // PIN modal close
     const pinModalClose = document.getElementById('pin-modal-close');
     if (pinModalClose) pinModalClose.onclick = () => {
-        document.getElementById('pin-modal').style.display = 'none';
+        document.getElementById('pin-modal').classList.remove('show');
+        if (saveConfigBtn) saveConfigBtn.focus();
     };
 
     // PIN Copy Button
@@ -2223,7 +2237,11 @@ async function saveShowroomConfig() {
             const pinModal = document.getElementById('pin-modal');
             const pinDisplay = document.getElementById('pin-display');
             if (pinDisplay) pinDisplay.textContent = data.pin;
-            if (pinModal) pinModal.style.display = '';
+            if (pinModal) {
+                pinModal.classList.add('show');
+                const closeBtn = document.getElementById('pin-modal-close');
+                if (closeBtn) closeBtn.focus();
+            }
             updateStatus('Configuration saved!');
             setTimeout(() => updateStatus(''), 3000);
         } else {
