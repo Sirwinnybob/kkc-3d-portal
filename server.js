@@ -929,8 +929,16 @@ async function generateTextureManifest(glbPath) {
         const jsonChunkLength = glbBuffer.readUInt32LE(12);
         const binChunkOffset = 12 + 8 + jsonChunkLength + 8;
 
-        // Cache image hashes to avoid re-computing when multiple materials share a texture
-        const imageHashCache = new Map();
+        // Cache full matching results (as promises) to prevent redundant processing of shared textures
+        const imageMatchCache = new Map();
+
+        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead
+        const flatLibrary = [];
+        for (const [category, textures] of Object.entries(libraryIndex)) {
+            for (const tex of textures) {
+                flatLibrary.push({ ...tex, category });
+            }
+        }
 
         const getImageData = (imageIdx) => {
             const image = gltf.images[imageIdx];
@@ -956,62 +964,62 @@ async function generateTextureManifest(glbPath) {
                 const imageIdx = gltf.textures && gltf.textures[textureIdx] ? gltf.textures[textureIdx].source : undefined;
                 if (imageIdx === undefined) return;
 
-                // Reuse cached hash for this image index
-                let inLow, inHigh;
-                if (imageHashCache.has(imageIdx)) {
-                    ({ inLow, inHigh } = imageHashCache.get(imageIdx));
-                } else {
-                    const imageData = getImageData(imageIdx);
-                    if (!imageData || imageData.length === 0) return;
-                    const inputHash = await computePhash(imageData);
-                    inLow = Number(inputHash & 0xFFFFFFFFn);
-                    inHigh = Number(inputHash >> 32n);
-                    imageHashCache.set(imageIdx, { inLow, inHigh });
+                // Check for cached match result promise to handle concurrent requests for shared textures
+                if (!imageMatchCache.has(imageIdx)) {
+                    imageMatchCache.set(imageIdx, (async () => {
+                        const imageData = getImageData(imageIdx);
+                        if (!imageData || imageData.length === 0) return null;
+
+                        const inputHash = await computePhash(imageData);
+                        const inLow = Number(inputHash & 0xFFFFFFFFn);
+                        const inHigh = Number(inputHash >> 32n);
+
+                        let bestMatch = null;
+                        let bestDistance = Infinity;
+                        const allMatches = [];
+
+                        for (let i = 0; i < flatLibrary.length; i++) {
+                            const tex = flatLibrary[i];
+                            const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
+                            if (distance < bestDistance) {
+                                bestDistance = distance;
+                                bestMatch = tex;
+                            }
+                            if (distance <= 20 && !tex.hidden) {
+                                allMatches.push({ ...tex, distance });
+                            }
+                        }
+
+                        allMatches.sort((a, b) => a.distance - b.distance);
+                        const isMatched = bestDistance <= 15;
+
+                        return {
+                            matched: isMatched,
+                            bestMatch: isMatched ? {
+                                name: bestMatch.name,
+                                file: bestMatch.file,
+                                url: bestMatch.url,
+                                urlMedium: bestMatch.urlMedium,
+                                urlLow: bestMatch.urlLow,
+                                category: bestMatch.category
+                            } : null,
+                            bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
+                            isHidden: isMatched && bestMatch && !!bestMatch.hidden,
+                            distance: bestDistance,
+                            similarTextures: allMatches.slice(0, 12).map(t => ({
+                                name: t.name,
+                                url: t.url,
+                                urlMedium: t.urlMedium,
+                                urlLow: t.urlLow,
+                                category: t.category,
+                                distance: t.distance
+                            }))
+                        };
+                    })());
                 }
 
-                let bestMatch = null;
-                let bestDistance = Infinity;
-                const allMatches = [];
-
-                for (const [category, textures] of Object.entries(libraryIndex)) {
-                    for (const tex of textures) {
-                        const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
-                        if (distance < bestDistance) {
-                            bestDistance = distance;
-                            bestMatch = { ...tex, category };
-                        }
-                        if (distance <= 20 && !tex.hidden) {
-                            allMatches.push({ ...tex, category, distance });
-                        }
-                    }
-                }
-
-                allMatches.sort((a, b) => a.distance - b.distance);
-                const isMatched = bestDistance <= 15;
-
-                // Key by material name — client matches via prevMat.name
-                manifest.materials[matName] = {
-                    matched: isMatched,
-                    bestMatch: isMatched ? {
-                        name: bestMatch.name,
-                        file: bestMatch.file,
-                        url: bestMatch.url,
-                        urlMedium: bestMatch.urlMedium,
-                        urlLow: bestMatch.urlLow,
-                        category: bestMatch.category
-                    } : null,
-                    bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
-                    isHidden: isMatched && bestMatch && !!bestMatch.hidden,
-                    distance: bestDistance,
-                    similarTextures: allMatches.slice(0, 12).map(t => ({
-                        name: t.name,
-                        url: t.url,
-                        urlMedium: t.urlMedium,
-                        urlLow: t.urlLow,
-                        category: t.category,
-                        distance: t.distance
-                    }))
-                };
+                const result = await imageMatchCache.get(imageIdx);
+                if (result) manifest.materials[matName] = result;
             } catch (e) {
                 console.error(`[Texture Manifest] Error processing material "${gltfMat.name}": ${e.message}`);
             }
