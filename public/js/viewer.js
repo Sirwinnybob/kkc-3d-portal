@@ -876,13 +876,24 @@ async function setupTexturePanel(jobCode, room) {
     if (textureBtn) {
         textureBtn.onclick = () => {
             texturePanel.classList.toggle('show');
-            if (texturePanel.classList.contains('show')) {
+            const isVisible = texturePanel.classList.contains('show');
+            textureBtn.setAttribute('aria-expanded', isVisible.toString());
+            if (isVisible) {
                 renderMaterialList();
+                if (closeTextureBtn) {
+                    requestAnimationFrame(() => closeTextureBtn.focus());
+                }
             }
         };
     }
     if (closeTextureBtn) {
-        closeTextureBtn.onclick = () => texturePanel.classList.remove('show');
+        closeTextureBtn.onclick = () => {
+            texturePanel.classList.remove('show');
+            if (textureBtn) {
+                textureBtn.setAttribute('aria-expanded', 'false');
+                textureBtn.focus();
+            }
+        };
     }
 
     // Internal function to match all textures on load
@@ -1390,6 +1401,9 @@ async function setupTexturePanel(jobCode, room) {
         if (mat.meshes.length > 1) {
             tapReplaceLabel.textContent = `How do you want to change "${label}"?`;
             tapReplaceSheet.classList.add('show');
+            if (tapReplaceAllBtn) {
+                requestAnimationFrame(() => tapReplaceAllBtn.focus());
+            }
         } else {
             // Only one mesh — skip the dialog
             qpReplaceAll = true;
@@ -1430,6 +1444,9 @@ async function setupTexturePanel(jobCode, room) {
             await loadQpCategories(mat);
         }
         qpEl.classList.add('show');
+        if (qpClose) {
+            requestAnimationFrame(() => qpClose.focus());
+        }
     }
 
     function closeQuickPicker() {
