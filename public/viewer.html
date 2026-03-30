@@ -57,7 +57,7 @@
         <button id="help-btn" class="ui-panel" aria-label="Help">?</button>
     </div>
 
-    <div id="status">
+    <div id="status" role="status" aria-live="polite">
         <span class="status-spin"></span>
         <span id="status-text">Initializing 3D...</span>
     </div>
@@ -174,7 +174,7 @@
                     <input type="text" id="qp-search-input" placeholder="Search..." autocomplete="off" aria-label="Search quick textures" style="width:100px; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:white; font-size:0.85em; transition: width 0.2s;" onfocus="this.style.width='160px'" onblur="this.style.width='100px'">
                     <button id="qp-clear-search" aria-label="Clear search" style="display:none; background:none; border:none; color:rgba(255,255,255,0.6); margin-left:-20px; cursor:pointer;">&times;</button>
                 </div>
-            <button id="qp-close">&#xD7;</button>
+            <button id="qp-close" aria-label="Close Quick Picker">&#xD7;</button>
             </div>
         </div>
         <div id="qp-views-container">

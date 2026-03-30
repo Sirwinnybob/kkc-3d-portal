@@ -1543,3 +1543,27 @@ body {
     #showroom-btn { left: 10px; bottom: 10px; width: 50px; height: 50px; border-radius: 50%; }
     #save-config-btn { bottom: 130px; right: 10px; width: 50px; height: 50px; border-radius: 50%; }
 }
+/* --- KEYBOARD ACCESSIBILITY: FOCUS STATES --- */
+.material-item:focus-visible,
+.qp-category-btn:focus-visible,
+.style-btn:focus-visible,
+.texture-thumb:focus-visible,
+.room-switcher-btn:focus-visible,
+.back-btn:focus-visible,
+.close-help-btn-style:focus-visible,
+.pin-modal-btn:focus-visible {
+    outline: 3px solid #3b82f6;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.25);
+    z-index: 10;
+}
+
+#texture-btn:focus-visible,
+#camera-btn:focus-visible,
+#showroom-btn:focus-visible,
+#save-config-btn:focus-visible,
+#help-btn:focus-visible,
+#menu-btn:focus-visible {
+    outline: 3px solid #3b82f6;
+    outline-offset: 4px;
+}
