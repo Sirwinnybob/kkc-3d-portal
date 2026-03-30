@@ -19,3 +19,7 @@
 **Vulnerability:** Weak random number generation using `Math.random()` to generate secure 5-digit PINs for showroom configs.
 **Learning:** `Math.random()` is predictable and not cryptographically secure, which means malicious actors could potentially guess PINs if they determine the seed or PRNG state. This is especially risky for short, numeric pins (like 5 digits).
 **Prevention:** Always use cryptographically secure random number generators (CSPRNG), such as `crypto.randomInt()`, when generating tokens, keys, passwords, or PINs.
+## 2024-05-18 - Missing Access Controls on Internal Categories
+**Vulnerability:** The `/api/textures/:category` endpoint allowed fetching texture data for internal system folders like `Uncategorized` and `Hidden` because those category names were not explicitly blocked in the route logic, exposing potentially sensitive user textures that failed matching, including ones that may contain sensitive tokens, filenames, or content.
+**Learning:** Directories hidden from API list endpoints (`/api/textures`) might still be accessible via direct parameter injection (`/api/textures/Hidden`) if validation isn't mirrored.
+**Prevention:** Ensure that filtering logic applied to listing items is also strictly applied as authorization constraints on individual item fetch endpoints.

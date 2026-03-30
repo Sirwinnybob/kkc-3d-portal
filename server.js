@@ -575,6 +575,11 @@ app.get('/api/textures/:category', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid category' });
     }
 
+    // Security: Prevent accessing internal/hidden texture categories
+    if (category.toLowerCase() === 'uncategorized' || category.toLowerCase() === 'hidden') {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
     const categoryPath = path.join(TEXTURES_DIR, path.basename(category));
     const rel = path.relative(TEXTURES_DIR, categoryPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
