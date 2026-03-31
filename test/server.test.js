@@ -75,9 +75,14 @@ test('POST /api/showroom/config tests', async (t) => {
 });
 
 test('POST JSON array vulnerability tests', async (t) => {
+    process.env.ADMIN_USER = 'admin';
+    process.env.ADMIN_PASS = 'kkc_admin_123';
+    const authHeader = 'Basic ' + Buffer.from('admin:kkc_admin_123').toString('base64');
+
     await t.test('/api/showroom/staging/tags/:file returns 400 Bad Request if tags is an array', async () => {
         const response = await request(app)
             .post('/api/showroom/staging/tags/test-file.glb')
+            .set('Authorization', authHeader)
             .send(['a', 'b', 'c'])
             .set('Content-Type', 'application/json');
 
@@ -89,6 +94,7 @@ test('POST JSON array vulnerability tests', async (t) => {
     await t.test('/api/showroom/staging/split/:file returns 400 Bad Request if meshCategories is an array', async () => {
         const response = await request(app)
             .post('/api/showroom/staging/split/test-file.glb')
+            .set('Authorization', authHeader)
             .send({
                 context: 'kitchen',
                 style: 'face_frame',

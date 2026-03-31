@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
+const adminAuth = require('./middleware/adminAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
 const { popcount32, hammingDistance } = require('./utils/hash');
 const gltfPipeline = require('gltf-pipeline');
@@ -698,7 +699,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 });
 
 // POST /api/textures/scan-jobs - Extract textures from DAE images folders and save to Uncategorized
-app.post('/api/textures/scan-jobs', async (req, res) => {
+app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
     try {
         const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
         if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
@@ -1704,7 +1705,7 @@ async function splitGlbByCategories(glbPath, meshCategories, destinations, outpu
 }
 
 // GET /api/showroom/staging - List staged GLB files
-app.get('/api/showroom/staging', async (req, res) => {
+app.get('/api/showroom/staging', adminAuth, async (req, res) => {
     try {
         const findGlbs = async (dir, rootDir) => {
             const results = [];
@@ -1739,7 +1740,7 @@ app.use('/showroom/staging', express.static(STAGING_DIR, {
 }));
 
 // GET /api/showroom/staging/meshes/:file - Extract mesh names from a staged GLB
-app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
+app.get('/api/showroom/staging/meshes/:file', adminAuth, async (req, res) => {
     const safeFile = req.params.file;
     if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
 
@@ -1772,7 +1773,7 @@ app.get('/api/showroom/staging/meshes/:file', async (req, res) => {
 });
 
 // POST /api/showroom/staging/parse/:file - Auto-parse a staged GLB by mesh names
-app.post('/api/showroom/staging/parse/:file', async (req, res) => {
+app.post('/api/showroom/staging/parse/:file', adminAuth, async (req, res) => {
     const safeFile = req.params.file;
     if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
 
@@ -1805,7 +1806,7 @@ app.post('/api/showroom/staging/parse/:file', async (req, res) => {
 });
 
 // POST /api/showroom/staging/tags/:file - Save staging tags
-app.post('/api/showroom/staging/tags/:file', express.json({ limit: '10mb' }), async (req, res) => {
+app.post('/api/showroom/staging/tags/:file', adminAuth, express.json({ limit: '10mb' }), async (req, res) => {
     const safeFile = req.params.file.replace(/\.glb$/i, '');
     if (!/^[a-zA-Z0-9\-_ \/]+$/.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file name' });
 
@@ -1823,7 +1824,7 @@ app.post('/api/showroom/staging/tags/:file', express.json({ limit: '10mb' }), as
 });
 
 // GET /api/showroom/staging/tags/:file - Get staging tags
-app.get('/api/showroom/staging/tags/:file', async (req, res) => {
+app.get('/api/showroom/staging/tags/:file', adminAuth, async (req, res) => {
     const safeFile = req.params.file.replace(/\.glb$/i, '').replace(/\.tags$/i, '');
     const tagsPath = path.join(STAGING_DIR, `${safeFile}.tags.json`);
     const rel = path.relative(STAGING_DIR, tagsPath);
@@ -1840,7 +1841,7 @@ app.get('/api/showroom/staging/tags/:file', async (req, res) => {
 // POST /api/showroom/staging/split/:file - Split staged GLB into deep showroom hierarchy
 // Payload: { context, style, overlay?, meshCategories, categorySettings?, outputName? }
 // categorySettings maps category -> { subCategory?, grain? } for per-category overrides
-app.post('/api/showroom/staging/split/:file', express.json({ limit: '10mb' }), async (req, res) => {
+app.post('/api/showroom/staging/split/:file', adminAuth, express.json({ limit: '10mb' }), async (req, res) => {
     const safeFile = req.params.file;
     if (!/^[a-zA-Z0-9\-_ \/]+\.glb$/i.test(safeFile)) return res.status(400).json({ success: false, error: 'Invalid file' });
 
