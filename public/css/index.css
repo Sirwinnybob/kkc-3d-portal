@@ -253,3 +253,11 @@ button:hover { background: #0056b3; }
     box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
 }
 
+
+/* --- KEYBOARD ACCESSIBILITY: FOCUS STATES --- */
+input:focus-visible,
+button:focus-visible,
+.room-btn:focus-visible {
+    outline: 3px solid #3b82f6;
+    outline-offset: 2px;
+}

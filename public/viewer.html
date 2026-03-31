@@ -83,7 +83,7 @@
                 <b>📷 Camera:</b> Save a hi-res photo with texture notes<br>
                 <b>? Help:</b> Show this guide
             </div>
-            <button id="close-help-btn" class="close-help-btn-style">Got it</button>
+            <button id="close-help-btn" class="close-help-btn-style" aria-label="Close help guide">Got it</button>
         </div>
     </div>
 
@@ -128,7 +128,7 @@
             </div>
             <!-- Catalog View -->
             <div id="catalog-view" style="display:none">
-                <button id="back-to-materials" class="back-btn">&larr; Back to Materials</button>
+                <button id="back-to-materials" class="back-btn" aria-label="Return to materials list">&larr; Back to Materials</button>
                 <div class="search-container">
                     <input type="text" id="texture-search" placeholder="Search textures..." autocomplete="off" aria-label="Search textures">
                     <button id="clear-texture-search" aria-label="Clear search" style="display:none">&times;</button>
@@ -145,14 +145,14 @@
         <div id="tap-replace-inner">
             <div id="tap-replace-label">Replace texture on this surface?</div>
             <div id="tap-replace-buttons">
-                <button id="tap-replace-all-btn">
+                <button id="tap-replace-all-btn" aria-label="Replace all matching surfaces">
                     <span class="replace-btn-icon">⬛⬛</span>
                     <span class="replace-btn-text">
                         <span class="replace-btn-title">All Matching Surfaces</span>
                         <span class="replace-btn-sub">Every surface of this type updates at once</span>
                     </span>
                 </button>
-                <button id="tap-replace-one-btn">
+                <button id="tap-replace-one-btn" aria-label="Enter paint mode to replace surfaces one by one">
                     <span class="replace-btn-icon">🖌</span>
                     <span class="replace-btn-text">
                         <span class="replace-btn-title">Paint Mode</span>
@@ -160,14 +160,14 @@
                     </span>
                 </button>
             </div>
-            <button id="tap-replace-cancel">Cancel</button>
+            <button id="tap-replace-cancel" aria-label="Cancel texture replacement">Cancel</button>
         </div>
     </div>
 
     <!-- Quick Texture Picker (tap-to-select) -->
     <div id="quick-picker" role="dialog" aria-modal="true" aria-label="Quick texture picker">
                 <div id="quick-picker-header">
-            <button id="qp-categories-back">&#8592; Categories</button>
+            <button id="qp-categories-back" aria-label="Back to categories">&#8592; Categories</button>
             <span id="qp-title">Select Texture</span>
             <div class="qp-actions">
                 <div class="search-container qp-search-container" style="margin-bottom:0; display:flex; align-items:center;">
