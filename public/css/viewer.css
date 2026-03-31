@@ -1567,3 +1567,12 @@ body {
     outline: 3px solid #3b82f6;
     outline-offset: 4px;
 }
+
+/* --- ADDITIONAL KEYBOARD ACCESSIBILITY: FOCUS STATES --- */
+#tap-replace-all-btn:focus-visible,
+#tap-replace-one-btn:focus-visible,
+#tap-replace-cancel:focus-visible,
+#qp-categories-back:focus-visible {
+    outline: 3px solid #3b82f6;
+    outline-offset: 2px;
+}

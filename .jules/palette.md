@@ -13,3 +13,7 @@
 ## 2025-06-12 - Focus Management and CSS Transitions for Modals
 **Learning:** When adding new modals (like the PIN modal) or side panels (Showroom panel), relying on `display: none/block` prevents CSS transitions and breaks focus management. Moving to a class-based `.show` toggle with `opacity` and `visibility` allows for delight (scale/fade effects) while maintaining accessibility. Furthermore, programmatically moving focus to the close button on open, and returning it to the trigger on close, is essential for a seamless keyboard experience.
 **Action:** Use `.show` classes with `opacity`/`visibility` for all UI overlays. Always implement "focus trapping" entry/exit points: focus the primary action or close button upon opening, and restore focus to the triggering element upon closing.
+
+## 2025-06-25 - Dynamic ARIA Feedback for Icon-Only Actions
+**Learning:** For icon-only buttons that trigger state changes (like "Copy PIN" changing to a checkmark), visual changes alone are insufficient for screen reader users. By dynamically updating the `aria-label` (e.g., from "Copy PIN" to "PIN Copied!") and reverting it after a timeout, we provide immediate, non-disruptive confirmation of the action's success.
+**Action:** When implementing "Copy" or similar transient actions on icon buttons, use `setAttribute('aria-label', ...)` to provide spoken feedback. Ensure the label is restored to its original state when the visual icon reverts.
