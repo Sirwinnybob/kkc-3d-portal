@@ -295,6 +295,12 @@ let textureHashCacheTime = 0;
 let textureHashInProgress = null;
 const HASH_CACHE_TTL = 60000; // 1 minute
 
+// Showroom category cache
+let showroomCategoryCache = null;
+let showroomCategoryCacheTime = 0;
+let showroomCategoryInProgress = null;
+const SHOWROOM_CACHE_TTL = 60000; // 1 minute
+
 /**
  * Perceptual Hash (pHash) using Discrete Cosine Transform (DCT)
  * Implementation matches logic common in imagehash libraries (32x32 -> 8x8)
@@ -1295,37 +1301,60 @@ async function buildCatTree(catDir, cat) {
     return tree;
 }
 
-// GET /api/showroom/categories - Deeply nested hierarchy
-app.get('/api/showroom/categories', async (req, res) => {
-    try {
-        const result = {};
-        for (const ctx of SHOWROOM_CONTEXTS) {
-            result[ctx] = {};
-            // Direct categories
-            for (const cat of DIRECT_CATEGORIES) {
-                result[ctx][cat] = { files: await listGlbs(path.join(SHOWROOM_DIR, ctx, cat)) };
-            }
-            // Style-nested categories
-            for (const style of SHOWROOM_STYLES) {
-                result[ctx][style] = {};
-                if (style === 'face_frame') {
-                    for (const overlay of SHOWROOM_OVERLAYS) {
-                        result[ctx][style][overlay] = {};
-                        for (const cat of OVERLAY_CATEGORIES) {
-                            result[ctx][style][overlay][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, overlay, cat), cat);
+// Helper: build the full showroom category hierarchy
+async function buildShowroomCategoryHierarchy() {
+    const now = Date.now();
+    if (showroomCategoryCache && (now - showroomCategoryCacheTime) < SHOWROOM_CACHE_TTL) {
+        return showroomCategoryCache;
+    }
+
+    if (showroomCategoryInProgress) return showroomCategoryInProgress;
+
+    showroomCategoryInProgress = (async () => {
+        try {
+            const result = {};
+            for (const ctx of SHOWROOM_CONTEXTS) {
+                result[ctx] = {};
+                // Direct categories
+                for (const cat of DIRECT_CATEGORIES) {
+                    result[ctx][cat] = { files: await listGlbs(path.join(SHOWROOM_DIR, ctx, cat)) };
+                }
+                // Style-nested categories
+                for (const style of SHOWROOM_STYLES) {
+                    result[ctx][style] = {};
+                    if (style === 'face_frame') {
+                        for (const overlay of SHOWROOM_OVERLAYS) {
+                            result[ctx][style][overlay] = {};
+                            for (const cat of OVERLAY_CATEGORIES) {
+                                result[ctx][style][overlay][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, overlay, cat), cat);
+                            }
                         }
-                    }
-                    for (const cat of NON_OVERLAY_CATEGORIES) {
-                        result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
-                    }
-                } else {
-                    for (const cat of [...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES]) {
-                        result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
+                        for (const cat of NON_OVERLAY_CATEGORIES) {
+                            result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
+                        }
+                    } else {
+                        for (const cat of [...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES]) {
+                            result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
+                        }
                     }
                 }
             }
+            showroomCategoryCache = result;
+            showroomCategoryCacheTime = Date.now();
+            return result;
+        } finally {
+            showroomCategoryInProgress = null;
         }
-        res.json({ success: true, categories: result });
+    })();
+
+    return showroomCategoryInProgress;
+}
+
+// GET /api/showroom/categories - Deeply nested hierarchy
+app.get('/api/showroom/categories', async (req, res) => {
+    try {
+        const categories = await buildShowroomCategoryHierarchy();
+        res.json({ success: true, categories });
     } catch (e) {
         console.error(`[Showroom] Categories error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Failed to list showroom categories' });
@@ -1996,6 +2025,22 @@ if (require.main === module) {
                     }
                 });
             });
+        }
+    });
+
+    // Watch showroom folder for live changes to GLBs and tags
+    chokidar.watch(SHOWROOM_DIR, {
+        ignoreInitial: true,
+        ignored: [
+            /(\\|\/)\./,
+            '**/configs/**',
+            '**/staging/**'
+        ],
+        awaitWriteFinish: { stabilityThreshold: 1000, pollInterval: 100 }
+    }).on('all', (event, fp) => {
+        if (fp.endsWith('.glb') || fp.endsWith('.tags.json')) {
+            console.log(`[Showroom] ${event}: ${fp} — invalidating category cache.`);
+            showroomCategoryCache = null;
         }
     });
 
