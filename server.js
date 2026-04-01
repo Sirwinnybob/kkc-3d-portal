@@ -157,11 +157,11 @@ app.get('/api/job/:code', async (req, res) => {
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 return findGlbs(fullPath);
-            } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                // If the file is directly in the job directory, use the filename (without .glb).
+            } else if (entry.name.toLowerCase().endsWith('.glb') || entry.name.toLowerCase().endsWith('.obj')) {
+                // If the file is directly in the job directory, use the filename (without .glb/.obj).
                 // If it's in a subfolder, use the immediate parent folder's name.
                 if (dir === jobPath) {
-                    rooms.push(path.basename(entry.name, '.glb'));
+                    rooms.push(path.basename(entry.name, path.extname(entry.name)));
                 } else {
                     rooms.push(path.basename(dir));
                 }
@@ -204,9 +204,9 @@ app.get('/api/job/:code/:room', (req, res) => {
                 const dirent = entries[i];
                 if (dirent.isDirectory()) {
                     dirs.push(path.join(dir, dirent.name));
-                } else if (dirent.name.toLowerCase().endsWith('.glb')) {
+                } else if (dirent.name.toLowerCase().endsWith('.glb') || dirent.name.toLowerCase().endsWith('.obj')) {
                     const isRoot = dir === jobPath;
-                    const matchName = isRoot ? path.basename(dirent.name, '.glb') : path.basename(dir);
+                    const matchName = isRoot ? path.basename(dirent.name, path.extname(dirent.name)) : path.basename(dir);
                     if (matchName.toLowerCase() === safeRoom.toLowerCase()) {
                         return path.join(dir, dirent.name);
                     }
