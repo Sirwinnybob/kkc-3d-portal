@@ -19,13 +19,19 @@ new_mat_block = """                                if (mat.map) {
                                     mat.color.setHex(0xffffff);
                                     mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
                                     mat.map.minFilter  = THREE.LinearMipmapLinearFilter;
+                                    // Three.js colorspace issue on older objs - ensure sRGB
+                                    mat.map.colorSpace = THREE.SRGBColorSpace;
                                     mat.map.magFilter  = THREE.LinearFilter;
+
                                     // Also clear any emission/specular darkening to be safe
                                     if (mat.emissive) mat.emissive.setHex(0x000000);
                                     if (mat.specular) mat.specular.setHex(0x111111);
+
+                                    mat.needsUpdate = true;
                                 }"""
 
 content = content.replace(old_mat_block, new_mat_block)
 
+# Remove the broken debug code by checking out earlier. Let's just run the patch
 with open(viewer_file, 'w') as f:
     f.write(content)

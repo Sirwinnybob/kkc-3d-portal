@@ -21,6 +21,8 @@ function escapeHtml(unsafe) {
 }
 
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
+window.scene = scene;
+
 let zoomVelocity = 0;
 let detectedMaterials = [];
 let selectedMaterialIndex = -1;
@@ -139,6 +141,9 @@ const updateStatus = (msg, isError = false) => {
 };
 
 async function init() {
+    window.getScene = () => scene;
+    window.getMaterials = () => detectedMaterials;
+
     updateStatus("Initializing 3D...");
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -413,8 +418,7 @@ async function init() {
 
     try {
         // --- THREE.JS SETUP (shared by standard and showroom modes) ---
-        scene = new THREE.Scene();
-        const isLightMode = localStorage.getItem("lightMode") === "true";
+        scene = new THREE.Scene(); window.scene = scene;         const isLightMode = localStorage.getItem("lightMode") === "true";
         scene.background = new THREE.Color(isLightMode ? 0xf0f0f0 : 0x111111);
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 5000);
 
@@ -860,8 +864,12 @@ async function init() {
             // Set up a LoadingManager to sanitize material URLs from SketchUp
             const manager = new THREE.LoadingManager();
             manager.setURLModifier((url) => {
+                console.error("URLModifier input:", url);
                 // Ignore data URIs or already-resolved URLs
-                if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http')) return url;
+                if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http')) {
+                    console.error("URLModifier skipped:", url);
+                    return url;
+                }
 
                 // Fix Windows backslashes sometimes exported by SketchUp
                 let cleanUrl = url.replace(/\\/g, '/');
@@ -870,14 +878,54 @@ async function init() {
                 cleanUrl = cleanUrl.replace(/#/g, '%23');
                 cleanUrl = cleanUrl.replace(/\?/g, '%3F');
 
+                console.error("URLModifier output:", cleanUrl);
                 return cleanUrl;
             });
+
+            manager.onError = function ( url ) {
+                console.error( 'There was an error loading ' + url );
+            };
 
             const mtlLoader = new MTLLoader(manager);
             // Crucial: Set resource path so textures resolve relative to the .mtl folder
             mtlLoader.setResourcePath(mtlDir);
 
             mtlLoader.load(mtlUrl, function(materials) {
+                // Manually parse materials to ensure textures are mapped
+                console.error("Manual MTL Parse Check");
+                for (const matName in materials.materialsInfo) {
+                    const info = materials.materialsInfo[matName];
+                    if (info.map_kd) {
+                        const texUrl = mtlDir + info.map_kd;
+                        console.error(`Material ${matName} has map_kd: ${info.map_kd} -> loading manually from ${texUrl}`);
+                        const tex = new THREE.TextureLoader().load(texUrl);
+                        tex.colorSpace = THREE.SRGBColorSpace;
+
+                        // We must create the material first if not exists
+                        let m = materials.materials[matName];
+                        if (!m) {
+                            m = new THREE.MeshPhongMaterial({ name: matName });
+                            materials.materials[matName] = m;
+                        }
+                        m.map = tex;
+                        m.map.wrapS = THREE.RepeatWrapping;
+                        m.map.wrapT = THREE.RepeatWrapping;
+                        m.color.setHex(0xffffff);
+                        if (m.emissive) m.emissive.setHex(0x000000);
+                        if (m.specular) m.specular.setHex(0x111111);
+                        m.needsUpdate = true;
+                    }
+                }
+
+                console.error("MTL loaded!");
+                materials.preload();
+                console.error("MTL materials created:", Object.keys(materials.materials));
+                Object.values(materials.materials).forEach(m => {
+                    console.error("MTL material name:", m.name, "Has map:", !!m.map);
+                    if (m.map) {
+                        console.error("Map src:", m.map.image ? m.map.image.src : m.map.name);
+                    }
+                });
                 materials.preload();
                 const objLoader = new OBJLoader(manager);
                 objLoader.setMaterials(materials);
@@ -898,6 +946,9 @@ async function init() {
                         }
                     }
 
+                    console.error("==== MTL DUMP ====");
+                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
+
                     const obj = objLoader.parse(text);
                     // Apply SketchUp rotation fix and scale
                     // // obj.rotation.x = -Math.PI / 2; // Assuming Y is up // Assuming Y is up
@@ -905,6 +956,19 @@ async function init() {
                     obj.updateMatrixWorld(true);
 
                     const model = obj;
+
+                    console.error("====== PARSED OBJ ======");
+                    model.traverse(child => {
+                        if (child.isMesh && child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => {
+                                    if (m.map) console.error("Found map on " + child.name + " -> " + m.name + ": " + (m.map.image ? m.map.image.src : 'no image object'));
+                                });
+                            } else {
+                                if (child.material.map) console.error("Found map on " + child.name + " -> " + child.material.name + ": " + (child.material.map.image ? child.material.map.image.src : 'no image object'));
+                            }
+                        }
+                    });
                     loadedModel = model;
                     detectedMaterials = [];
                     const materialMap = new Map();
@@ -913,6 +977,11 @@ async function init() {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
+
+                            // Ensure UVs exist, otherwise textures won't render
+                            if (!child.geometry.attributes.uv) {
+                                console.warn("No UV map on " + child.name);
+                            }
 
                             // Keep the material created by MTLLoader, but adjust properties
                             const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -923,6 +992,9 @@ async function init() {
                                 mat.polygonOffsetFactor = 1;
                                 mat.polygonOffsetUnits = 1;
 
+                                // MTL files often use map_Kd, which becomes map
+                                // Or map_Ka, which becomes map, etc.
+                                // If it has a map, enforce white base color.
                                 if (mat.map) {
                                     // SketchUp MTLs often set dark Kd values which multiply with the texture map,
                                     // making them look black/blank. Force the diffuse color to pure white.
@@ -968,6 +1040,28 @@ async function init() {
                     controls.target.copy(center);
                     controls.update();
                     updateStatus("");
+
+                    // DEBUG LOGGING
+                    let report = "\n==== DEBUG MATERIAL REPORT ====\n";
+                    model.traverse(child => {
+                        if (child.isMesh) {
+                            report += `Mesh: ${child.name}\n`;
+                            report += `  Has UVs: ${child.geometry.attributes.uv !== undefined}\n`;
+                            const mats = Array.isArray(child.material) ? child.material : [child.material];
+                            mats.forEach(m => {
+                                report += `  Material: ${m.name}\n`;
+                                report += `    Has Map: ${!!m.map}\n`;
+                                report += `    Color: #${m.color.getHexString()}\n`;
+                                if (m.map) {
+                                    report += `    ColorSpace: ${m.map.colorSpace}\n`;
+                                    if (m.map.image) {
+                                        report += `    Image Src: ${m.map.image.src}\n`;
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    console.log(report);
                 });
             }, undefined, function(err) {
                 console.warn('MTL load failed, loading OBJ without materials:', err);
@@ -987,6 +1081,9 @@ async function init() {
                             break;
                         }
                     }
+
+                    console.error("==== MTL DUMP ====");
+                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
 
                     const obj = objLoader.parse(text);
                     obj.scale.set(scale, scale, scale);
@@ -1015,6 +1112,28 @@ async function init() {
                     controls.target.copy(center);
                     controls.update();
                     updateStatus("");
+
+                    // DEBUG LOGGING
+                    let report = "\n==== DEBUG MATERIAL REPORT ====\n";
+                    model.traverse(child => {
+                        if (child.isMesh) {
+                            report += `Mesh: ${child.name}\n`;
+                            report += `  Has UVs: ${child.geometry.attributes.uv !== undefined}\n`;
+                            const mats = Array.isArray(child.material) ? child.material : [child.material];
+                            mats.forEach(m => {
+                                report += `  Material: ${m.name}\n`;
+                                report += `    Has Map: ${!!m.map}\n`;
+                                report += `    Color: #${m.color.getHexString()}\n`;
+                                if (m.map) {
+                                    report += `    ColorSpace: ${m.map.colorSpace}\n`;
+                                    if (m.map.image) {
+                                        report += `    Image Src: ${m.map.image.src}\n`;
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    console.log(report);
                 });
             });
         } else {
