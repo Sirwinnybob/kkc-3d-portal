@@ -1460,6 +1460,7 @@ async function setupTexturePanel(jobCode, room) {
         currentCategoryTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'texture-thumb';
+            btn.dataset.search = (tex.name || '').toLowerCase();
             btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
             btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
             btn.onclick = () => previewTexture(tex.url, tex.name, tex.urlMedium, tex.urlLow);
@@ -1534,7 +1535,7 @@ async function setupTexturePanel(jobCode, room) {
             let visibleCount = 0;
 
             thumbs.forEach(th => {
-                const name = th.querySelector('span')?.innerText?.toLowerCase() || '';
+                const name = th.dataset.search || '';
                 const isVisible = name.includes(q);
                 th.style.display = isVisible ? '' : 'none';
                 if (isVisible) visibleCount++;
@@ -1665,13 +1666,13 @@ async function setupTexturePanel(jobCode, room) {
             if (isTexturesView) {
                 const thumbs = qpTextureStrip.querySelectorAll('.qp-tex-item');
                 thumbs.forEach(th => {
-                    const name = th.querySelector('span')?.textContent?.toLowerCase() || '';
+                    const name = th.dataset.search || '';
                     th.style.display = name.includes(q) ? '' : 'none';
                 });
             } else {
                 const cats = qpCategoryGrid.querySelectorAll('.qp-category-btn');
                 cats.forEach(btn => {
-                    const name = btn.textContent.toLowerCase() || '';
+                    const name = btn.dataset.search || '';
                     btn.style.display = name.includes(q) ? '' : 'none';
                 });
             }
@@ -1732,6 +1733,7 @@ async function setupTexturePanel(jobCode, room) {
             // Add Solid Colors first
             const colorBtn = document.createElement('button');
             colorBtn.className = 'qp-category-btn';
+            colorBtn.dataset.search = 'solid colors';
             colorBtn.textContent = 'Solid Colors';
             colorBtn.addEventListener('click', () => loadQpSolidColors(mat));
             qpCategoryGrid.appendChild(colorBtn);
@@ -1739,6 +1741,7 @@ async function setupTexturePanel(jobCode, room) {
             data.categories.forEach(cat => {
                 const btn = document.createElement('button');
                 btn.className = 'qp-category-btn';
+                btn.dataset.search = (cat || '').toLowerCase();
                 if (mat && mat.bestCategory && cat === mat.bestCategory) {
                     btn.classList.add('current-cat');
                 }
@@ -1765,6 +1768,7 @@ async function setupTexturePanel(jobCode, room) {
         COLOR_PRESETS.forEach(preset => {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
+            btn.dataset.search = (preset.name || '').toLowerCase();
             btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
             btn.addEventListener('click', () => {
                 if (qpMatGroupIndex >= 0) {
@@ -1801,6 +1805,7 @@ async function setupTexturePanel(jobCode, room) {
         recent.forEach(hex => {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
+            btn.dataset.search = (hex || '').toLowerCase();
             btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
             btn.addEventListener('click', () => {
                 if (qpMatGroupIndex >= 0) {
@@ -1851,6 +1856,7 @@ async function setupTexturePanel(jobCode, room) {
         qpCurrentTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
+            btn.dataset.search = (tex.name || '').toLowerCase();
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
             btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
             btn.addEventListener('click', () => applyQpTexture(tex.url, tex.name, tex.urlMedium, tex.urlLow));
