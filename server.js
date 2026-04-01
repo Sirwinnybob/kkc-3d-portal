@@ -520,6 +520,12 @@ async function buildTextureHashIndex() {
                 // 2. Process variant hashes in the 'hashes/' sub-folder in parallel (once main textures are indexed)
                 const hashFolderPath = path.join(categoryPath, 'hashes');
                 if (fs.existsSync(hashFolderPath)) {
+                    // Create a Map for O(1) canonical texture lookups
+                    const canonicalMap = new Map();
+                    for (const t of index[entry.name]) {
+                        canonicalMap.set(t.name, t);
+                    }
+
                     const variantFiles = await fs.promises.readdir(hashFolderPath);
                     await Promise.all(variantFiles.map(async (file) => {
                         if (file === 'Thumbs.db' || file.startsWith('.')) return;
@@ -531,7 +537,9 @@ async function buildTextureHashIndex() {
                             const buffer = await fs.promises.readFile(filePath);
                             const hash = await computePhash(buffer);
                             let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
-                            const canonical = index[entry.name].find(t => t.name === canonicalName);
+
+                            // Find the canonical entry in the map for O(1) lookup
+                            const canonical = canonicalMap.get(canonicalName);
 
                             if (canonical) {
                                 index[entry.name].push({
