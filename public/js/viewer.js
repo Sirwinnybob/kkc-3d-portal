@@ -917,13 +917,12 @@ async function init() {
                                 child.material.map.magFilter  = THREE.LinearFilter;
                             }
 
-                            const mat = child.material;
-                            const hasTexture = !!mat.map;
+                            const hasTexture = !!child.material.map;
 
                             if (hasTexture) {
-                                const texSrc = mat.map.source?.data?.src || mat.map.image?.src || 'obj_texture';
+                                const texSrc = child.material.map.source?.data?.src || child.material.map.image?.src || 'obj_texture';
                                 if (!materialMap.has(texSrc)) {
-                                    materialMap.set(texSrc, { material: mat, meshes: [], name: prevMat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
+                                    materialMap.set(texSrc, { material: child.material, meshes: [], name: prevMat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
                                 }
                                 materialMap.get(texSrc).meshes.push(child);
                             }
