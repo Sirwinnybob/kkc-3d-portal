@@ -1143,6 +1143,89 @@ async function cleanDae(filePath) {
     } catch (e) { console.error(`!!! [Cleaner] Error: ${e.message}`); }
 }
 
+
+// Helper: Sanitize GLB samplers to fix WebGL Sample Bias warnings and black textures
+async function sanitizeGlbSamplers(glbPath) {
+    try {
+        const glbBuffer = await fs.promises.readFile(glbPath);
+        const magic = glbBuffer.readUInt32LE(0);
+        if (magic !== 0x46546C67) return; // Not a GLB
+
+        const jsonChunkLength = glbBuffer.readUInt32LE(12);
+        const jsonString = glbBuffer.toString('utf8', 20, 20 + jsonChunkLength);
+        const gltf = JSON.parse(jsonString);
+        let modified = false;
+
+        if (gltf.samplers) {
+            for (const sampler of gltf.samplers) {
+                // Remove problematic extras like textureBias (-100) that crash WebGL shaders
+                if (sampler.extras && sampler.extras.textureBias !== undefined) {
+                    delete sampler.extras.textureBias;
+                    if (Object.keys(sampler.extras).length === 0) {
+                        delete sampler.extras;
+                    }
+                    modified = true;
+                }
+
+                // Enforce standard texture filtering (Linear, Mipmap Linear)
+                if (sampler.magFilter !== 9729) {
+                    sampler.magFilter = 9729; // LINEAR
+                    modified = true;
+                }
+                if (sampler.minFilter !== 9987 && sampler.minFilter !== 9729) {
+                    sampler.minFilter = 9987; // LINEAR_MIPMAP_LINEAR
+                    modified = true;
+                }
+            }
+        }
+
+        // Fix SketchUp's overblown PBR baseColorFactor (if it defaults to pure white or something weird)
+        // Ensure metallic is 0 and roughness is reasonably high for wood/paint
+        if (gltf.materials) {
+            for (const mat of gltf.materials) {
+                if (mat.pbrMetallicRoughness) {
+                    const pbr = mat.pbrMetallicRoughness;
+                    if (pbr.baseColorTexture && pbr.metallicFactor === undefined && pbr.roughnessFactor === undefined) {
+                        // Assimp sometimes misses these or sets defaults poorly for Lambert
+                        pbr.metallicFactor = 0.0;
+                        pbr.roughnessFactor = 0.8;
+                        modified = true;
+                    }
+                }
+            }
+        }
+
+        if (!modified) return;
+
+        let newJsonString = JSON.stringify(gltf);
+        let newJsonLength = Buffer.byteLength(newJsonString, 'utf8');
+        const padding = (4 - (newJsonLength % 4)) % 4;
+        for (let i = 0; i < padding; i++) newJsonString += ' ';
+        newJsonLength += padding;
+
+        const binChunkOffset = 20 + jsonChunkLength;
+        const binData = glbBuffer.length > binChunkOffset ? glbBuffer.slice(binChunkOffset) : Buffer.alloc(0);
+
+        const newTotalLength = 20 + newJsonLength + binData.length;
+        const newBuffer = Buffer.alloc(newTotalLength);
+
+        newBuffer.writeUInt32LE(0x46546C67, 0);
+        newBuffer.writeUInt32LE(2, 4);
+        newBuffer.writeUInt32LE(newTotalLength, 8);
+
+        newBuffer.writeUInt32LE(newJsonLength, 12);
+        newBuffer.writeUInt32LE(0x4E4F534A, 16);
+        newBuffer.write(newJsonString, 20, newJsonLength, 'utf8');
+
+        if (binData.length > 0) binData.copy(newBuffer, 20 + newJsonLength);
+
+        await fs.promises.writeFile(glbPath, newBuffer);
+        console.log(`[GLB Sanitizer] Fixed samplers/materials in ${path.basename(glbPath)}`);
+    } catch (e) {
+        console.error(`[GLB Sanitizer] Error: ${e.message}`);
+    }
+}
+
 async function processQueue() {
     if (isConverting || conversionQueue.length === 0) return;
     isConverting = true;
@@ -1173,6 +1256,12 @@ async function processQueue() {
                     if (e.code !== 'ENOENT') console.error(`!!! [FAILED] Rename ${roomName}: ${e.message}`);
                 }
             }
+
+            // Fix SketchUp samplers before pipeline/LOD processing
+            if (fs.existsSync(finalGlb)) {
+                await sanitizeGlbSamplers(finalGlb);
+            }
+
             console.log(`SUCCESS: ${roomName} is live.`);
             // Generate texture manifest for client-side consumption
             await generateTextureManifest(finalGlb);
@@ -2055,6 +2144,9 @@ if (require.main === module) {
                         const genGlb = path.join(dir, outputGlb);
                         if (outputGlb !== `${baseName}.glb`) {
                             try { await fs.promises.rename(genGlb, finalGlb); } catch (e) { /* ignore */ }
+                        }
+                        if (fs.existsSync(finalGlb)) {
+                            await sanitizeGlbSamplers(finalGlb);
                         }
                         console.log(`[Staging] Converted: ${baseName}.glb`);
                     }
