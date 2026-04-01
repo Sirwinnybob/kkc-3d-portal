@@ -855,14 +855,34 @@ async function init() {
 
         if (isObj) {
             const mtlUrl = urlData.url.substring(0, urlData.url.lastIndexOf('.')) + '.mtl';
-            const mtlLoader = new MTLLoader();
+            const mtlDir = mtlUrl.substring(0, mtlUrl.lastIndexOf('/') + 1);
+
+            // Set up a LoadingManager to sanitize material URLs from SketchUp
+            const manager = new THREE.LoadingManager();
+            manager.setURLModifier((url) => {
+                // Ignore data URIs or already-resolved URLs
+                if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http')) return url;
+
+                // Fix Windows backslashes sometimes exported by SketchUp
+                let cleanUrl = url.replace(/\\/g, '/');
+
+                // Encode hash characters (#) so they aren't parsed as URL fragments
+                cleanUrl = cleanUrl.replace(/#/g, '%23');
+                cleanUrl = cleanUrl.replace(/\?/g, '%3F');
+
+                return cleanUrl;
+            });
+
+            const mtlLoader = new MTLLoader(manager);
+            // Crucial: Set resource path so textures resolve relative to the .mtl folder
+            mtlLoader.setResourcePath(mtlDir);
 
             mtlLoader.load(mtlUrl, function(materials) {
                 materials.preload();
-                const objLoader = new OBJLoader();
+                const objLoader = new OBJLoader(manager);
                 objLoader.setMaterials(materials);
 
-                const fileLoader = new THREE.FileLoader();
+                const fileLoader = new THREE.FileLoader(manager);
                 fileLoader.load(urlData.url, function(text) {
                     const lines = text.substring(0, 1024).split('\n');
                     let scale = 1.0;
@@ -946,8 +966,8 @@ async function init() {
                 });
             }, undefined, function(err) {
                 console.warn('MTL load failed, loading OBJ without materials:', err);
-                const objLoader = new OBJLoader();
-                const fileLoader = new THREE.FileLoader();
+                const objLoader = new OBJLoader(manager);
+                const fileLoader = new THREE.FileLoader(manager);
                 fileLoader.load(urlData.url, function(text) {
                     const lines = text.substring(0, 1024).split('\n');
                     let scale = 1.0;
