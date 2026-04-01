@@ -734,14 +734,26 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
 
         for (const daePath of daeFiles) {
             try {
-                const imagesDir = path.join(path.dirname(daePath), 'images');
+                let imagesDir = path.join(path.dirname(daePath), 'images');
 
-                // Check if images folder exists
+                // Check if standard 'images' folder exists (Cabinet Vision)
+                let hasImages = false;
                 try {
                     await fs.promises.access(imagesDir);
+                    hasImages = true;
                 } catch {
-                    continue; // No images folder, skip
+                    // Fallback: SketchUp usually exports textures into a folder named after the DAE file
+                    const baseName = path.basename(daePath, '.dae');
+                    imagesDir = path.join(path.dirname(daePath), baseName);
+                    try {
+                        await fs.promises.access(imagesDir);
+                        hasImages = true;
+                    } catch {
+                        // Neither folder exists, skip
+                    }
                 }
+
+                if (!hasImages) continue;
 
                 const files = await fs.promises.readdir(imagesDir);
                 for (const file of files) {
@@ -854,14 +866,26 @@ async function extractTexturesFromGlb(glbPath) {
 // Extract textures from a DAE file's images folder (pre-GLB conversion)
 async function extractTexturesFromDaeImages(daeFilePath) {
     const dir = path.dirname(daeFilePath);
-    const imagesDir = path.join(dir, 'images');
+    let imagesDir = path.join(dir, 'images');
 
-    // Check if images folder exists
+    // Check if standard 'images' folder exists (Cabinet Vision)
+    let hasImages = false;
     try {
         await fs.promises.access(imagesDir);
+        hasImages = true;
     } catch {
-        return; // No images folder, nothing to extract
+        // Fallback: SketchUp usually exports textures into a folder named after the DAE file
+        const baseName = path.basename(daeFilePath, '.dae');
+        imagesDir = path.join(dir, baseName);
+        try {
+            await fs.promises.access(imagesDir);
+            hasImages = true;
+        } catch {
+            // Neither folder exists, nothing to extract
+        }
     }
+
+    if (!hasImages) return;
 
     const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
     if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
