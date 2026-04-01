@@ -855,7 +855,9 @@ async function init() {
 
         if (isObj) {
             const mtlUrl = urlData.url.substring(0, urlData.url.lastIndexOf('.')) + '.mtl';
+            const basePath = urlData.url.substring(0, urlData.url.lastIndexOf('/') + 1);
             const mtlLoader = new MTLLoader();
+            mtlLoader.setPath(basePath);
 
             mtlLoader.load(mtlUrl, function(materials) {
                 materials.preload();
@@ -880,7 +882,7 @@ async function init() {
 
                     const obj = objLoader.parse(text);
                     // Apply SketchUp rotation fix and scale
-                    obj.rotation.x = -Math.PI / 2;
+                    // // obj.rotation.x = -Math.PI / 2; // Assuming Y is up // Assuming Y is up
                     obj.scale.set(scale, scale, scale);
                     obj.updateMatrixWorld(true);
 
@@ -894,18 +896,20 @@ async function init() {
                             child.castShadow = true;
                             child.receiveShadow = true;
 
-                            // Map material the same way we do for GLTF
-                            const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
-                            child.material = new THREE.MeshLambertMaterial({
-                                map: prevMat.map,
-                                color: prevMat.map ? 0xffffff : (prevMat.color || 0xcccccc),
-                                transparent: prevMat.transparent || false,
-                                opacity: prevMat.opacity !== undefined ? prevMat.opacity : 1.0,
-                                side: THREE.DoubleSide,
-                                polygonOffset: true,
-                                polygonOffsetFactor: 1,
-                                polygonOffsetUnits: 1
-                            });
+                            // Keep the material created by MTLLoader, but adjust properties
+                            const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+                            mat.side = THREE.DoubleSide;
+                            mat.polygonOffset = true;
+                            mat.polygonOffsetFactor = 1;
+                            mat.polygonOffsetUnits = 1;
+
+                            // Only set color to white if there's a map to avoid multiplying texture color
+                            if (mat.map) {
+                                mat.color.set(0xffffff);
+                            }
+
+                            child.material = mat;
+                            const prevMat = mat; // For the rest of the code to reference
 
                             if (child.material.map) {
                                 child.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -961,7 +965,6 @@ async function init() {
                     }
 
                     const obj = objLoader.parse(text);
-                    obj.rotation.x = -Math.PI / 2;
                     obj.scale.set(scale, scale, scale);
                     obj.updateMatrixWorld(true);
 

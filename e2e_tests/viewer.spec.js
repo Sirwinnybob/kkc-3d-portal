@@ -22,6 +22,7 @@ test.describe('Viewer E2E Tests', () => {
         await page.addInitScript(() => {
             window.localStorage.setItem('kkc_help_shown', 'true');
             window.localStorage.setItem('kkc_tutorial_v1', 'true');
+            window.localStorage.setItem('kkc_tutorial_v1', 'true');
             window.localStorage.setItem('kkc_skip_disclaimer', 'true');
         });
     });
