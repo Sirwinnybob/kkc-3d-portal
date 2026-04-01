@@ -862,9 +862,26 @@ async function init() {
                 const objLoader = new OBJLoader();
                 objLoader.setMaterials(materials);
 
-                objLoader.load(urlData.url, function(obj) {
-                    // Apply SketchUp rotation fix
+                const fileLoader = new THREE.FileLoader();
+                fileLoader.load(urlData.url, function(text) {
+                    const lines = text.substring(0, 1024).split('\n');
+                    let scale = 1.0;
+                    for (const line of lines) {
+                        if (line.startsWith('# File units = ')) {
+                            const unit = line.split('=')[1].trim().toLowerCase();
+                            if (unit === 'inches') scale = 0.0254;
+                            else if (unit === 'millimeters' || unit === 'millimeter' || unit === 'mm') scale = 0.001;
+                            else if (unit === 'centimeters' || unit === 'centimeter' || unit === 'cm') scale = 0.01;
+                            else if (unit === 'meters' || unit === 'meter' || unit === 'm') scale = 1.0;
+                            else if (unit === 'feet' || unit === 'foot' || unit === 'ft') scale = 0.3048;
+                            break;
+                        }
+                    }
+
+                    const obj = objLoader.parse(text);
+                    // Apply SketchUp rotation fix and scale
                     obj.rotation.x = -Math.PI / 2;
+                    obj.scale.set(scale, scale, scale);
                     obj.updateMatrixWorld(true);
 
                     const model = obj;
@@ -914,13 +931,38 @@ async function init() {
                     setupTexturePanel();
 
                     scene.add(model);
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
+                    camera.lookAt(center);
+                    controls.target.copy(center);
+                    controls.update();
                     updateStatus("");
                 });
             }, undefined, function(err) {
                 console.warn('MTL load failed, loading OBJ without materials:', err);
                 const objLoader = new OBJLoader();
-                objLoader.load(urlData.url, function(obj) {
+                const fileLoader = new THREE.FileLoader();
+                fileLoader.load(urlData.url, function(text) {
+                    const lines = text.substring(0, 1024).split('\n');
+                    let scale = 1.0;
+                    for (const line of lines) {
+                        if (line.startsWith('# File units = ')) {
+                            const unit = line.split('=')[1].trim().toLowerCase();
+                            if (unit === 'inches') scale = 0.0254;
+                            else if (unit === 'millimeters' || unit === 'millimeter' || unit === 'mm') scale = 0.001;
+                            else if (unit === 'centimeters' || unit === 'centimeter' || unit === 'cm') scale = 0.01;
+                            else if (unit === 'meters' || unit === 'meter' || unit === 'm') scale = 1.0;
+                            else if (unit === 'feet' || unit === 'foot' || unit === 'ft') scale = 0.3048;
+                            break;
+                        }
+                    }
+
+                    const obj = objLoader.parse(text);
                     obj.rotation.x = -Math.PI / 2;
+                    obj.scale.set(scale, scale, scale);
                     obj.updateMatrixWorld(true);
 
                     const model = obj;
@@ -937,6 +979,14 @@ async function init() {
                     });
 
                     scene.add(model);
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
+                    camera.lookAt(center);
+                    controls.target.copy(center);
+                    controls.update();
                     updateStatus("");
                 });
             });
