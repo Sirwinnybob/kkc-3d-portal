@@ -1,6 +1,6 @@
 const path = require('path');
 
-const ALLOWED_EXTENSIONS = new Set(['.glb', '.jpg', '.png', '.jpeg']);
+const ALLOWED_EXTENSIONS = new Set(['.glb', '.jpg', '.png', '.jpeg', '.obj', '.mtl']);
 
 module.exports = (req, res, next) => {
     try {
