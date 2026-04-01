@@ -1014,6 +1014,7 @@ async function init() {
                 updateStatus(`Downloading: ${p}%`);
             }
         });
+        } // Close else block
 
     } catch (e) {
         console.error(e);
@@ -2668,7 +2669,6 @@ function animate() {
                 }
             }
         });
-        }
     }
 
     if (zoomVelocity !== 0 && camera && controls) {
