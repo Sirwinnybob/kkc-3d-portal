@@ -1410,7 +1410,7 @@ app.get('/api/showroom/tags/{*path}', async (req, res) => {
 });
 
 // POST /api/showroom/tags/{*path} - Save tags for a showroom part at any depth
-app.post('/api/showroom/tags/{*path}', express.json(), async (req, res) => {
+app.post('/api/showroom/tags/{*path}', adminAuth, express.json(), async (req, res) => {
     const deepPath = req.params.path;
     const baseName = path.basename(deepPath, '.glb');
     if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid file name' });

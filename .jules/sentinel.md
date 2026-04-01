@@ -27,3 +27,8 @@
 **Vulnerability:** The application had several resource-intensive administrative endpoints (`POST /api/textures/scan-jobs`, `/api/showroom/staging/*`) that lacked any form of authentication or authorization. This allowed arbitrary users to trigger file scanning, GLB parsing, splitting, and tag saving operations, leading to potential Denial of Service (DoS) attacks and unauthorized modification of application state.
 **Learning:** All endpoints that perform administrative actions, modify server state, or consume significant resources (CPU, I/O) must be protected by authentication.
 **Prevention:** Implement and apply robust authentication middleware (e.g., Basic Auth with constant-time comparison) to all administrative API routes.
+
+## $(date +%Y-%m-%d) - Missing Authentication on Production State Modification API
+**Vulnerability:** The `POST /api/showroom/tags/{*path}` endpoint, which is responsible for modifying and saving showroom tag metadata, lacked the `adminAuth` middleware. This allowed unauthenticated users to modify application state by submitting arbitrary tag data to the server, potentially overwriting valid configurations.
+**Learning:** Endpoints that modify production state or metadata must be protected by the same authentication mechanisms as their staging or administrative counterparts. It is easy to secure staging endpoints (e.g., `POST /api/showroom/staging/tags/:file`) while accidentally leaving corresponding production endpoints unsecured.
+**Prevention:** Always review related CRUD endpoints as a group and ensure authorization middleware (like `adminAuth`) is consistently applied to all state-modifying (`POST`, `PUT`, `DELETE`) routes.
