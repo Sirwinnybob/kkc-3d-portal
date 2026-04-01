@@ -891,46 +891,42 @@ async function init() {
             mtlLoader.setResourcePath(mtlDir);
 
             mtlLoader.load(mtlUrl, function(materials) {
-                // --- MANUAL TEXTURE FIX (must run BEFORE preload()) ---
-                // MTLLoader's built-in texture loading can fail for SketchUp-style
-                // subdirectory paths (e.g. map_Kd uuid/Walnut.jpg). We patch any
-                // material that still has no map by constructing the URL ourselves.
-                const texLoaderWithManager = new THREE.TextureLoader(manager);
+                // Manually parse materials to ensure textures are mapped
+                console.error("Manual MTL Parse Check");
                 for (const matName in materials.materialsInfo) {
                     const info = materials.materialsInfo[matName];
-                    if (!info.map_kd) continue;
+                    if (info.map_kd) {
+                        const texUrl = mtlDir + info.map_kd;
+                        console.error(`Material ${matName} has map_kd: ${info.map_kd} -> loading manually from ${texUrl}`);
+                        const tex = new THREE.TextureLoader().load(texUrl);
+                        tex.colorSpace = THREE.SRGBColorSpace;
 
-                    // Normalise the map_kd value (SketchUp sometimes uses backslashes)
-                    const rawMapKd = info.map_kd.replace(/\\/g, '/');
-                    const texUrl = mtlDir + rawMapKd;
-                    console.log(`[OBJ] Patching texture for "${matName}": ${texUrl}`);
-
-                    // Ensure the material object exists before preload() runs
-                    if (!materials.materials[matName]) {
-                        materials.materials[matName] = new THREE.MeshPhongMaterial({ name: matName });
+                        // We must create the material first if not exists
+                        let m = materials.materials[matName];
+                        if (!m) {
+                            m = new THREE.MeshPhongMaterial({ name: matName });
+                            materials.materials[matName] = m;
+                        }
+                        m.map = tex;
+                        m.map.wrapS = THREE.RepeatWrapping;
+                        m.map.wrapT = THREE.RepeatWrapping;
+                        m.color.setHex(0xffffff);
+                        if (m.emissive) m.emissive.setHex(0x000000);
+                        if (m.specular) m.specular.setHex(0x111111);
+                        m.needsUpdate = true;
                     }
-                    const m = materials.materials[matName];
-
-                    // Load the texture through the shared manager so the URLModifier fires
-                    const tex = texLoaderWithManager.load(texUrl);
-                    tex.colorSpace = THREE.SRGBColorSpace;
-                    tex.wrapS = THREE.RepeatWrapping;
-                    tex.wrapT = THREE.RepeatWrapping;
-
-                    m.map = tex;
-                    // SketchUp MTLs set dark Kd values that multiply with the texture,
-                    // making them appear black. Force diffuse to white so the texture
-                    // colour is displayed as-is.
-                    m.color.setHex(0xffffff);
-                    if (m.emissive) m.emissive.setHex(0x000000);
-                    if (m.specular) m.specular.setHex(0x111111);
-                    m.needsUpdate = true;
                 }
 
-                // preload() is called exactly once — AFTER the manual patches —
-                // so OBJLoader receives materials with textures already assigned.
+                console.error("MTL loaded!");
                 materials.preload();
-
+                console.error("MTL materials created:", Object.keys(materials.materials));
+                Object.values(materials.materials).forEach(m => {
+                    console.error("MTL material name:", m.name, "Has map:", !!m.map);
+                    if (m.map) {
+                        console.error("Map src:", m.map.image ? m.map.image.src : m.map.name);
+                    }
+                });
+                materials.preload();
                 const objLoader = new OBJLoader(manager);
                 objLoader.setMaterials(materials);
 
@@ -950,6 +946,9 @@ async function init() {
                         }
                     }
 
+                    console.error("==== MTL DUMP ====");
+                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
+
                     const obj = objLoader.parse(text);
                     // Apply SketchUp rotation fix and scale
                     // // obj.rotation.x = -Math.PI / 2; // Assuming Y is up // Assuming Y is up
@@ -957,6 +956,19 @@ async function init() {
                     obj.updateMatrixWorld(true);
 
                     const model = obj;
+
+                    console.error("====== PARSED OBJ ======");
+                    model.traverse(child => {
+                        if (child.isMesh && child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => {
+                                    if (m.map) console.error("Found map on " + child.name + " -> " + m.name + ": " + (m.map.image ? m.map.image.src : 'no image object'));
+                                });
+                            } else {
+                                if (child.material.map) console.error("Found map on " + child.name + " -> " + child.material.name + ": " + (child.material.map.image ? child.material.map.image.src : 'no image object'));
+                            }
+                        }
+                    });
                     loadedModel = model;
                     detectedMaterials = [];
                     const materialMap = new Map();
@@ -974,56 +986,35 @@ async function init() {
                             // Keep the material created by MTLLoader, but adjust properties
                             const mats = Array.isArray(child.material) ? child.material : [child.material];
 
-                            mats.forEach((mat, index) => {
-                                // If it has a map, enforce specific quality and visibility settings
-                                if (mat.map) {
-                                    // Convert to MeshStandardMaterial if it's not already (MTLLoader defaults to MeshPhongMaterial)
-                                    // This gives better, more modern rendering for SketchUp models.
-                                    if (mat.type !== 'MeshStandardMaterial') {
-                                        const oldMat = mat;
-                                        mat = new THREE.MeshStandardMaterial({
-                                            map: oldMat.map,
-                                            name: oldMat.name,
-                                            color: 0xffffff, // Force white to not darken the texture
-                                            roughness: 0.8,
-                                            metalness: 0.2,
-                                            side: THREE.DoubleSide
-                                        });
-                                        // Update the object's material reference
-                                        if (Array.isArray(child.material)) child.material[index] = mat;
-                                        else child.material = mat;
-                                    }
-
-                                    mat.map.wrapS = THREE.RepeatWrapping;
-                                    mat.map.wrapT = THREE.RepeatWrapping;
-                                    mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                    mat.map.minFilter = THREE.LinearMipmapLinearFilter;
-                                    mat.map.magFilter = THREE.LinearFilter;
-                                    mat.map.needsUpdate = true;
-
-                                    // Safeguard: Force visibility
-                                    mat.opacity = 1.0;
-                                    mat.transparent = false; // Usually False for Opaque objects
-                                    mat.alphaTest = 0.5; // Handle cutout textures if they exist
-                                } else {
-                                    mat.side = THREE.DoubleSide;
-                                }
-
-                                mat.shadowSide = THREE.DoubleSide;
+                            mats.forEach(mat => {
+                                mat.side = THREE.DoubleSide;
                                 mat.polygonOffset = true;
                                 mat.polygonOffsetFactor = 1;
                                 mat.polygonOffsetUnits = 1;
 
+                                // MTL files often use map_Kd, which becomes map
+                                // Or map_Ka, which becomes map, etc.
+                                // If it has a map, enforce white base color.
+                                if (mat.map) {
+                                    // SketchUp MTLs often set dark Kd values which multiply with the texture map,
+                                    // making them look black/blank. Force the diffuse color to pure white.
+                                    mat.color.setHex(0xffffff);
+                                    mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                    mat.map.minFilter  = THREE.LinearMipmapLinearFilter;
+                                    mat.map.magFilter  = THREE.LinearFilter;
+                                    // Also clear any emission/specular darkening to be safe
+                                    if (mat.emissive) mat.emissive.setHex(0x000000);
+                                    if (mat.specular) mat.specular.setHex(0x111111);
+                                }
+
                                 const hasTexture = !!mat.map;
 
                                 if (hasTexture) {
-                                    // Key by material name (not image src) because the
-                                    // src URL is empty until the async image load resolves.
-                                    const texKey = mat.name || mat.map.uuid || 'obj_texture';
-                                    if (!materialMap.has(texKey)) {
-                                        materialMap.set(texKey, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture, originalMap: texKey });
+                                    const texSrc = mat.map.source?.data?.src || mat.map.image?.src || 'obj_texture';
+                                    if (!materialMap.has(texSrc)) {
+                                        materialMap.set(texSrc, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
                                     }
-                                    if (!materialMap.get(texKey).meshes.includes(child)) materialMap.get(texKey).meshes.push(child);
+                                    if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
                                 } else {
                                     const colorHex = mat.color.getHexString();
                                     if (!materialMap.has(colorHex)) {
@@ -1090,6 +1081,9 @@ async function init() {
                             break;
                         }
                     }
+
+                    console.error("==== MTL DUMP ====");
+                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
 
                     const obj = objLoader.parse(text);
                     obj.scale.set(scale, scale, scale);
