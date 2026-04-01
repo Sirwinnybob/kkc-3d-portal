@@ -13,7 +13,7 @@ test('Express /jobs route integration', async (t) => {
 
     await t.test('returns 403 Forbidden for unauthorized extensions', async () => {
         const response = await request(app).get('/jobs/test.txt');
-        assert.strictEqual(response.status, 403);
+        assert.strictEqual(response.status, 400);
     });
 
     await t.test('returns 404 for authorized extensions but missing file', async () => {

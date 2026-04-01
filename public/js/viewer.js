@@ -1696,9 +1696,12 @@ async function setupTexturePanel(jobCode, room) {
             newTex.wrapT = THREE.RepeatWrapping;
             // Apply to all meshes sharing this material
             matGroup.meshes.forEach(mesh => {
-                mesh.material.map = newTex;
-                mesh.material.color.set(0xffffff);
-                mesh.material.needsUpdate = true;
+                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    mats.forEach(m => {
+                        m.map = newTex;
+                        if (m.color) m.color.setHex(0xffffff);
+                        m.needsUpdate = true;
+                    });
             });
             // Update LOD tracking info on group
             matGroup.urlHigh = url;
@@ -1993,9 +1996,12 @@ async function setupTexturePanel(jobCode, room) {
                     } else {
                         // Paint mode: single mesh
                         const color = new THREE.Color(preset.hex);
-                        qpTappedMesh.material.map = null;
-                        qpTappedMesh.material.color.copy(color);
-                        qpTappedMesh.material.needsUpdate = true;
+                        const tappedMats = Array.isArray(qpTappedMesh.material) ? qpTappedMesh.material : [qpTappedMesh.material];
+        tappedMats.forEach(m => {
+            m.map = null;
+            if (m.color) m.color.copy(color);
+            m.needsUpdate = true;
+        });
                         targetMat.hasPartialChange = true;
                         targetMat.isColor = true;
                         targetMat.colorHex = preset.hex;
@@ -2101,15 +2107,21 @@ async function setupTexturePanel(jobCode, room) {
 
             if (qpReplaceAll) {
                 matGroup.meshes.forEach(mesh => {
-                    mesh.material.map = newTex;
-                    mesh.material.color.set(0xffffff);
-                    mesh.material.needsUpdate = true;
+                    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    mats.forEach(m => {
+                        m.map = newTex;
+                        if (m.color) m.color.setHex(0xffffff);
+                        m.needsUpdate = true;
+                    });
                 });
             } else {
                 // Each mesh has its own material instance — safe to update individually
-                qpTappedMesh.material.map = newTex;
-                qpTappedMesh.material.color.set(0xffffff);
-                qpTappedMesh.material.needsUpdate = true;
+                const tappedMats = Array.isArray(qpTappedMesh.material) ? qpTappedMesh.material : [qpTappedMesh.material];
+                tappedMats.forEach(m => {
+                    m.map = newTex;
+                    if (m.color) m.color.setHex(0xffffff);
+                    m.needsUpdate = true;
+                });
                 matGroup.hasPartialChange = true;
             }
 
@@ -2163,9 +2175,12 @@ async function setupTexturePanel(jobCode, room) {
             tex.magFilter  = THREE.LinearFilter;
             tex.wrapS      = THREE.RepeatWrapping;
             tex.wrapT      = THREE.RepeatWrapping;
-            mesh.material.map = tex;
-            mesh.material.color.set(0xffffff);
-            mesh.material.needsUpdate = true;
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    mats.forEach(m => {
+                        m.map = tex;
+                        if (m.color) m.color.setHex(0xffffff);
+                        m.needsUpdate = true;
+                    });
         });
     }
 
@@ -2804,9 +2819,12 @@ function addRecentColor(hex) {
 function applySolidColor(matGroup, hexColor) {
     const color = new THREE.Color(hexColor);
     matGroup.meshes.forEach(mesh => {
-        mesh.material.map = null;
-        mesh.material.color.copy(color);
-        mesh.material.needsUpdate = true;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach(m => {
+            m.map = null;
+            if (m.color) m.color.copy(color);
+            m.needsUpdate = true;
+        });
     });
     // Parse RGB for display
     const r = Math.round(color.r * 255);
