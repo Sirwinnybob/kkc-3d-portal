@@ -851,6 +851,100 @@ async function init() {
         // --- LOAD MODEL ---
         updateStatus("Loading Design...");
         window.setupTexturePanel = setupTexturePanel; // Expose for testing
+        const isObj = urlData.url.toLowerCase().endsWith('.obj');
+
+        if (isObj) {
+            const mtlUrl = urlData.url.substring(0, urlData.url.lastIndexOf('.')) + '.mtl';
+            const mtlLoader = new MTLLoader();
+
+            mtlLoader.load(mtlUrl, function(materials) {
+                materials.preload();
+                const objLoader = new OBJLoader();
+                objLoader.setMaterials(materials);
+
+                objLoader.load(urlData.url, function(obj) {
+                    // Apply SketchUp rotation fix
+                    obj.rotation.x = -Math.PI / 2;
+                    obj.updateMatrixWorld(true);
+
+                    const model = obj;
+                    loadedModel = model;
+                    detectedMaterials = [];
+                    const materialMap = new Map();
+
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+
+                            // Map material the same way we do for GLTF
+                            const prevMat = child.material;
+                            child.material = new THREE.MeshLambertMaterial({
+                                map: prevMat.map,
+                                color: prevMat.map ? 0xffffff : (prevMat.color || 0xcccccc),
+                                transparent: prevMat.transparent,
+                                opacity: prevMat.opacity,
+                                side: THREE.DoubleSide,
+                                polygonOffset: true,
+                                polygonOffsetFactor: 1,
+                                polygonOffsetUnits: 1
+                            });
+
+                            if (child.material.map) {
+                                child.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                child.material.map.minFilter  = THREE.LinearMipmapLinearFilter;
+                                child.material.map.magFilter  = THREE.LinearFilter;
+                            }
+
+                            const mat = child.material;
+                            const hasTexture = !!mat.map;
+
+                            if (hasTexture) {
+                                const texSrc = mat.map.source?.data?.src || mat.map.image?.src || 'obj_texture';
+                                if (!materialMap.has(texSrc)) {
+                                    materialMap.set(texSrc, { material: mat, meshes: [], name: prevMat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
+                                }
+                                materialMap.get(texSrc).meshes.push(child);
+                            }
+                        }
+                    });
+
+                    // Finish processing materials
+                    detectedMaterials = Array.from(materialMap.values());
+                    setupTexturePanel();
+
+                    scene.add(model);
+                    centerCameraOnObject(model);
+                    updateStatus("");
+                });
+            }, undefined, function(err) {
+                console.warn('MTL load failed, loading OBJ without materials:', err);
+                const objLoader = new OBJLoader();
+                objLoader.load(urlData.url, function(obj) {
+                    obj.rotation.x = -Math.PI / 2;
+                    obj.updateMatrixWorld(true);
+
+                    const model = obj;
+                    loadedModel = model;
+                    detectedMaterials = [];
+                    const materialMap = new Map();
+
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            child.material = new THREE.MeshLambertMaterial({ color: 0xcccccc, side: THREE.DoubleSide });
+                        }
+                    });
+
+                    scene.add(model);
+                    centerCameraOnObject(model);
+                    updateStatus("");
+                });
+            });
+            return;
+        }
+
         const loader = new GLTFLoader();
         loader.load(urlData.url, (gltf) => {
             const model = gltf.scene;
