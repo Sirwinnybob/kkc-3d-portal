@@ -895,40 +895,37 @@ async function init() {
                             child.receiveShadow = true;
 
                             // Keep the material created by MTLLoader, but adjust properties
-                            const mat = Array.isArray(child.material) ? child.material[0] : child.material;
-                            mat.side = THREE.DoubleSide;
-                            mat.polygonOffset = true;
-                            mat.polygonOffsetFactor = 1;
-                            mat.polygonOffsetUnits = 1;
+                            const mats = Array.isArray(child.material) ? child.material : [child.material];
 
-                            // Only set color to white if there's a map to avoid multiplying texture color
-                            if (mat.map) {
-                                mat.color.set(0xffffff);
-                            }
+                            mats.forEach(mat => {
+                                mat.side = THREE.DoubleSide;
+                                mat.polygonOffset = true;
+                                mat.polygonOffsetFactor = 1;
+                                mat.polygonOffsetUnits = 1;
 
-                            child.material = mat;
-                            const prevMat = mat; // For the rest of the code to reference
-
-                            if (child.material.map) {
-                                child.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                child.material.map.minFilter  = THREE.LinearMipmapLinearFilter;
-                                child.material.map.magFilter  = THREE.LinearFilter;
-                            }
-
-                            const hasTexture = !!child.material.map;
-
-                            if (hasTexture) {
-                                const texSrc = child.material.map.source?.data?.src || child.material.map.image?.src || 'obj_texture';
-                                if (!materialMap.has(texSrc)) {
-                                    materialMap.set(texSrc, { material: child.material, meshes: [], name: prevMat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
+                                if (mat.map) {
+                                    mat.color.set(0xffffff);
+                                    mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                    mat.map.minFilter  = THREE.LinearMipmapLinearFilter;
+                                    mat.map.magFilter  = THREE.LinearFilter;
                                 }
-                                materialMap.get(texSrc).meshes.push(child);
-                            }
-                        }
-                    });
 
-                    // Finish processing materials
-                    detectedMaterials = Array.from(materialMap.values());
+                                const hasTexture = !!mat.map;
+
+                                if (hasTexture) {
+                                    const texSrc = mat.map.source?.data?.src || mat.map.image?.src || 'obj_texture';
+                                    if (!materialMap.has(texSrc)) {
+                                        materialMap.set(texSrc, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
+                                    }
+                                    if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
+                                } else {
+                                    const colorHex = mat.color.getHexString();
+                                    if (!materialMap.has(colorHex)) {
+                                        materialMap.set(colorHex, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture: false, originalMap: null });
+                                    }
+                                    if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                                }
+                            });
                     setupTexturePanel();
 
                     scene.add(model);
@@ -1002,40 +999,59 @@ async function init() {
 
             model.traverse((child) => {
                 if (child.isMesh) {
-                    const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
-                    child.material = new THREE.MeshLambertMaterial({
-                        map: prevMat.map,
-                        color: prevMat.map ? 0xffffff : prevMat.color,
-                        transparent: prevMat.transparent,
-                        opacity: prevMat.opacity,
-                        side: THREE.DoubleSide,
-                        polygonOffset: true,
-                        polygonOffsetFactor: 1,
-                        polygonOffsetUnits: 1
-                    });
-                    if (child.material.map) {
-                        child.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                        child.material.map.minFilter  = THREE.LinearMipmapLinearFilter;
-                        child.material.map.magFilter  = THREE.LinearFilter;
-                    }
-
-                    const mat = child.material;
-                    const hasTexture = !!mat.map;
-
-                    if (hasTexture) {
-                        const texSrc = mat.map.image?.src || mat.map.uuid;
-                        if (materialMap.has(texSrc)) {
-                            materialMap.get(texSrc).meshes.push(child);
-                        } else {
-                            materialMap.set(texSrc, {
-                                name: prevMat.name || child.name || `Material_${materialMap.size}`,
-                                material: mat,
-                                meshes: [child],
-                                hasTexture: true,
-                                originalMap: mat.map,
-                                originalColor: mat.color.clone()
-                            });
+                    const prevMats = Array.isArray(child.material) ? child.material : [child.material];
+                    const newMats = prevMats.map(prevMat => {
+                        const newMat = new THREE.MeshLambertMaterial({
+                            map: prevMat.map,
+                            color: prevMat.map ? 0xffffff : prevMat.color,
+                            transparent: prevMat.transparent,
+                            opacity: prevMat.opacity,
+                            side: THREE.DoubleSide,
+                            polygonOffset: true,
+                            polygonOffsetFactor: 1,
+                            polygonOffsetUnits: 1
+                        });
+                        if (newMat.map) {
+                            newMat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                            newMat.map.minFilter  = THREE.LinearMipmapLinearFilter;
+                            newMat.map.magFilter  = THREE.LinearFilter;
                         }
+                        return newMat;
+                    });
+                    child.material = Array.isArray(child.material) ? newMats : newMats[0];
+
+                    newMats.forEach(mat => {
+                        const hasTexture = !!mat.map;
+                        if (hasTexture) {
+                            const texSrc = mat.image?.src || mat.uuid;
+                            if (!materialMap.has(texSrc)) {
+                                materialMap.set(texSrc, {
+                                    name: mat.name || child.name || `Material_${materialMap.size}`,
+                                    material: mat,
+                                    meshes: [],
+                                    hasTexture: true,
+                                    originalMap: mat.map,
+                                    colorHex: mat.color.getHexString()
+                                });
+                            }
+                            if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
+                        } else {
+                            const colorHex = mat.color.getHexString();
+                            if (!materialMap.has(colorHex)) {
+                                materialMap.set(colorHex, {
+                                    name: mat.name || child.name || `Material_${materialMap.size}`,
+                                    material: mat,
+                                    meshes: [],
+                                    hasTexture: false,
+                                    originalMap: null,
+                                    colorHex: colorHex
+                                });
+                            }
+                            if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                        }
+                    });
+                    child.castShadow = true;
+                    child.receiveShadow = true;
                     }
                 }
             });
@@ -2358,35 +2374,46 @@ async function loadShowroomPart(category, ctx, deepPath, btnEl) {
                     child.visible = false; return;
                 }
 
-                const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
-                const hasTexture = !!prevMat.map;
-                child.material = new THREE.MeshLambertMaterial({
-                    color: MILKY_GRAY, side: THREE.DoubleSide,
-                    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+                const prevMats = Array.isArray(child.material) ? child.material : [child.material];
+                const newMats = prevMats.map(prevMat => {
+                    return new THREE.MeshLambertMaterial({
+                        map: prevMat.map,
+                        color: prevMat.map ? 0xffffff : prevMat.color,
+                        transparent: prevMat.transparent,
+                        opacity: prevMat.opacity,
+                        side: THREE.DoubleSide,
+                        polygonOffset: true,
+                        polygonOffsetFactor: 1,
+                        polygonOffsetUnits: 1,
+                        name: prevMat.name || 'Material'
+                    });
                 });
-                if (hasTexture) {
-                    const texSrc = prevMat.map?.image?.src || prevMat.map?.uuid || `tex_${materialMap.size}`;
-                    if (materialMap.has(texSrc)) {
-                        materialMap.get(texSrc).meshes.push(child);
+                child.material = Array.isArray(child.material) ? newMats : newMats[0];
+
+                newMats.forEach(mat => {
+                    if (mat.map) {
+                        const texSrc = mat.map.source?.data?.src || mat.map.image?.src || mat.map.name;
+                        if (!materialMap.has(texSrc)) {
+                            materialMap.set(texSrc, {
+                                material: mat, meshes: [], hasTexture: true,
+                                originalMap: texSrc, name: mat.name
+                            });
+                        }
+                        if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
                     } else {
-                        materialMap.set(texSrc, {
-                            name: prevMat.name || child.name || `Material_${materialMap.size}`,
-                            material: child.material, meshes: [child], hasTexture: true,
-                            originalMap: null, originalColor: new THREE.Color(MILKY_GRAY),
-                            matchedName: null, originalMatchedName: null, isHidden: false,
-                            isIsland, showroomCategory: category
-                        });
+                        const colorHex = mat.color.getHexString();
+                        if (!materialMap.has(colorHex)) {
+                            materialMap.set(colorHex, {
+                                material: mat, meshes: [], hasTexture: false,
+                                originalMap: null, name: mat.name
+                            });
+                        }
+                        if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
                     }
-                }
-            });
+                });
 
-            const newMaterials = Array.from(materialMap.values());
-            detectedMaterials.push(...newMaterials);
-            if (isIsland) islandMaterials.push(...newMaterials);
-            else kitchenMaterials.push(...newMaterials);
-
-            scene.add(group);
-            showroomParts[partKey] = { group, deepPath, ctx, category, tagData };
+                child.castShadow = true;
+                child.receiveShadow = true;
 
             if (category === 'finished_ends') handlePaneledEndSwap(ctx, deepPath);
 
