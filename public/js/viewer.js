@@ -854,12 +854,12 @@ async function init() {
         const isObj = urlData.url.toLowerCase().endsWith('.obj');
 
         if (isObj) {
-            const mtlUrl = urlData.url.substring(0, urlData.url.lastIndexOf('.')) + '.mtl';
+            const mtlFilename = urlData.url.substring(urlData.url.lastIndexOf('/') + 1, urlData.url.lastIndexOf('.')) + '.mtl';
             const basePath = urlData.url.substring(0, urlData.url.lastIndexOf('/') + 1);
             const mtlLoader = new MTLLoader();
             mtlLoader.setPath(basePath);
 
-            mtlLoader.load(mtlUrl, function(materials) {
+            mtlLoader.load(mtlFilename, function(materials) {
                 materials.preload();
                 const objLoader = new OBJLoader();
                 objLoader.setMaterials(materials);
