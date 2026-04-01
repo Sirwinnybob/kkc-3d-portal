@@ -878,7 +878,7 @@ async function init() {
                             child.receiveShadow = true;
 
                             // Map material the same way we do for GLTF
-                            const prevMat = child.material;
+                            const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
                             child.material = new THREE.MeshLambertMaterial({
                                 map: prevMat.map,
                                 color: prevMat.map ? 0xffffff : (prevMat.color || 0xcccccc),
@@ -952,7 +952,7 @@ async function init() {
 
             model.traverse((child) => {
                 if (child.isMesh) {
-                    const prevMat = child.material;
+                    const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
                     child.material = new THREE.MeshLambertMaterial({
                         map: prevMat.map,
                         color: prevMat.map ? 0xffffff : prevMat.color,
@@ -2308,7 +2308,7 @@ async function loadShowroomPart(category, ctx, deepPath, btnEl) {
                     child.visible = false; return;
                 }
 
-                const prevMat = child.material;
+                const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
                 const hasTexture = !!prevMat.map;
                 child.material = new THREE.MeshLambertMaterial({
                     color: MILKY_GRAY, side: THREE.DoubleSide,

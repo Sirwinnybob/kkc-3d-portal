@@ -799,7 +799,7 @@ function loadGlbFromUrl(url, onEntry, onComplete) {
                     if (assoc?.nodes !== undefined) originalIndex = assoc.nodes;
                 }
                 const name = child.name || `Node_${originalIndex}`;
-                const prevMat = child.material;
+                const prevMat = Array.isArray(child.material) ? child.material[0] : child.material;
                 child.material = new THREE.MeshLambertMaterial({
                     map: prevMat.map,
                     color: prevMat.map ? 0xffffff : (prevMat.color || 0xcccccc),
