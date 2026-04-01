@@ -855,9 +855,7 @@ async function init() {
 
         if (isObj) {
             const mtlFilename = urlData.url.substring(urlData.url.lastIndexOf('/') + 1, urlData.url.lastIndexOf('.')) + '.mtl';
-            const basePath = urlData.url.substring(0, urlData.url.lastIndexOf('/') + 1);
             const mtlLoader = new MTLLoader();
-            mtlLoader.setPath(basePath);
 
             mtlLoader.load(mtlFilename, function(materials) {
                 materials.preload();
