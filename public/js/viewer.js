@@ -923,9 +923,14 @@ async function init() {
                                     if (!materialMap.has(colorHex)) {
                                         materialMap.set(colorHex, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture: false, originalMap: null });
                                     }
-                                    if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                                if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
                                 }
                             });
+                        }
+                    });
+
+                    // Finish processing materials
+                    detectedMaterials = Array.from(materialMap.values());
                     setupTexturePanel();
 
                     scene.add(model);
@@ -1052,7 +1057,6 @@ async function init() {
                     });
                     child.castShadow = true;
                     child.receiveShadow = true;
-                    }
                 }
             });
 
