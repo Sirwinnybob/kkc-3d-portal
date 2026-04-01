@@ -914,6 +914,14 @@ async function init() {
                     setupTexturePanel();
 
                     scene.add(model);
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
+                    camera.lookAt(center);
+                    controls.target.copy(center);
+                    controls.update();
                     updateStatus("");
                 });
             }, undefined, function(err) {
@@ -937,6 +945,14 @@ async function init() {
                     });
 
                     scene.add(model);
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
+                    camera.lookAt(center);
+                    controls.target.copy(center);
+                    controls.update();
                     updateStatus("");
                 });
             });
