@@ -931,7 +931,6 @@ async function init() {
                 // so OBJLoader receives materials with textures already assigned.
                 materials.preload();
 
-                console.log("[OBJ] MTL materials after preload:", Object.keys(materials.materials));
                 const objLoader = new OBJLoader(manager);
                 objLoader.setMaterials(materials);
 
@@ -950,9 +949,6 @@ async function init() {
                             break;
                         }
                     }
-
-                    console.error("==== MTL DUMP ====");
-                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
 
                     const obj = objLoader.parse(text);
                     // Apply SketchUp rotation fix and scale
@@ -978,26 +974,45 @@ async function init() {
                             // Keep the material created by MTLLoader, but adjust properties
                             const mats = Array.isArray(child.material) ? child.material : [child.material];
 
-                            mats.forEach(mat => {
-                                mat.side = THREE.DoubleSide;
+                            mats.forEach((mat, index) => {
+                                // If it has a map, enforce specific quality and visibility settings
+                                if (mat.map) {
+                                    // Convert to MeshStandardMaterial if it's not already (MTLLoader defaults to MeshPhongMaterial)
+                                    // This gives better, more modern rendering for SketchUp models.
+                                    if (mat.type !== 'MeshStandardMaterial') {
+                                        const oldMat = mat;
+                                        mat = new THREE.MeshStandardMaterial({
+                                            map: oldMat.map,
+                                            name: oldMat.name,
+                                            color: 0xffffff, // Force white to not darken the texture
+                                            roughness: 0.8,
+                                            metalness: 0.2,
+                                            side: THREE.DoubleSide
+                                        });
+                                        // Update the object's material reference
+                                        if (Array.isArray(child.material)) child.material[index] = mat;
+                                        else child.material = mat;
+                                    }
+
+                                    mat.map.wrapS = THREE.RepeatWrapping;
+                                    mat.map.wrapT = THREE.RepeatWrapping;
+                                    mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                    mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+                                    mat.map.magFilter = THREE.LinearFilter;
+                                    mat.map.needsUpdate = true;
+
+                                    // Safeguard: Force visibility
+                                    mat.opacity = 1.0;
+                                    mat.transparent = false; // Usually False for Opaque objects
+                                    mat.alphaTest = 0.5; // Handle cutout textures if they exist
+                                } else {
+                                    mat.side = THREE.DoubleSide;
+                                }
+
+                                mat.shadowSide = THREE.DoubleSide;
                                 mat.polygonOffset = true;
                                 mat.polygonOffsetFactor = 1;
                                 mat.polygonOffsetUnits = 1;
-
-                                // MTL files often use map_Kd, which becomes map
-                                // Or map_Ka, which becomes map, etc.
-                                // If it has a map, enforce white base color.
-                                if (mat.map) {
-                                    // SketchUp MTLs often set dark Kd values which multiply with the texture map,
-                                    // making them look black/blank. Force the diffuse color to pure white.
-                                    mat.color.setHex(0xffffff);
-                                    mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                    mat.map.minFilter  = THREE.LinearMipmapLinearFilter;
-                                    mat.map.magFilter  = THREE.LinearFilter;
-                                    // Also clear any emission/specular darkening to be safe
-                                    if (mat.emissive) mat.emissive.setHex(0x000000);
-                                    if (mat.specular) mat.specular.setHex(0x111111);
-                                }
 
                                 const hasTexture = !!mat.map;
 
