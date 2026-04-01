@@ -882,8 +882,8 @@ async function init() {
                             child.material = new THREE.MeshLambertMaterial({
                                 map: prevMat.map,
                                 color: prevMat.map ? 0xffffff : (prevMat.color || 0xcccccc),
-                                transparent: prevMat.transparent,
-                                opacity: prevMat.opacity,
+                                transparent: prevMat.transparent || false,
+                                opacity: prevMat.opacity !== undefined ? prevMat.opacity : 1.0,
                                 side: THREE.DoubleSide,
                                 polygonOffset: true,
                                 polygonOffsetFactor: 1,
@@ -914,7 +914,6 @@ async function init() {
                     setupTexturePanel();
 
                     scene.add(model);
-                    centerCameraOnObject(model);
                     updateStatus("");
                 });
             }, undefined, function(err) {
@@ -938,7 +937,6 @@ async function init() {
                     });
 
                     scene.add(model);
-                    centerCameraOnObject(model);
                     updateStatus("");
                 });
             });
