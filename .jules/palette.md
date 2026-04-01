@@ -17,3 +17,7 @@
 ## 2025-06-25 - Dynamic ARIA Feedback for Icon-Only Actions
 **Learning:** For icon-only buttons that trigger state changes (like "Copy PIN" changing to a checkmark), visual changes alone are insufficient for screen reader users. By dynamically updating the `aria-label` (e.g., from "Copy PIN" to "PIN Copied!") and reverting it after a timeout, we provide immediate, non-disruptive confirmation of the action's success.
 **Action:** When implementing "Copy" or similar transient actions on icon buttons, use `setAttribute('aria-label', ...)` to provide spoken feedback. Ensure the label is restored to its original state when the visual icon reverts.
+
+## 2025-10-24 - Context Preservation via Focus Restoration in Dynamic Lists
+**Learning:** In interfaces where users navigate from a list (e.g., Materials) to a detail/selection view (e.g., Catalog) and back, maintaining the user's scroll and focus position is critical for orientation. Restoring focus to the specific list item that triggered the transition, rather than just the top of the list or the panel itself, prevents "focus reset" disorientation for keyboard and screen reader users.
+**Action:** Use `data-index` or similar unique identifiers on list items. When returning from a sub-view, use `requestAnimationFrame` to ensure the list has rendered before programmatically calling `.focus()` on the previously selected item.

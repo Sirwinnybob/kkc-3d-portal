@@ -217,7 +217,15 @@ async function init() {
             sheet.classList.remove('show');
             return typeof clearMeshHighlight === 'function' && clearMeshHighlight();
         }
-        if (document.getElementById('texture-panel')?.classList.contains('show')) return document.getElementById('texture-panel').classList.remove('show');
+        if (document.getElementById('texture-panel')?.classList.contains('show')) {
+            document.getElementById('texture-panel').classList.remove('show');
+            const textureBtn = document.getElementById('texture-btn');
+            if (textureBtn) {
+                textureBtn.setAttribute('aria-expanded', 'false');
+                textureBtn.focus();
+            }
+            return;
+        }
         if (dropdown?.classList.contains('show')) {
             dropdown.classList.remove('show');
             menuBtn?.setAttribute('aria-expanded', 'false');
@@ -1014,6 +1022,8 @@ async function setupTexturePanel(jobCode, room) {
     function createMaterialItem(mat) {
         const btn = document.createElement('button');
         btn.className = 'material-item';
+        const originalIndex = detectedMaterials.indexOf(mat);
+        btn.dataset.index = originalIndex.toString();
 
         if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
             try {
@@ -1038,13 +1048,12 @@ async function setupTexturePanel(jobCode, room) {
             <div class="material-item-left">
                 ${previewHtml}
                 <div class="material-info">
-                    <span class="material-name">${escapeHtml(displayName)}</span>
+                    <span class="material-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
                     <span class="material-status">Customizable</span>
                 </div>
             </div>
             <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
         `;
-        const originalIndex = detectedMaterials.indexOf(mat);
         btn.onclick = () => selectMaterial(originalIndex);
         return btn;
     }
@@ -1056,6 +1065,10 @@ async function setupTexturePanel(jobCode, room) {
         document.getElementById('materials-view').style.display = 'none';
         document.getElementById('catalog-view').style.display = 'block';
         catalogTitle.innerText = `Replace: ${mat.matchedName || mat.name}`;
+
+        if (backToMaterialsBtn) {
+            requestAnimationFrame(() => backToMaterialsBtn.focus());
+        }
 
         // If manifest already gave us a category, use it directly (no API call)
         if (mat.bestCategory) {
@@ -1323,11 +1336,19 @@ async function setupTexturePanel(jobCode, room) {
     if (backToMaterialsBtn) {
         backToMaterialsBtn.onclick = () => {
             renderMaterialList();
+            if (selectedMaterialIndex >= 0) {
+                const index = selectedMaterialIndex;
+                requestAnimationFrame(() => {
+                    const item = materialList.querySelector(`.material-item[data-index="${index}"]`);
+                    if (item) item.focus();
+                });
+            }
         };
     }
 
     // Search filter
     const clearSearchBtn = document.getElementById('clear-texture-search');
+    const clearSearchEmptyBtn = document.getElementById('clear-search-empty');
     const searchEmptyState = document.getElementById('texture-search-empty');
 
     function clearSearch(shouldFocus = false) {
@@ -1358,6 +1379,9 @@ async function setupTexturePanel(jobCode, room) {
 
     if (clearSearchBtn) {
         clearSearchBtn.onclick = () => clearSearch(true);
+    }
+    if (clearSearchEmptyBtn) {
+        clearSearchEmptyBtn.onclick = () => clearSearch(true);
     }
 
     // ================================================================
