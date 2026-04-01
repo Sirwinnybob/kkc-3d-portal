@@ -412,7 +412,8 @@ async function init() {
     try {
         // --- THREE.JS SETUP (shared by standard and showroom modes) ---
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
+        const isLightMode = localStorage.getItem("lightMode") === "true";
+        scene.background = new THREE.Color(isLightMode ? 0xf0f0f0 : 0x111111);
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 5000);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
@@ -2185,7 +2186,8 @@ async function loadShowroomPart(category, ctx, deepPath, btnEl) {
 
     const glbUrl = `/showroom/${deepPath}`;
     const loader = new GLTFLoader();
-    if (scene) scene.background = new THREE.Color(0x111111);
+    if (scene) { const isLightMode = localStorage.getItem("lightMode") === "true";
+        scene.background = new THREE.Color(isLightMode ? 0xf0f0f0 : 0x111111); }
     const isIsland = (ctx === 'island');
 
     return new Promise((resolve) => {
@@ -2584,3 +2586,33 @@ function animate() {
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
+
+// Light Mode Toggle
+function setupLightMode() {
+    const lightModeBtn = document.getElementById('light-mode-btn');
+    if (lightModeBtn) {
+        const updateLightModeUI = () => {
+            const isLightMode = localStorage.getItem("lightMode") === "true";
+            if (isLightMode) {
+                lightModeBtn.style.background = '#e0e0e0';
+            } else {
+                lightModeBtn.style.background = '#fff';
+            }
+        };
+
+        lightModeBtn.addEventListener('click', () => {
+            const isLightMode = localStorage.getItem("lightMode") === "true";
+            const newMode = !isLightMode;
+            localStorage.setItem("lightMode", newMode);
+
+            if (scene) {
+                scene.background = new THREE.Color(newMode ? 0xf0f0f0 : 0x111111);
+            }
+            updateLightModeUI();
+        });
+
+        updateLightModeUI();
+    }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupLightMode);
+else setupLightMode();

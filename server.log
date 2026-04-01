@@ -1,0 +1,40 @@
+
+> kkc-cabinet-portal@2.1.7 start
+> node server.js
+
+KKC PORTAL v2.1.7 ACTIVE ON PORT 5021
+GET /job/job_test_room1_A 404 159 - 6.070 ms
+GET / 200 4552 - 3.086 ms
+GET /css/index.css?v=100 200 5201 - 2.472 ms
+GET /js/index.js?v=100 200 4908 - 1.624 ms
+GET /images/kkc_logo.jpg 200 1125941 - 2.315 ms
+GET /service-worker.js 200 270 - 1.936 ms
+GET / 200 4552 - 0.946 ms
+GET /css/index.css?v=100 200 5201 - 3.508 ms
+GET /js/index.js?v=100 200 4908 - 2.508 ms
+GET /images/kkc_logo.jpg 200 1125941 - 3.346 ms
+GET /service-worker.js 200 270 - 1.076 ms
+GET /api/job/job_test_room1_A 404 17 - 13.032 ms
+GET / 200 4552 - 0.947 ms
+GET /css/index.css?v=100 200 5201 - 6.021 ms
+GET /js/index.js?v=100 200 4908 - 6.759 ms
+GET /images/kkc_logo.jpg 200 1125941 - 6.663 ms
+GET /service-worker.js 200 270 - 1.032 ms
+GET /api/job/job_test_room1_A 404 17 - 1.256 ms
+GET / 200 4552 - 1.699 ms
+GET /css/index.css?v=100 200 5201 - 4.416 ms
+GET /js/index.js?v=100 200 4908 - 5.342 ms
+GET /images/kkc_logo.jpg 200 1125941 - 5.326 ms
+GET /service-worker.js 200 270 - 0.791 ms
+GET /api/job/job_test_room1_A 404 17 - 1.584 ms
+GET /showroom 301 158 - 1.389 ms
+GET /showroom/ 404 148 - 2.774 ms
+GET /viewer.html 200 24342 - 0.811 ms
+GET /css/viewer.css?v=108 200 37558 - 4.182 ms
+GET /js/viewer.js?v=108 200 111245 - 5.120 ms
+GET / 200 4552 - 1.273 ms
+GET /css/index.css?v=100 200 5201 - 2.728 ms
+GET /js/index.js?v=100 200 4908 - 2.263 ms
+GET /images/kkc_logo.jpg 200 1125941 - 2.451 ms
+GET /service-worker.js 200 270 - 1.077 ms
+Terminated
