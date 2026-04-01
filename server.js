@@ -939,12 +939,19 @@ async function generateTextureManifest(glbPath) {
         // Cache full matching results (as promises) to prevent redundant processing of shared textures
         const imageMatchCache = new Map();
 
-        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead
+        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
+        // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
         const flatLibrary = [];
         for (const [category, textures] of Object.entries(libraryIndex)) {
             for (const tex of textures) {
                 flatLibrary.push({ ...tex, category });
             }
+        }
+        const flatLow = new Uint32Array(flatLibrary.length);
+        const flatHigh = new Uint32Array(flatLibrary.length);
+        for (let i = 0; i < flatLibrary.length; i++) {
+            flatLow[i] = flatLibrary[i].hLow;
+            flatHigh[i] = flatLibrary[i].hHigh;
         }
 
         const getImageData = (imageIdx) => {
@@ -981,24 +988,27 @@ async function generateTextureManifest(glbPath) {
                         const inLow = Number(inputHash & 0xFFFFFFFFn);
                         const inHigh = Number(inputHash >> 32n);
 
-                        let bestMatch = null;
+                        let bestMatchIdx = -1;
                         let bestDistance = Infinity;
                         const allMatches = [];
 
+                        // Optimized Hamming distance loop using TypedArrays and SWAR popcount
                         for (let i = 0; i < flatLibrary.length; i++) {
-                            const tex = flatLibrary[i];
-                            const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
+                            const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
+                                             popcount32((inHigh ^ flatHigh[i]) >>> 0);
+
                             if (distance < bestDistance) {
                                 bestDistance = distance;
-                                bestMatch = tex;
+                                bestMatchIdx = i;
                             }
-                            if (distance <= 20 && !tex.hidden) {
-                                allMatches.push({ ...tex, distance });
+                            if (distance <= 20 && !flatLibrary[i].hidden) {
+                                allMatches.push({ ...flatLibrary[i], distance });
                             }
                         }
 
                         allMatches.sort((a, b) => a.distance - b.distance);
                         const isMatched = bestDistance <= 15;
+                        const bestMatch = isMatched ? flatLibrary[bestMatchIdx] : null;
 
                         return {
                             matched: isMatched,
