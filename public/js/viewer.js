@@ -940,10 +940,8 @@ async function init() {
                     updateStatus("");
                 });
             });
-            return;
-        }
-
-        const loader = new GLTFLoader();
+        } else {
+            const loader = new GLTFLoader();
         loader.load(urlData.url, (gltf) => {
             const model = gltf.scene;
             loadedModel = model;
@@ -2664,6 +2662,7 @@ function animate() {
                 }
             }
         });
+        }
     }
 
     if (zoomVelocity !== 0 && camera && controls) {
