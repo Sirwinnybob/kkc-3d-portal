@@ -158,6 +158,8 @@ app.get('/api/job/:code', async (req, res) => {
             if (entry.isDirectory()) {
                 return findGlbs(fullPath);
             } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                const lowerName = entry.name.toLowerCase();
+                if (lowerName.endsWith('_medium.glb') || lowerName.endsWith('_low.glb')) return;
                 // If the file is directly in the job directory, use the filename (without .glb).
                 // If it's in a subfolder, use the immediate parent folder's name.
                 if (dir === jobPath) {
@@ -205,6 +207,8 @@ app.get('/api/job/:code/:room', (req, res) => {
                 if (dirent.isDirectory()) {
                     dirs.push(path.join(dir, dirent.name));
                 } else if (dirent.name.toLowerCase().endsWith('.glb')) {
+                    const lowerName = dirent.name.toLowerCase();
+                    if (lowerName.endsWith('_medium.glb') || lowerName.endsWith('_low.glb')) continue;
                     const isRoot = dir === jobPath;
                     const matchName = isRoot ? path.basename(dirent.name, '.glb') : path.basename(dir);
                     if (matchName.toLowerCase() === safeRoom.toLowerCase()) {
