@@ -13,18 +13,11 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 function escapeHtml(unsafe) {
     if (!unsafe || typeof unsafe !== 'string') return unsafe;
     return unsafe
-        .replace(/&/g, "&")
-        .replace(/</g, "<")
-        .replace(/>/g, ">")
-        .replace(/"/g, """)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
-}
-
-// Helper: Check if geometry has valid UV coordinates
-function hasValidUVs(geometry) {
-    if (!geometry) return false;
-    const uvAttr = geometry.getAttribute('uv');
-    return uvAttr && uvAttr.count > 0 && uvAttr.array && uvAttr.array.length > 0;
 }
 
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass;
@@ -886,12 +879,9 @@ async function init() {
 
                             // Map material the same way we do for GLTF
                             const prevMat = child.material;
-                            const meshHasUVs = hasValidUVs(child.geometry);
-                            const useTexture = prevMat.map && meshHasUVs;
-                            
                             child.material = new THREE.MeshLambertMaterial({
-                                map: useTexture ? prevMat.map : null,
-                                color: useTexture ? 0xffffff : (prevMat.color || 0xcccccc),
+                                map: prevMat.map,
+                                color: prevMat.map ? 0xffffff : (prevMat.color || 0xcccccc),
                                 transparent: prevMat.transparent || false,
                                 opacity: prevMat.opacity !== undefined ? prevMat.opacity : 1.0,
                                 side: THREE.DoubleSide,
@@ -963,12 +953,9 @@ async function init() {
             model.traverse((child) => {
                 if (child.isMesh) {
                     const prevMat = child.material;
-                    const meshHasUVs = hasValidUVs(child.geometry);
-                    const useTexture = prevMat.map && meshHasUVs;
-                    
                     child.material = new THREE.MeshLambertMaterial({
-                        map: useTexture ? prevMat.map : null,
-                        color: useTexture ? 0xffffff : prevMat.color,
+                        map: prevMat.map,
+                        color: prevMat.map ? 0xffffff : prevMat.color,
                         transparent: prevMat.transparent,
                         opacity: prevMat.opacity,
                         side: THREE.DoubleSide,
