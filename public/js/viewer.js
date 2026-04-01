@@ -2418,6 +2418,7 @@ async function loadShowroomPart(category, ctx, deepPath, btnEl) {
 
                 child.castShadow = true;
                 child.receiveShadow = true;
+            });
 
             if (category === 'finished_ends') handlePaneledEndSwap(ctx, deepPath);
 
