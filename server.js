@@ -1093,7 +1093,7 @@ async function generateTextureManifest(glbPath) {
 async function generateAllManifests(dir, force = false) {
     try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
+        await Promise.all(entries.map(async (entry) => {
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 await generateAllManifests(fullPath, force);
@@ -1105,12 +1105,12 @@ async function generateAllManifests(dir, force = false) {
                             fs.promises.stat(fullPath),
                             fs.promises.stat(manifestPath)
                         ]);
-                        if (manifestStat.mtimeMs >= glbStat.mtimeMs) continue;
+                        if (manifestStat.mtimeMs >= glbStat.mtimeMs) return;
                     } catch { /* ignore stat errors, just regenerate */ }
                 }
                 await generateTextureManifest(fullPath);
             }
-        }
+        }));
     } catch (e) {
         console.error(`[Texture Manifest] Batch error in ${dir}: ${e.message}`);
     }
