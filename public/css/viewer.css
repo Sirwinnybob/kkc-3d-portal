@@ -869,7 +869,7 @@ body {
     border-radius: 20px 20px 0 0;
     transform: translateY(100%);
     transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
-    max-display: flex;
+    display: flex;
     flex-direction: column;
 }
 
@@ -1132,39 +1132,6 @@ body {
 @media (max-width: 600px) {
     #tap-replace-inner { padding: 20px 16px 36px; }
     #tap-replace-all-btn, #tap-replace-one-btn { padding: 14px; font-size: 0.95em; }
-
-    #qp-category-grid {
-    display: flex;
-    flex-direction: row;
-    gap: 10px;
-    overflow-x: auto;
-    padding: 0 4px;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Hide scrollbar for compact view */
-    height: 100%;
-}
-#qp-category-grid::-webkit-scrollbar {
-    display: none;
-}
-
-    .qp-category-btn {
-    padding: 12px 18px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    color: rgba(255,255,255,0.85);
-    font-size: 0.9em;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
-    transition: background 0.18s, border-color 0.18s;
-    font-family: inherit;
-    white-space: nowrap;
-    height: fit-content;
-    align-self: center;
-    scroll-snap-align: center;
-}
 }
 
 /* ─── Product Tour ─── */

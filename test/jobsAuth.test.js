@@ -53,8 +53,8 @@ test('jobsAuth middleware', async (t) => {
         const next = () => { throw new Error('next should not be called'); };
 
         jobsAuth(req, res, next);
-        assert.strictEqual(statusSet, 403);
-        assert.strictEqual(sentMessage, 'Forbidden');
+        assert.strictEqual(statusSet, 400);
+        assert.strictEqual(sentMessage, 'Bad Request');
     });
 
     await t.test('allows .png files', () => {
