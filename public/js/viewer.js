@@ -932,8 +932,10 @@ async function init() {
 
                                         // Use the actual render path the viewer uses
                                         if (typeof composer !== 'undefined' && composer) {
+                                            console.log(`✅ FORCING RE-RENDER WITH COMPOSER FOR ${texUrl}`);
                                             composer.render();
                                         } else {
+                                            console.log(`✅ FORCING RE-RENDER WITH RENDERER FOR ${texUrl}`);
                                             renderer.render(scene, camera);
                                         }
                                     }
