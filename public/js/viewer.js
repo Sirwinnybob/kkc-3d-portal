@@ -904,8 +904,6 @@ async function init() {
                     if (info.map_kd) {
                         const texUrl = mtlDir + info.map_kd;
                         console.error(`Material ${matName} has map_kd: ${info.map_kd} -> loading manually from ${texUrl}`);
-                        const tex = new THREE.TextureLoader().load(texUrl);
-                        tex.colorSpace = THREE.SRGBColorSpace;
 
                         // We must create the material first if not exists
                         let m = materials.materials[matName];
@@ -913,6 +911,22 @@ async function init() {
                             m = new THREE.MeshPhongMaterial({ name: matName });
                             materials.materials[matName] = m;
                         }
+
+                        const tex = new THREE.TextureLoader().load(
+                            texUrl,
+                            function(loadedTex) {
+                                loadedTex.colorSpace = THREE.SRGBColorSpace;
+                                loadedTex.flipY = true;
+                                m.map = loadedTex;
+                                m.needsUpdate = true;
+                                console.log(`✅ TEXTURE FULLY LOADED: ${texUrl}`);
+                            },
+                            undefined,
+                            function(err) {
+                                console.error(`Failed to load texture from: ${texUrl}`, err);
+                            }
+                        );
+
                         m.map = tex;
                         m.map.wrapS = THREE.RepeatWrapping;
                         m.map.wrapT = THREE.RepeatWrapping;
