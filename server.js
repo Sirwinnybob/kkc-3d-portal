@@ -1090,27 +1090,28 @@ async function generateTextureManifest(glbPath) {
 }
 
 // Batch generate manifests for all GLBs in a directory
+// Parallelized using Promise.all for concurrent directory traversal and manifest generation
 async function generateAllManifests(dir, force = false) {
     try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
+        await Promise.all(entries.map(async (entry) => {
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 await generateAllManifests(fullPath, force);
             } else if (entry.name.toLowerCase().endsWith('.glb')) {
                 const manifestPath = fullPath.replace(/\.glb$/i, '.textures.json');
-                if (!force && fs.existsSync(manifestPath)) {
+                if (!force) {
                     try {
                         const [glbStat, manifestStat] = await Promise.all([
                             fs.promises.stat(fullPath),
                             fs.promises.stat(manifestPath)
                         ]);
-                        if (manifestStat.mtimeMs >= glbStat.mtimeMs) continue;
+                        if (manifestStat.mtimeMs >= glbStat.mtimeMs) return;
                     } catch { /* ignore stat errors, just regenerate */ }
                 }
                 await generateTextureManifest(fullPath);
             }
-        }
+        }));
     } catch (e) {
         console.error(`[Texture Manifest] Batch error in ${dir}: ${e.message}`);
     }
@@ -1405,41 +1406,49 @@ app.use('/showroom', express.static(SHOWROOM_DIR, {
 }));
 
 // Helper: list GLB files in a directory
+// Optimized by using a Set for O(1) tag file lookups to avoid O(N) synchronous stat calls
 async function listGlbs(dir) {
     try {
         const files = await fs.promises.readdir(dir);
+        const fileSet = new Set(files);
         return files
             .filter(f => f.toLowerCase().endsWith('.glb') && !f.toLowerCase().endsWith('.full.glb'))
             .map(f => {
                 const baseName = path.basename(f, '.glb');
-                const tagsFile = path.join(dir, `${baseName}.tags.json`);
-                return { file: f, name: baseName.replace(/_/g, ' '), tagged: fs.existsSync(tagsFile) };
+                const tagsFileName = `${baseName}.tags.json`;
+                return {
+                    file: f,
+                    name: baseName.replace(/_/g, ' '),
+                    tagged: fileSet.has(tagsFileName)
+                };
             });
     } catch { return []; }
 }
 
 // Helper: build nested tree for a category with sub-categories and grain
+// Parallelized to build sub-category trees concurrently
 async function buildCatTree(catDir, cat) {
     const subs = SUB_CATEGORIES[cat];
     if (!subs) {
         return { files: await listGlbs(catDir) };
     }
     const tree = {};
-    for (const sub of subs) {
+    await Promise.all(subs.map(async (sub) => {
         const subDir = path.join(catDir, sub);
         if (cat === 'doors' && sub === 'slab') {
             tree[sub] = {};
-            for (const grain of GRAIN_DIRS) {
+            await Promise.all(GRAIN_DIRS.map(async (grain) => {
                 tree[sub][grain] = { files: await listGlbs(path.join(subDir, grain)) };
-            }
+            }));
         } else {
             tree[sub] = { files: await listGlbs(subDir) };
         }
-    }
+    }));
     return tree;
 }
 
 // Helper: build the full showroom category hierarchy
+// Parallelized using Promise.all across contexts, styles, and categories
 async function buildShowroomCategoryHierarchy() {
     const now = Date.now();
     if (showroomCategoryCache && (now - showroomCategoryCacheTime) < SHOWROOM_CACHE_TTL) {
@@ -1451,32 +1460,38 @@ async function buildShowroomCategoryHierarchy() {
     showroomCategoryInProgress = (async () => {
         try {
             const result = {};
-            for (const ctx of SHOWROOM_CONTEXTS) {
+            await Promise.all(SHOWROOM_CONTEXTS.map(async (ctx) => {
                 result[ctx] = {};
-                // Direct categories
-                for (const cat of DIRECT_CATEGORIES) {
+
+                // 1. Direct categories
+                const directPromises = DIRECT_CATEGORIES.map(async (cat) => {
                     result[ctx][cat] = { files: await listGlbs(path.join(SHOWROOM_DIR, ctx, cat)) };
-                }
-                // Style-nested categories
-                for (const style of SHOWROOM_STYLES) {
+                });
+
+                // 2. Style-nested categories
+                const stylePromises = SHOWROOM_STYLES.map(async (style) => {
                     result[ctx][style] = {};
                     if (style === 'face_frame') {
-                        for (const overlay of SHOWROOM_OVERLAYS) {
+                        const overlayPromises = SHOWROOM_OVERLAYS.map(async (overlay) => {
                             result[ctx][style][overlay] = {};
-                            for (const cat of OVERLAY_CATEGORIES) {
+                            await Promise.all(OVERLAY_CATEGORIES.map(async (cat) => {
                                 result[ctx][style][overlay][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, overlay, cat), cat);
-                            }
-                        }
-                        for (const cat of NON_OVERLAY_CATEGORIES) {
+                            }));
+                        });
+                        const nonOverlayPromises = NON_OVERLAY_CATEGORIES.map(async (cat) => {
                             result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
-                        }
+                        });
+                        await Promise.all([...overlayPromises, ...nonOverlayPromises]);
                     } else {
-                        for (const cat of [...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES]) {
+                        await Promise.all([...OVERLAY_CATEGORIES, ...NON_OVERLAY_CATEGORIES].map(async (cat) => {
                             result[ctx][style][cat] = await buildCatTree(path.join(SHOWROOM_DIR, ctx, style, cat), cat);
-                        }
+                        }));
                     }
-                }
-            }
+                });
+
+                await Promise.all([...directPromises, ...stylePromises]);
+            }));
+
             showroomCategoryCache = result;
             showroomCategoryCacheTime = Date.now();
             return result;
@@ -1874,28 +1889,30 @@ async function splitGlbByCategories(glbPath, meshCategories, destinations, outpu
 app.get('/api/showroom/staging', adminAuth, async (req, res) => {
     try {
         const findGlbs = async (dir, rootDir) => {
-            const results = [];
             const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                const fullPath = require('path').join(dir, entry.name);
+            const fileSet = new Set(entries.map(e => e.name));
+            const results = await Promise.all(entries.map(async (entry) => {
+                const fullPath = path.join(dir, entry.name);
                 if (entry.isDirectory()) {
-                    results.push(...await findGlbs(fullPath, rootDir));
+                    return await findGlbs(fullPath, rootDir);
                 } else if (entry.name.toLowerCase().endsWith('.glb')) {
-                    const relativePath = require('path').relative(rootDir, fullPath).replace(/\\/g, '/');
-                    const baseName = require('path').basename(entry.name, '.glb');
-                    const tagsFile = require('path').join(dir, `${baseName}.tags.json`);
-                    results.push({
+                    const relativePath = path.relative(rootDir, fullPath).replace(/\\/g, '/');
+                    const baseName = path.basename(entry.name, '.glb');
+                    const tagsFileName = `${baseName}.tags.json`;
+                    return {
                         file: relativePath,
                         name: baseName.replace(/_/g, ' '),
-                        tagged: fs.existsSync(tagsFile)
-                    });
+                        tagged: fileSet.has(tagsFileName)
+                    };
                 }
-            }
-            return results;
+                return null;
+            }));
+            return results.flat().filter(r => r !== null);
         };
         const glbs = await findGlbs(STAGING_DIR, STAGING_DIR);
         res.json({ success: true, files: glbs });
     } catch (e) {
+        console.error(`[Staging] List error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Failed to list staging files' });
     }
 });
