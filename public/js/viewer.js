@@ -920,26 +920,6 @@ async function init() {
                                 m.map = loadedTex;
                                 m.needsUpdate = true;
                                 console.log(`✅ TEXTURE FULLY LOADED: ${texUrl}`);
-
-                                setTimeout(() => {
-                                    if (typeof renderer !== 'undefined' && renderer && scene && camera) {
-                                        // Force material update on every mesh (safety net)
-                                        scene.traverse((obj) => {
-                                            if (obj.isMesh && obj.material) {
-                                                obj.material.needsUpdate = true;
-                                            }
-                                        });
-
-                                        // Use the actual render path the viewer uses
-                                        if (typeof composer !== 'undefined' && composer) {
-                                            console.log(`✅ FORCING RE-RENDER WITH COMPOSER FOR ${texUrl}`);
-                                            composer.render();
-                                        } else {
-                                            console.log(`✅ FORCING RE-RENDER WITH RENDERER FOR ${texUrl}`);
-                                            renderer.render(scene, camera);
-                                        }
-                                    }
-                                }, 0);
                             },
                             undefined,
                             function(err) {
@@ -1102,6 +1082,23 @@ async function init() {
                         }
                     });
                     console.log(report);
+
+                    // Force a single final re-render now that the model is fully added and textures are async loading
+                    setTimeout(() => {
+                        if (typeof renderer !== 'undefined' && renderer && scene && camera) {
+                            scene.traverse((obj) => {
+                                if (obj.isMesh && obj.material) {
+                                    obj.material.needsUpdate = true;
+                                }
+                            });
+                            if (typeof composer !== 'undefined' && composer) {
+                                console.log('✅ FINAL FORCING RE-RENDER WITH COMPOSER AFTER OBJ LOAD');
+                                composer.render();
+                            } else {
+                                renderer.render(scene, camera);
+                            }
+                        }
+                    }, 100);
                 });
             }, undefined, function(err) {
                 console.warn('MTL load failed, loading OBJ without materials:', err);
