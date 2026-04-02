@@ -1566,7 +1566,7 @@ app.post('/api/showroom/tags/{*path}', adminAuth, express.json(), async (req, re
 });
 
 // POST /api/showroom/config - Save a showroom configuration with a 5-digit PIN
-app.post('/api/showroom/config', configLimiter, adminAuth, express.json({ limit: '1mb' }), (err, req, res, next) => {
+app.post('/api/showroom/config', configLimiter, express.json({ limit: '1mb' }), (err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         return res.status(400).json({ success: false, error: 'Invalid config' });
     }
