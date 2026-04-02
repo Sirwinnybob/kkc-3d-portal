@@ -17,7 +17,7 @@ const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.7";
+const APP_VERSION = "2.1.9";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -128,6 +128,15 @@ const apiLimiter = rateLimit({
 });
 
 app.use('/api/', apiLimiter);
+
+// Strict rate limiter for showroom config creation to prevent abuse
+const configLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 5, // Limit each IP to 5 requests per `window` (here, per 15 minutes).
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many configuration attempts, please try again later.' }
+});
 
 app.get('/api/job/:code', async (req, res) => {
     const code = req.params.code;
@@ -1572,7 +1581,7 @@ app.post('/api/showroom/tags/{*path}', adminAuth, express.json(), async (req, re
 });
 
 // POST /api/showroom/config - Save a showroom configuration with a 5-digit PIN
-app.post('/api/showroom/config', express.json({ limit: '1mb' }), (err, req, res, next) => {
+app.post('/api/showroom/config', configLimiter, express.json({ limit: '1mb' }), (err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         return res.status(400).json({ success: false, error: 'Invalid config' });
     }

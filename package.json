@@ -1,6 +1,6 @@
 {
   "name": "kkc-cabinet-portal",
-  "version": "2.1.8",
+  "version": "2.1.9",
   "description": "Production portal for viewing 3D cabinet models",
   "main": "server.js",
   "scripts": {
