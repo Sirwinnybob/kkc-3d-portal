@@ -923,7 +923,19 @@ async function init() {
 
                                 setTimeout(() => {
                                     if (typeof renderer !== 'undefined' && renderer && scene && camera) {
-                                        renderer.render(scene, camera);
+                                        // Force material update on every mesh (safety net)
+                                        scene.traverse((obj) => {
+                                            if (obj.isMesh && obj.material) {
+                                                obj.material.needsUpdate = true;
+                                            }
+                                        });
+
+                                        // Use the actual render path the viewer uses
+                                        if (typeof composer !== 'undefined' && composer) {
+                                            composer.render();
+                                        } else {
+                                            renderer.render(scene, camera);
+                                        }
                                     }
                                 }, 0);
                             },
