@@ -428,10 +428,16 @@ async function init() {
         renderer.setSize(window.innerWidth, window.innerHeight);
 
         const canvasContainer = document.getElementById('canvas-container');
-        if (canvasContainer) canvasContainer.appendChild(renderer.domElement);
+        if (canvasContainer) {
+            canvasContainer.appendChild(renderer.domElement);
+            renderer.domElement.id = 'main-canvas';
+            renderer.domElement.setAttribute('tabindex', '0');
+            renderer.domElement.setAttribute('aria-label', '3D Model Viewer. Use arrow keys to rotate, shift + arrow keys to pan, and plus or minus keys to zoom.');
+        }
 
         scene.add(camera);
         controls = new OrbitControls(camera, renderer.domElement);
+        controls.listenToKeyEvents(window);
         controls.enableDamping = true;
         controls.dampingFactor = 0.25;
 
