@@ -2,11 +2,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
-import { state, updateStatus, jobCode, roomName, customUrl, stagingFile, loadPin } from './viewer-state.js';
+import { state, updateStatus, jobCode, roomName, customUrl, urlParams, loadPin } from './viewer-state.js';
 import { initEngine } from './viewer-core.js';
 import { setupUI, renderShowroomPanel } from './viewer-ui.js';
-import { buildMaterialGroups } from './viewer-materials.js';
+import { buildMaterialGroups, applySolidColor, updateMaterialMap } from './viewer-materials.js';
 import { fetchShowroomCategories, checkShowroomPin, loadShowroomPart, reframeShowroomCamera } from './viewer-showroom.js';
+import { setupTexturePanel, renderMaterialList } from './viewer-catalog.js';
 
 // Setup basic global error handling
 window.onerror = function(msg, url, lineNo, columnNo, error) {
@@ -19,11 +20,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 1. Initialize Engine & UI
     const core = initEngine('viewer-container');
     setupUI(() => {
-        // Render callback
         if (state.isShowroomMode) reframeShowroomCamera(core.camera, core.controls);
     });
 
     // 2. Determine Load Mode
+    const stagingFile = urlParams.get('staging');
+
     if (loadPin) {
         state.isShowroomMode = true;
         await loadShowroom(loadPin);
@@ -31,8 +33,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.isShowroomMode = true;
         await loadStagingModel(stagingFile);
     } else if (customUrl) {
+        await setupTexturePanel();
         await loadModelFromUrl(customUrl);
     } else if (jobCode && roomName) {
+        await setupTexturePanel();
         await loadJobModel(jobCode, roomName);
     } else {
         updateStatus('No model specified', true);
@@ -43,7 +47,6 @@ async function loadShowroom(pin) {
     updateStatus('Loading Showroom Config...');
     state.showroomPin = pin;
 
-    // UI handling for Showroom
     document.getElementById('texture-panel')?.classList.add('hidden');
     document.getElementById('showroom-panel')?.classList.remove('hidden');
     document.getElementById('pin-display').textContent = pin;
@@ -54,13 +57,11 @@ async function loadShowroom(pin) {
     const config = await checkShowroomPin(pin);
     if (!config) return updateStatus('Invalid PIN', true);
 
-    // Load styles
     state.kitchenStyle = config.kitchenStyle || 'face_frame';
     state.islandStyle = config.islandStyle || 'face_frame';
     state.overlayStyle = config.overlayStyle || 'full';
     state.islandOverlayStyle = config.islandOverlayStyle || 'full';
 
-    // Build parts
     updateStatus('Building configuration...');
     const loadPromises = [];
     ['kitchen', 'island'].forEach(ctx => {
@@ -73,6 +74,22 @@ async function loadShowroom(pin) {
     });
 
     await Promise.all(loadPromises);
+
+    // Apply textures/colors
+    const allTextures = { ...(config.kitchen?.textures || {}), ...(config.island?.textures || {}) };
+    for (const [matName, texInfo] of Object.entries(allTextures)) {
+        const mat = state.detectedMaterials.find(m => m.name === matName);
+        if (!mat) continue;
+
+        if (texInfo.type === 'color') {
+            applySolidColor(mat, texInfo.hex);
+        } else if (texInfo.type === 'texture' && texInfo.name) {
+            mat.matchedName = texInfo.name;
+            mat.bestCategory = texInfo.category;
+            let urlHigh = `/api/textures/${texInfo.category}/${texInfo.name}?size=high`;
+            updateMaterialMap(urlHigh, mat.meshes, () => renderMaterialList());
+        }
+    }
 
     if (config.view && config.view.position && config.view.target) {
         state.camera.position.fromArray(config.view.position);
@@ -107,11 +124,8 @@ async function loadJobModel(jobCode, roomName) {
     try {
         const pathPrefix = `/jobs/${jobCode}/${roomName}`;
 
-        // Try DAE first, fallback to GLB/OBJ
         const check = await fetch(`${pathPrefix}.dae`, { method: 'HEAD' });
         if (check.ok) {
-            // Note: In real setup, you might import ColladaLoader.
-            // The previous viewer used GLB fallback if DAE failed. Let's assume GLB here for refactor simplicity
             await loadGltf(`${pathPrefix}.glb`);
         } else {
             const glbCheck = await fetch(`${pathPrefix}.glb`, { method: 'HEAD' });
@@ -170,10 +184,9 @@ function onModelLoaded(model) {
     state.loadedModel = model;
     state.scene.add(model);
 
-    // Process Materials
-    state.detectedMaterials = buildMaterialGroups(model);
+    state.detectedMaterials = buildMaterialGroups(model, customUrl);
+    renderMaterialList();
 
-    // Fit Camera
     const box = new THREE.Box3().setFromObject(model);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());

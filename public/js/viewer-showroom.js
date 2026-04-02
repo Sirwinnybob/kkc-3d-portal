@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { state, updateStatus, statusEl, statusText, jobCode, roomName, escapeHtml, customUrl } from './viewer-state.js';
+import { state, updateStatus, escapeHtml, customUrl } from './viewer-state.js';
 import { buildMaterialGroups } from './viewer-materials.js';
 
 const gltfLoader = new GLTFLoader();
@@ -31,7 +31,6 @@ export async function checkShowroomPin(pin) {
 export function buildCategoryTree(ctx, overlayStr) {
     if (!state.showroomCategories[ctx]) return [];
 
-    // Style loop (e.g. face_frame, frameless)
     let stylesToSearch = [ctx === 'island' ? state.islandStyle : state.kitchenStyle];
     if (stylesToSearch[0] === 'face_frame') {
         const overlay = ctx === 'island' ? state.islandOverlayStyle : state.overlayStyle;
@@ -44,14 +43,12 @@ export function buildCategoryTree(ctx, overlayStr) {
         const styleData = state.showroomCategories[ctx][style];
         if (!styleData) continue;
 
-        // If face frame, we need to go one level deeper into the Overlay folder
         let searchBase = styleData;
         if (style === 'face_frame' && overlayStr && styleData[overlayStr]) {
             searchBase = styleData[overlayStr];
         }
 
         for (const catName of Object.keys(searchBase)) {
-            // Find deep parts
             const parts = [];
             const collect = (node, path) => {
                 if (node._file) {
@@ -86,7 +83,6 @@ export function formatCatName(s) {
     return s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-// Ensure loadShowroomPart calls gltfLoader
 export async function loadShowroomPart(category, ctx, deepPath, btnEl = null, renderCallback = null) {
     const partKey = `${ctx}/${category}`;
     if (btnEl) {
@@ -116,7 +112,6 @@ export async function loadShowroomPart(category, ctx, deepPath, btnEl = null, re
         const group = new THREE.Group();
         group.name = partKey;
 
-        // Reposition logic
         let yOffset = 0;
         let zOffset = 0;
         let xOffset = 0;
@@ -124,10 +119,10 @@ export async function loadShowroomPart(category, ctx, deepPath, btnEl = null, re
         if (ctx === 'kitchen') {
             if (category === 'uppers') yOffset = 54;
             else if (category === 'talls') yOffset = 0;
-            else if (category === 'finished_ends') zOffset = 0.5; // push ends out slightly to prevent z-fighting
+            else if (category === 'finished_ends') zOffset = 0.5;
         } else if (ctx === 'island') {
-            zOffset = 48; // move island out 48 inches
-            xOffset = 12; // offset from center
+            zOffset = 48;
+            xOffset = 12;
         }
 
         gltf.scene.traverse(child => {
@@ -136,7 +131,6 @@ export async function loadShowroomPart(category, ctx, deepPath, btnEl = null, re
                 child.position.z += zOffset;
                 child.position.x += xOffset;
                 if (child.material) {
-                    // Start everything in milky gray
                     child.material = new THREE.MeshStandardMaterial({ color: state.MILKY_GRAY, roughness: 0.7 });
                     if (tagData && tagData.meshCategories && tagData.meshCategories[child.name]) {
                         child.userData.meshCategories = tagData.meshCategories[child.name];
@@ -152,14 +146,14 @@ export async function loadShowroomPart(category, ctx, deepPath, btnEl = null, re
         state.showroomParts[partKey] = { group, style: state.kitchenStyle, deepPath, tagData };
         if (btnEl) btnEl.classList.remove('loading');
 
-        // Refresh material groups and trigger a render
-        state.detectedMaterials = buildMaterialGroups(state.scene);
+        state.detectedMaterials = buildMaterialGroups(state.scene, customUrl);
         state.kitchenMaterials = state.detectedMaterials;
 
-        // Handle Paneled Ends (hiding base geometry when applied)
         if (category === 'finished_ends') {
             handlePaneledEndSwap(ctx, deepPath);
         }
+
+        import('./viewer-catalog.js').then(m => m.renderMaterialList());
 
         if (renderCallback) renderCallback();
         return true;
@@ -229,9 +223,8 @@ export async function saveShowroomConfig(camera, controls) {
         islandStyle: state.islandStyle,
         overlayStyle: state.overlayStyle,
         islandOverlayStyle: state.islandOverlayStyle,
-        kitchen: { parts: {} },
-        island: { parts: {} },
-        materials: {}, // We'd serialize material maps here in a full app
+        kitchen: { parts: {}, textures: {} },
+        island: { parts: {}, textures: {} },
         view: {
             position: [camera.position.x, camera.position.y, camera.position.z],
             target: [controls.target.x, controls.target.y, controls.target.z]
@@ -243,6 +236,14 @@ export async function saveShowroomConfig(camera, controls) {
         const section = ctx === 'island' ? config.island : config.kitchen;
         section.parts[partKey] = { deepPath: part.deepPath };
     }
+
+    state.detectedMaterials.forEach(mat => {
+        if (mat.isColor) {
+            config.kitchen.textures[mat.name] = { type: 'color', hex: mat.colorHex };
+        } else if (mat.matchedName) {
+            config.kitchen.textures[mat.name] = { type: 'texture', name: mat.matchedName, category: mat.bestCategory };
+        }
+    });
 
     try {
         const r = await fetch('/api/showroom/config', {

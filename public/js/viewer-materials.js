@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { state, updateStatus, textureCache, SETTINGS, jobCode, roomName, escapeHtml, customUrl } from './viewer-state.js';
+import { state, updateStatus, textureCache, SETTINGS, getRecentColors, addRecentColor, _lodVec } from './viewer-state.js';
+import { openReplaceSheet } from './viewer-ui.js';
 
 export function highlightMesh(mesh) {
     clearMeshHighlight();
@@ -19,21 +20,16 @@ export function clearMeshHighlight() {
     state.highlightOriginalEmissive = null;
 }
 
-export function buildMaterialGroups(scene) {
+export function buildMaterialGroups(scene, customUrl) {
     const materials = [];
     scene.traverse((child) => {
         if (child.isMesh && child.material) {
             if (state.isShowroomMode) {
-                // If the user provided ?url=..., they can change everything
-                // but if not, showroom defaults to only replacing specific tagged meshes
                 if (!customUrl && (!child.userData.meshCategories || child.userData.meshCategories.length === 0)) {
                     return;
                 }
             }
-
             const materialName = child.material.name || 'Unknown Material';
-
-            // Filter out internal / helper objects
             if (materialName.includes('BoundingBox') || materialName.includes('Hidden')) return;
             if (child.name && (child.name.includes('BoundingBox') || child.name.includes('Hidden'))) return;
 
@@ -64,13 +60,10 @@ export function buildMaterialGroups(scene) {
     });
 }
 
-// Convert texture to Base64 for matching
 export async function getTextureBase64(texture) {
     if (!texture || !texture.image) return null;
-
     let image = texture.image;
 
-    // If it's an ImageBitmap (e.g. from ImageBitmapLoader), draw it to a canvas
     if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) {
         const canvas = document.createElement('canvas');
         canvas.width = image.width;
@@ -80,7 +73,6 @@ export async function getTextureBase64(texture) {
         return canvas.toDataURL('image/jpeg', 0.8);
     }
 
-    // If it's a regular HTMLImageElement
     if (image instanceof HTMLImageElement) {
         try {
             const canvas = document.createElement('canvas');
@@ -90,17 +82,15 @@ export async function getTextureBase64(texture) {
             ctx.drawImage(image, 0, 0);
             return canvas.toDataURL('image/jpeg', 0.8);
         } catch (e) {
-            console.warn("Could not read image data (likely CORS):", e);
+            console.warn("Could not read image data:", e);
             return null;
         }
     }
-
     return null;
 }
 
 export async function matchTexture(mat, jobCode, room) {
     if (!mat.material.map) return null;
-
     try {
         const base64Data = await getTextureBase64(mat.material.map);
         if (!base64Data) return null;
@@ -118,9 +108,7 @@ export async function matchTexture(mat, jobCode, room) {
 
         if (response.ok) {
             const data = await response.json();
-            if (data.success && data.bestMatch) {
-                return data.bestMatch;
-            }
+            if (data.success && data.bestMatch) return data.bestMatch;
         }
     } catch (e) {
         console.warn("Failed to match texture for:", mat.name, e);
@@ -128,52 +116,77 @@ export async function matchTexture(mat, jobCode, room) {
     return null;
 }
 
-export async function updateMaterialMap(url, meshes, onLoadCallback) {
-    updateStatus('Loading texture...');
-    const textureLoader = new THREE.TextureLoader();
-
-    try {
-        // Try to get from cache first
-        let texture = textureCache.get(url);
-
-        if (!texture) {
-            texture = await textureLoader.loadAsync(url);
-            texture.colorSpace = THREE.SRGBColorSpace;
-            texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.RepeatWrapping;
-            // Basic scale, could be improved based on real-world scale data
-            texture.repeat.set(1, 1);
-            textureCache.set(url, texture);
-        }
-
-        meshes.forEach(mesh => {
-            // Clone material so we don't affect other objects sharing the old material
-            if (mesh.material) {
-                // If it's a showroom replacement, clone it, otherwise we might just be replacing everything
-                mesh.material = mesh.material.clone();
-                mesh.material.map = texture;
-                mesh.material.color.setHex(0xffffff); // reset color to white when using texture
-                mesh.material.needsUpdate = true;
-            }
+export function applySolidColor(matGroup, hexColor) {
+    const color = new THREE.Color(hexColor);
+    matGroup.meshes.forEach(mesh => {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach(m => {
+            m.map = null;
+            if (m.color) m.color.copy(color);
+            m.needsUpdate = true;
         });
-
-        updateStatus('Texture applied');
-        if (onLoadCallback) onLoadCallback();
-        return texture;
-    } catch (error) {
-        console.error('Error loading texture:', error);
-        updateStatus('Failed to load texture', true);
-        return null;
-    }
+    });
+    const r = Math.round(color.r * 255);
+    const g = Math.round(color.g * 255);
+    const b = Math.round(color.b * 255);
+    matGroup.matchedName = `RGB(${r},${g},${b})`;
+    matGroup.isColor = true;
+    matGroup.colorHex = hexColor;
+    addRecentColor(hexColor);
 }
 
-export function updateMaterialColor(hex, meshes) {
-    meshes.forEach(mesh => {
-        if (mesh.material) {
-            mesh.material = mesh.material.clone();
-            mesh.material.map = null; // remove texture
-            mesh.material.color.setHex(hex);
-            mesh.material.needsUpdate = true;
-        }
-    });
+export function updateLodState(camera, renderer) {
+    const now = Date.now();
+    if (camera && state.scene && (now - state.lastLodCheckTime > 500) && state.detectedMaterials.length > 0) {
+        state.lastLodCheckTime = now;
+        const camPos = camera.position;
+
+        const tHigh = window.lodHighThreshold || 500;
+        const tMed = window.lodMediumThreshold || 2000;
+
+        state.detectedMaterials.forEach(matGroup => {
+            if (!matGroup.hasTexture || matGroup.isColor || window.forceHighResRender) return;
+            if (!matGroup.urlLow && !matGroup.urlMedium) return;
+
+            if (matGroup.meshes.length > 0) {
+                const mesh = matGroup.meshes[0];
+                if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+                _lodVec.copy(mesh.geometry.boundingSphere.center);
+                mesh.localToWorld(_lodVec);
+                const dist = camPos.distanceTo(_lodVec);
+
+                let targetUrl = matGroup.urlHigh;
+                if (dist > tMed) targetUrl = matGroup.urlLow || matGroup.urlMedium || matGroup.urlHigh;
+                else if (dist > tHigh) targetUrl = matGroup.urlMedium || matGroup.urlHigh;
+
+                if (targetUrl && matGroup.currentLODUrl !== targetUrl) {
+                    matGroup.currentLODUrl = targetUrl;
+                    if (textureCache.has(targetUrl)) {
+                        const cachedTex = textureCache.get(targetUrl);
+                        matGroup.meshes.forEach(m => {
+                            m.material.map = cachedTex;
+                            m.material.needsUpdate = true;
+                        });
+                    } else {
+                        const loader = new THREE.TextureLoader();
+                        loader.load(targetUrl, (tex) => {
+                            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                            tex.minFilter  = THREE.LinearMipmapLinearFilter;
+                            tex.magFilter  = THREE.LinearFilter;
+                            tex.wrapS      = THREE.RepeatWrapping;
+                            tex.wrapT      = THREE.RepeatWrapping;
+                            textureCache.set(targetUrl, tex);
+
+                            if (matGroup.currentLODUrl === targetUrl) {
+                                matGroup.meshes.forEach(m => {
+                                    m.material.map = tex;
+                                    m.material.needsUpdate = true;
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+        });
+    }
 }

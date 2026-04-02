@@ -7,7 +7,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 import { state, SETTINGS, updateStatus, manager, customUrl, loadPin } from './viewer-state.js';
-import { buildMaterialGroups, highlightMesh, clearMeshHighlight } from './viewer-materials.js';
+import { highlightMesh, clearMeshHighlight, updateLodState } from './viewer-materials.js';
 import { openReplaceSheet } from './viewer-ui.js';
 
 const KKCShader = {
@@ -78,18 +78,27 @@ export function initEngine(containerId) {
     setupLighting();
     setupPostProcessing(canvas);
     setupInteractions(canvas);
+    setupLightMode();
 
     window.addEventListener('resize', onWindowResize);
 
     // Animation loop
     state.renderer.setAnimationLoop(() => {
-        state.controls.update();
-        if (state.zoomVelocity !== 0) {
-            state.camera.position.z += state.zoomVelocity;
+        updateLodState(state.camera, state.renderer);
+
+        if (state.zoomVelocity !== 0 && state.camera && state.controls) {
+            const direction = new THREE.Vector3();
+            state.camera.getWorldDirection(direction);
+            const dist = state.camera.position.distanceTo(state.controls.target);
+            if (!(state.zoomVelocity > 0 && dist < 0.5)) {
+                state.camera.position.addScaledVector(direction, state.zoomVelocity * state.controls.zoomSpeed);
+            }
             state.zoomVelocity *= 0.9;
             if (Math.abs(state.zoomVelocity) < 0.01) state.zoomVelocity = 0;
         }
-        state.composer.render();
+
+        state.controls.update();
+        if (state.composer) state.composer.render();
     });
 
     return { scene: state.scene, camera: state.camera, renderer: state.renderer, controls: state.controls };
@@ -167,11 +176,10 @@ function setupInteractions(canvas) {
         return null;
     }
 
-    // Touch logic (pinch, single tap, double tap)
     let lastTapTime = 0;
     canvas.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
-            e.preventDefault(); // allow pinch zoom via controls
+            e.preventDefault();
             return;
         }
         if (e.touches.length === 1) {
@@ -179,7 +187,6 @@ function setupInteractions(canvas) {
             const tapLength = currentTime - lastTapTime;
 
             if (tapLength < 300 && tapLength > 0) {
-                // Double tap handling
                 const intersect = getIntersect(e);
                 if (intersect) {
                     e.preventDefault();
@@ -190,7 +197,6 @@ function setupInteractions(canvas) {
                     }
                 }
             } else {
-                // Single tap
                 const intersect = getIntersect(e);
                 if (intersect) highlightMesh(intersect.object);
                 else clearMeshHighlight();
@@ -199,7 +205,6 @@ function setupInteractions(canvas) {
         }
     }, { passive: false });
 
-    // Mouse logic
     canvas.addEventListener('dblclick', (e) => {
         const intersect = getIntersect(e);
         if (intersect) {
@@ -232,5 +237,32 @@ function onWindowResize() {
         const pixelRatio = state.renderer.getPixelRatio();
         state.fxaaPass.material.uniforms['resolution'].value.x = 1 / (width * pixelRatio);
         state.fxaaPass.material.uniforms['resolution'].value.y = 1 / (height * pixelRatio);
+    }
+}
+
+function setupLightMode() {
+    const lightModeBtn = document.getElementById('light-mode-btn');
+    if (lightModeBtn) {
+        const updateLightModeUI = () => {
+            const isLightMode = localStorage.getItem("lightMode") === "true";
+            if (isLightMode) {
+                lightModeBtn.style.background = '#e0e0e0';
+            } else {
+                lightModeBtn.style.background = '#fff';
+            }
+        };
+
+        lightModeBtn.addEventListener('click', () => {
+            const isLightMode = localStorage.getItem("lightMode") === "true";
+            const newMode = !isLightMode;
+            localStorage.setItem("lightMode", newMode);
+
+            if (state.scene) {
+                state.scene.background = new THREE.Color(newMode ? 0xf0f0f0 : 0x111111);
+            }
+            updateLightModeUI();
+        });
+
+        updateLightModeUI();
     }
 }

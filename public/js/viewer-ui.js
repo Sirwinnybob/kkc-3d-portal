@@ -1,6 +1,7 @@
 import { state, updateStatus, TILE_SIZE, escapeHtml } from './viewer-state.js';
-import { updateMaterialMap, updateMaterialColor } from './viewer-materials.js';
+import { applySolidColor, updateMaterialMap } from './viewer-materials.js';
 import { buildCategoryTree, loadShowroomPart } from './viewer-showroom.js';
+import { renderMaterialList } from './viewer-catalog.js';
 
 export const quickPicker = { open: null, close: null, paintTap: null };
 
@@ -9,7 +10,6 @@ export function setupUI(renderCallback) {
     setupProductTour();
     setupEventHandlers();
 
-    // Pass rendering callback to other systems if needed
     quickPicker.renderCallback = renderCallback;
 }
 
@@ -30,7 +30,6 @@ function setupModals() {
     if (pinBtn) pinBtn.onclick = () => pinModal?.classList.add('show');
     if (pinModalClose) pinModalClose.onclick = () => pinModal?.classList.remove('show');
 
-    // Copy PIN logic
     const copyPinBtn = document.getElementById('copy-pin-btn');
     if (copyPinBtn) {
         copyPinBtn.addEventListener('click', async () => {
@@ -134,7 +133,6 @@ function setupEventHandlers() {
     }
 }
 
-// Quick Picker functionality mapping
 let qpMatGroupIndex = -1;
 let qpMesh = null;
 const qpEl = document.getElementById('quick-picker');
@@ -170,6 +168,8 @@ quickPicker.paintTap = () => {
     document.getElementById('qp-textures-view')?.classList.add('hidden');
 
     qpEl.classList.add('show');
+
+    import('./viewer-quickpicker.js').then(m => m.loadQpCategories(mat));
 };
 
 quickPicker.close = () => {
@@ -186,28 +186,20 @@ if (tapReplaceCancel) tapReplaceCancel.addEventListener('click', closeReplaceShe
 if (tapReplaceBackdrop) tapReplaceBackdrop.addEventListener('click', closeReplaceSheet);
 if (qpClose) qpClose.addEventListener('click', quickPicker.close);
 
-// Rendering the UI for Showroom
 export function renderShowroomPanel(renderCallback) {
     const container = document.getElementById('showroom-config-container');
     if (!container) return;
     container.innerHTML = '';
 
-    // Add context toggle (Kitchen / Island)
     const ctxToggle = document.createElement('div');
     ctxToggle.className = 'flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg';
     ['kitchen', 'island'].forEach(ctx => {
         const btn = document.createElement('button');
         btn.className = `flex-1 py-2 text-sm font-medium rounded-md ${state[`${ctx}Style`] ? 'bg-white shadow' : 'text-gray-500 hover:bg-gray-200'}`;
         btn.textContent = ctx.charAt(0).toUpperCase() + ctx.slice(1);
-        btn.onclick = () => {
-            // Need a state to track active tab, for now just a simple stub
-            // This requires more complex logic to switch the panel
-        };
         ctxToggle.appendChild(btn);
     });
-    // For brevity in refactor, keeping basic structure setup
 
-    // Kitchen Section (Default)
     const tree = buildCategoryTree('kitchen');
     tree.forEach(cat => {
         const sect = document.createElement('div');
