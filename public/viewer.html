@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/css/viewer.css?v=308">
 </head>
 <body>
+    <a href="#main-canvas" class="skip-link">Skip to 3D Viewer</a>
     <div id="top-ui">
         <div id="menu-container">
             <div id="job-info" class="ui-panel">
@@ -55,7 +56,7 @@
         </div>
 
         <div style="display: flex; gap: 10px;">
-            <button id="light-mode-btn" class="ui-panel" aria-label="Toggle Light Mode" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
+            <button id="light-mode-btn" class="ui-panel" title="Toggle Light Mode" aria-label="Toggle Light Mode" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="5"></circle>
                     <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -68,7 +69,7 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <button id="share-btn" class="ui-panel" aria-label="Share Link" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
+            <button id="share-btn" class="ui-panel" title="Share Link" aria-label="Share Link" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="18" cy="5" r="3"></circle>
                     <circle cx="6" cy="12" r="3"></circle>
@@ -77,7 +78,7 @@
                     <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
                 </svg>
             </button>
-            <button id="help-btn" class="ui-panel" aria-label="Help">?</button>
+            <button id="help-btn" class="ui-panel" title="Help" aria-label="Help">?</button>
         </div>
     </div>
 
@@ -92,10 +93,10 @@
             <h3 id="help-title" class="controls-title">Controls</h3>
             <div class="controls-body">
                 <div class="help-section-label">Navigation</div>
-                <b>Rotate:</b> Left Click / 1 Finger Drag<br>
-                <b>Pan:</b> Right Click / 2 Finger Drag<br>
-                <b>Zoom:</b> Scroll / Right Joystick<br>
-                <b>Pivot:</b> Double-tap to re-center rotation<br>
+                <b>Rotate:</b> Left Click / Arrow Keys<br>
+                <b>Pan:</b> Right Click / Shift + Arrows<br>
+                <b>Zoom:</b> Scroll / +/- Keys<br>
+                <b>Pivot:</b> Double-tap surface<br>
                 <br>
                 <div class="help-section-label">Textures</div>
                 <b>Change Texture:</b> Tap any surface<br>
