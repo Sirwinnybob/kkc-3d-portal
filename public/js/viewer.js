@@ -920,6 +920,16 @@ async function init() {
                                 m.map = loadedTex;
                                 m.needsUpdate = true;
                                 console.log(`✅ TEXTURE FULLY LOADED: ${texUrl}`);
+
+                                // Force a re-render to apply the newly loaded texture
+                                if (typeof scene !== 'undefined' && scene) {
+                                    scene.traverse((child) => {
+                                        if (child.isMesh && child.material === m) {
+                                            child.material.needsUpdate = true;
+                                        }
+                                    });
+                                }
+                                if (typeof composer !== 'undefined' && composer) composer.render();
                             },
                             undefined,
                             function(err) {
