@@ -143,10 +143,8 @@ const updateStatus = (msg, isError = false) => {
     }
 };
 
-function initMaterialManager() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const jobCode = urlParams.get('job');
-    const room = urlParams.get('room');
+function initMaterialManager(jobCode, room) {
+    // Use jobCode and room passed from main init() scope, ensuring fallback to dynamically resolved initialRoom
 
     materialManager = new MaterialManager({
         detectedMaterials,
@@ -498,7 +496,7 @@ async function init() {
 
         // --- SHOWROOM MODE BRANCH ---
         if (isShowroomMode) {
-            window.setupTexturePanel = initMaterialManager; // Expose for showroom mode
+            window.setupTexturePanel = () => initMaterialManager(null, null); // Expose for showroom mode
             await initShowroomMode(loadPin);
             window.addEventListener('resize', onWindowResize);
             animate();
@@ -588,11 +586,6 @@ async function init() {
 
         // --- SINGLE TAP: open texture picker for the tapped surface ---
         function handleSingleTap(clientX, clientY) {
-            // Don't open picker if any overlay is already visible
-            if (document.getElementById('quick-picker')?.classList.contains('show')) return;
-            if (document.getElementById('tap-replace-sheet')?.classList.contains('show')) return;
-            if (document.getElementById('texture-panel')?.classList.contains('show')) return;
-
             const raycaster = new THREE.Raycaster();
             const mouse = new THREE.Vector2(
                 (clientX / window.innerWidth) * 2 - 1,
@@ -604,11 +597,17 @@ async function init() {
 
             const tappedMesh = intersects[0].object;
 
+            // Allow paint mode taps to pass through even if quick-picker is open
             if (materialManager && materialManager.qpPaintMode) {
                 if (materialManager.handlePaintTap(tappedMesh)) {
                     return;
                 }
             }
+
+            // Don't open picker if any overlay is already visible (except we allow paint mode above)
+            if (document.getElementById('quick-picker')?.classList.contains('show')) return;
+            if (document.getElementById('tap-replace-sheet')?.classList.contains('show')) return;
+            if (document.getElementById('texture-panel')?.classList.contains('show')) return;
 
             const matGroupIndex = detectedMaterials.findIndex(g => g.meshes.includes(tappedMesh));
             if (matGroupIndex < 0) return;
@@ -1035,7 +1034,7 @@ async function init() {
 
                     // Finish processing materials
                     detectedMaterials = Array.from(materialMap.values());
-                    initMaterialManager();
+                    initMaterialManager(jobCode, initialRoom);
 
                     scene.add(model);
                     const box = new THREE.Box3().setFromObject(model);
@@ -1242,7 +1241,7 @@ async function init() {
             updateStatus("");
 
             // Setup texture panel and start matching
-            initMaterialManager();
+            initMaterialManager(jobCode, initialRoom);
 
         }, (xhr) => {
             if (xhr.lengthComputable) {
@@ -1381,7 +1380,7 @@ async function initShowroomMode(pinToLoad) {
     }
 
     // Setup texture panel for showroom (reuse existing)
-    initMaterialManager();
+    initMaterialManager(jobCode, initialRoom);
 
     // Load from PIN if provided
     if (pinToLoad) {

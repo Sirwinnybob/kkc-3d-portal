@@ -26,6 +26,8 @@ export class MaterialManager {
         this.qpPaintMode = false;
         this.qpLastTextureUrl = null;
         this.qpLastTextureName = null;
+        this.qpLastColorHex = null;
+        this.qpLastColorHex = null;
 
         this.COLOR_PRESETS = [
             { name: 'White', hex: '#FFFFFF' },
@@ -331,11 +333,84 @@ export class MaterialManager {
                 islandVis.forEach(mat => this.materialList.appendChild(this.createMaterialItem(mat)));
             }
         } else {
-            visibleMaterials.forEach(mat => this.materialList.appendChild(this.createMaterialItem(mat)));
+            // Group materials by matchedName or original texture name
+            const groupedMaterials = new Map();
+            visibleMaterials.forEach(mat => {
+                let displayName = mat.matchedName;
+                if (!displayName) {
+                    // Provide a cleaner fallback name instead of raw mesh names
+                    if (mat.name && mat.name.startsWith('N_Sh')) {
+                        displayName = 'Customizable Material';
+                    } else if (mat.name && mat.name.includes('Material_')) {
+                        displayName = 'Customizable Material';
+                    } else {
+                        displayName = mat.name || 'Customizable Material';
+                    }
+                }
+
+                if (!groupedMaterials.has(displayName)) {
+                    groupedMaterials.set(displayName, {
+                        displayName: displayName,
+                        primaryMat: mat,
+                        indices: [this.detectedMaterials.indexOf(mat)]
+                    });
+                } else {
+                    groupedMaterials.get(displayName).indices.push(this.detectedMaterials.indexOf(mat));
+                }
+            });
+
+            Array.from(groupedMaterials.values()).forEach(group => {
+                this.materialList.appendChild(this.createGroupedMaterialItem(group));
+            });
         }
 
         document.getElementById('materials-view').style.display = 'block';
         document.getElementById('catalog-view').style.display = 'none';
+    }
+
+    createGroupedMaterialItem(group) {
+        const btn = document.createElement('button');
+        btn.className = 'material-item';
+        const mat = group.primaryMat;
+        // Store indices to apply to all when clicked
+        btn.dataset.indices = JSON.stringify(group.indices);
+
+        if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
+            try {
+                const img = mat.material.map.image;
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, 64, 64);
+                mat.previewCache = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
+            } catch {
+                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+            }
+        } else if (!mat.previewCache) {
+            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+            mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+        }
+
+        const previewHtml = mat.previewCache;
+        const displayName = group.displayName;
+        btn.innerHTML = `
+            <div class="material-item-left">
+                ${previewHtml}
+                <div class="material-info">
+                    <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
+                    <span class="material-status">Customizable</span>
+                </div>
+            </div>
+            <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
+        `;
+        btn.onclick = () => {
+            // When user clicks a grouped material row, we just treat the first index as the active one
+            // for the catalog view, but we'll apply texture changes to ALL grouped indices
+            this.selectedGroupIndices = group.indices;
+            this.selectMaterial(group.indices[0], group.displayName);
+        };
+        return btn;
     }
 
     createMaterialItem(mat) {
@@ -377,12 +452,12 @@ export class MaterialManager {
         return btn;
     }
 
-    async selectMaterial(index) {
+    async selectMaterial(index, customTitle = null) {
         this.selectedMaterialIndex = index;
         const mat = this.detectedMaterials[index];
         document.getElementById('materials-view').style.display = 'none';
         document.getElementById('catalog-view').style.display = 'block';
-        this.catalogTitle.innerText = `Replace: ${mat.matchedName || mat.name}`;
+        this.catalogTitle.innerText = `Replace: ${customTitle || mat.matchedName || mat.name}`;
 
         if (this.backToMaterialsBtn) {
             requestAnimationFrame(() => this.backToMaterialsBtn.focus());
@@ -515,7 +590,8 @@ export class MaterialManager {
             swatch.style.backgroundColor = preset.hex;
             swatch.title = preset.name;
             swatch.onclick = () => {
-                this.onApplyColor(this.selectedMaterialIndex, preset.hex, null, true);
+                const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
+                indices.forEach(idx => this.onApplyColor(idx, preset.hex, null, true));
                 presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
                 swatch.classList.add('active');
             };
@@ -536,7 +612,8 @@ export class MaterialManager {
 
         picker.oninput = () => {
             hexDisplay.textContent = picker.value;
-            this.onApplyColor(this.selectedMaterialIndex, picker.value, null, true);
+            const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
+            indices.forEach(idx => this.onApplyColor(idx, picker.value, null, true));
             presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
         };
         pickerRow.appendChild(pickerLabel);
@@ -561,7 +638,8 @@ export class MaterialManager {
                 swatch.style.backgroundColor = hex;
                 swatch.title = hex;
                 swatch.onclick = () => {
-                    this.onApplyColor(this.selectedMaterialIndex, hex, null, true);
+                    const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
+                    indices.forEach(idx => this.onApplyColor(idx, hex, null, true));
                 };
                 recentRow.appendChild(swatch);
             });
@@ -596,7 +674,8 @@ export class MaterialManager {
             btn.setAttribute('aria-label', `Select texture ${this.escapeHtml(tex.name)}`);
             btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
             btn.onclick = () => {
-                this.onApplyTexture(this.selectedMaterialIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true);
+                const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
+                indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true));
             };
             this.textureGrid.appendChild(btn);
         });
@@ -738,7 +817,11 @@ export class MaterialManager {
                     }
                     btn.classList.add('active');
                     this.qpLastTextureUrl = null;
+                    this.qpLastTextureName = hex;
+                    this.qpLastColorHex = hex;
+                    this.qpLastTextureUrl = null;
                     this.qpLastTextureName = preset.name;
+                    this.qpLastColorHex = preset.hex;
                 }
             });
             if (this.qpTextureStrip) this.qpTextureStrip.appendChild(btn);
@@ -816,6 +899,7 @@ export class MaterialManager {
 
                 this.qpLastTextureUrl = tex.url;
                 this.qpLastTextureName = tex.name;
+                this.qpLastColorHex = null;
             });
             this.qpTextureStrip.appendChild(btn);
         });
@@ -830,7 +914,8 @@ export class MaterialManager {
 
     // Helper for paint mode called by viewer.js
     handlePaintTap(mesh) {
-        if (!this.qpPaintMode || !this.qpLastTextureUrl) return false;
+        if (!this.qpPaintMode) return false;
+        if (!this.qpLastTextureUrl && !this.qpLastColorHex) return false;
 
         const idx = this.detectedMaterials.findIndex(g => g.meshes.includes(mesh));
         if (idx < 0 || !this.detectedMaterials[idx].hasTexture) return false;
@@ -840,7 +925,11 @@ export class MaterialManager {
         this.onHighlightMesh(mesh);
 
         // For paint tap, we just do a partial apply
-        this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false);
+        if (this.qpLastColorHex) {
+            this.onApplyColor(idx, this.qpLastColorHex, mesh, false);
+        } else {
+            this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false);
+        }
         return true;
     }
 
