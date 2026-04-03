@@ -1022,8 +1022,8 @@ async function init() {
                                     }
                                     if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
                                 } else {
-                                    const colorHex = mat.color.getHexString();
-                                    if (!materialMap.has(colorHex)) {
+                        const colorHex = prevMat.uuid; // precise UUID instead of flat color grouping
+                        if (!materialMap.has(colorHex)) {
                                         materialMap.set(colorHex, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture: false, originalMap: null });
                                     }
                                 if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
@@ -1193,10 +1193,11 @@ async function init() {
                     });
                     child.material = Array.isArray(child.material) ? newMats : newMats[0];
 
-                    newMats.forEach(mat => {
+                    newMats.forEach((mat, i) => {
+                        const prevMat = prevMats[i];
                         const hasTexture = !!mat.map;
                         if (hasTexture) {
-                            const texSrc = mat.image?.src || mat.uuid;
+                            const texSrc = prevMat.map?.source?.uuid || prevMat.map?.uuid || prevMat.uuid;
                             if (!materialMap.has(texSrc)) {
                                 materialMap.set(texSrc, {
                                     name: mat.name || child.name || `Material_${materialMap.size}`,
@@ -1209,7 +1210,7 @@ async function init() {
                             }
                             if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
                         } else {
-                            const colorHex = mat.color.getHexString();
+                            const colorHex = prevMat.uuid; // Use UUID for colors too, to ensure precise grouping per material
                             if (!materialMap.has(colorHex)) {
                                 materialMap.set(colorHex, {
                                     name: mat.name || child.name || `Material_${materialMap.size}`,
@@ -1625,9 +1626,10 @@ async function loadShowroomPart(category, ctx, deepPath, btnEl) {
                 });
                 child.material = Array.isArray(child.material) ? newMats : newMats[0];
 
-                newMats.forEach(mat => {
+                newMats.forEach((mat, i) => {
+                    const prevMat = prevMats[i];
                     if (mat.map) {
-                        const texSrc = mat.map.source?.data?.src || mat.map.image?.src || mat.map.name;
+                        const texSrc = prevMat.map?.source?.uuid || prevMat.map?.uuid || prevMat.uuid;
                         if (!materialMap.has(texSrc)) {
                             materialMap.set(texSrc, {
                                 material: mat, meshes: [], hasTexture: true,
