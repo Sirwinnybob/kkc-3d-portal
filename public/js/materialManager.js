@@ -362,13 +362,14 @@ export class MaterialManager {
         }
 
         const previewHtml = mat.previewCache;
-        const displayName = mat.matchedName || mat.name;
+        const mainName = mat.name;
+        const subName = mat.matchedName || 'Customizable';
         btn.innerHTML = `
             <div class="material-item-left">
                 ${previewHtml}
                 <div class="material-info">
-                    <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
-                    <span class="material-status">Customizable</span>
+                    <span class="material-name" title="${this.escapeHtml(mainName)}">${this.escapeHtml(mainName)}</span>
+                    <span class="material-status" title="${this.escapeHtml(subName)}">${this.escapeHtml(subName)}</span>
                 </div>
             </div>
             <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
