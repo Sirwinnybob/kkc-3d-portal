@@ -1181,7 +1181,8 @@ async function init() {
                             side: THREE.DoubleSide,
                             polygonOffset: true,
                             polygonOffsetFactor: 1,
-                            polygonOffsetUnits: 1
+                            polygonOffsetUnits: 1,
+                            name: prevMat.name
                         });
                         if (newMat.map) {
                             newMat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
