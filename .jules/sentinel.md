@@ -32,3 +32,8 @@
 **Vulnerability:** The `POST /api/showroom/tags/{*path}` endpoint, which is responsible for modifying and saving showroom tag metadata, lacked the `adminAuth` middleware. This allowed unauthenticated users to modify application state by submitting arbitrary tag data to the server, potentially overwriting valid configurations.
 **Learning:** Endpoints that modify production state or metadata must be protected by the same authentication mechanisms as their staging or administrative counterparts. It is easy to secure staging endpoints (e.g., `POST /api/showroom/staging/tags/:file`) while accidentally leaving corresponding production endpoints unsecured.
 **Prevention:** Always review related CRUD endpoints as a group and ensure authorization middleware (like `adminAuth`) is consistently applied to all state-modifying (`POST`, `PUT`, `DELETE`) routes.
+
+## 2026-04-04 - Insecure Direct Object Reference (IDOR) on Internal Directories
+**Vulnerability:** The `GET /api/textures/:category` endpoint relied solely on path traversal validation (`..`) and hidden-from-listing mechanisms to protect internal system directories like `Uncategorized` and `Hidden`. However, an attacker could still directly request these directories by name, bypassing the UI and accessing potentially sensitive unmatched or raw textures.
+**Learning:** Excluding items from a collection list API (like `GET /api/textures`) does not automatically protect those items from direct access in item-specific APIs. Security controls must be enforced at both the enumeration and direct-access levels.
+**Prevention:** Always implement explicit access controls (e.g., strict string validation or deny-lists) on direct-access endpoints to mirror the visibility constraints of listing endpoints.
