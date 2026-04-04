@@ -29,3 +29,7 @@
 ## 2025-07-03 - [Parallelizing I/O-Bound Recursive Traversals]
 **Learning:** Sequential `await` inside loops for directory traversal (e.g., `readdir`, `stat`) and batch processing creates a major performance bottleneck as the filesystem grows. By switching to `Promise.all(entries.map(async ...))`, we can overlap I/O wait times, leading to a measured speedup of ~3x-10x for cold-cache hierarchical metadata generation. Additionally, replacing (N)$ synchronous `fs.existsSync` calls within loops with a single `Set` lookup from `readdir` results ((1)$ in memory) prevents event loop blocking and reduces syscall overhead.
 **Action:** Always parallelize recursive directory traversals and batch I/O operations using `Promise.all`. For metadata checks (like sidecar files), build a `Set` of the directory contents once to avoid redundant filesystem hits.
+
+## 2026-04-04 - [Optimizing Popcount with Math.imul]
+**Learning:** In JavaScript, the standard multiplication operator (\*) operates on 64-bit floats. For performance-critical bitwise algorithms like population count that rely on 32-bit integer wrap-around, using `Math.imul()` is more efficient and idiomatic than standard multiplication followed by bitwise masking or shifting. In the Hamming distance hot loop, this ensures the multiplication is performed as a single 32-bit integer operation.
+**Action:** Use `Math.imul()` for 32-bit integer multiplications in bitwise algorithms or performance-critical loops to avoid float conversion overhead and ensure correct overflow behavior.

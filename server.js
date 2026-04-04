@@ -17,7 +17,7 @@ const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.9";
+const APP_VERSION = "2.1.10";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -575,6 +575,26 @@ async function buildTextureHashIndex() {
             console.error(`[Texture] Index build error: ${e.message}`);
         }
 
+        // Optimization: Pre-flatten the library for faster Hamming distance matching.
+        // This avoids redundant Object.entries() and nested loop overhead in match loops.
+        const flatLibrary = [];
+        for (const [category, textures] of Object.entries(index)) {
+            for (const tex of textures) {
+                flatLibrary.push({ ...tex, category });
+            }
+        }
+        const flatLow = new Uint32Array(flatLibrary.length);
+        const flatHigh = new Uint32Array(flatLibrary.length);
+        for (let i = 0; i < flatLibrary.length; i++) {
+            flatLow[i] = flatLibrary[i].hLow;
+            flatHigh[i] = flatLibrary[i].hHigh;
+        }
+
+        // Attach pre-flattened data as non-enumerable properties to avoid polluting API responses
+        Object.defineProperty(index, '_flatLibrary', { value: flatLibrary, enumerable: false });
+        Object.defineProperty(index, '_flatLow', { value: flatLow, enumerable: false });
+        Object.defineProperty(index, '_flatHigh', { value: flatHigh, enumerable: false });
+
         textureHashCache = index;
         app.locals.clearTextureCache = () => { textureHashCache = null; };
         textureHashCacheTime = Date.now();
@@ -657,26 +677,27 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         // Build/load hash index
         const index = await buildTextureHashIndex();
+        const { _flatLibrary: flatLibrary, _flatLow: flatLow, _flatHigh: flatHigh } = index;
 
         // Find best match across all categories (excluding hidden)
         let bestMatch = null;
         let bestDistance = Infinity;
         const allMatches = [];
 
-        for (const [category, textures] of Object.entries(index)) {
-            for (const tex of textures) {
-                const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
+        // Optimized Hamming distance loop using TypedArrays and pre-flattened library
+        for (let i = 0; i < flatLow.length; i++) {
+            const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
+                             popcount32((inHigh ^ flatHigh[i]) >>> 0);
 
-                // Track absolute best match including hidden ones
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestMatch = { ...tex, category };
-                }
+            // Track absolute best match including hidden ones
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestMatch = flatLibrary[i];
+            }
 
-                // Track similar non-hidden matches for the catalog view
-                if (distance <= 20 && !tex.hidden) {
-                    allMatches.push({ ...tex, category, distance });
-                }
+            // Track similar non-hidden matches for the catalog view
+            if (distance <= 20 && !flatLibrary[i].hidden) {
+                allMatches.push({ ...flatLibrary[i], distance });
             }
         }
 
@@ -858,17 +879,16 @@ async function extractTexturesFromGlb(glbPath) {
         const hash = await computePhash(imageData);
         const inLow = Number(hash & 0xFFFFFFFFn);
         const inHigh = Number(hash >> 32n);
+        const { _flatLow: flatLow, _flatHigh: flatHigh } = index;
         let isMatched = false;
 
-        for (const [category, textures] of Object.entries(index)) {
-            for (const tex of textures) {
-                const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
-                if (distance <= 15) {
-                    isMatched = true;
-                    break;
-                }
+        for (let i = 0; i < flatLow.length; i++) {
+            const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
+                             popcount32((inHigh ^ flatHigh[i]) >>> 0);
+            if (distance <= 15) {
+                isMatched = true;
+                break;
             }
-            if (isMatched) break;
         }
 
         if (!isMatched) {
@@ -933,17 +953,16 @@ async function extractTexturesFromDaeImages(daeFilePath) {
                 const hash = await computePhash(buffer);
                 const inLow = Number(hash & 0xFFFFFFFFn);
                 const inHigh = Number(hash >> 32n);
+                const { _flatLow: flatLow, _flatHigh: flatHigh } = index;
                 let isMatched = false;
 
-                for (const [category, textures] of Object.entries(index)) {
-                    for (const tex of textures) {
-                        const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
-                        if (distance <= 15) {
-                            isMatched = true;
-                            break;
-                        }
+                for (let i = 0; i < flatLow.length; i++) {
+                    const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
+                                     popcount32((inHigh ^ flatHigh[i]) >>> 0);
+                    if (distance <= 15) {
+                        isMatched = true;
+                        break;
                     }
-                    if (isMatched) break;
                 }
 
                 if (!isMatched) {
@@ -986,20 +1005,8 @@ async function generateTextureManifest(glbPath) {
         // Cache full matching results (as promises) to prevent redundant processing of shared textures
         const imageMatchCache = new Map();
 
-        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
-        // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
-        const flatLibrary = [];
-        for (const [category, textures] of Object.entries(libraryIndex)) {
-            for (const tex of textures) {
-                flatLibrary.push({ ...tex, category });
-            }
-        }
-        const flatLow = new Uint32Array(flatLibrary.length);
-        const flatHigh = new Uint32Array(flatLibrary.length);
-        for (let i = 0; i < flatLibrary.length; i++) {
-            flatLow[i] = flatLibrary[i].hLow;
-            flatHigh[i] = flatLibrary[i].hHigh;
-        }
+        // Retrieve pre-flattened library and TypedArrays from cached index
+        const { _flatLibrary: flatLibrary, _flatLow: flatLow, _flatHigh: flatHigh } = libraryIndex;
 
         const getImageData = (imageIdx) => {
             const image = gltf.images[imageIdx];
