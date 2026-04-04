@@ -10,6 +10,16 @@ export class UIManager {
         this.setupHelp();
         this.setupTour();
         this.setupLightMode();
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+                    document.activeElement.blur();
+                } else {
+                    this.closeActiveModals();
+                }
+            }
+        });
     }
 
     setupShare() {
@@ -240,6 +250,7 @@ export class UIManager {
     }
 
     closeActiveModals() {
+        // Priority: Tour -> Help -> Share -> PIN -> Showroom -> QuickPicker -> ReplaceSheet -> TexturePanel -> Dropdown
         const tour = document.getElementById('product-tour');
         if (tour?.classList.contains('show')) {
             document.getElementById('tour-skip')?.click();
@@ -255,6 +266,36 @@ export class UIManager {
         const shareModal = document.getElementById('share-modal');
         if (shareModal?.classList.contains('show')) {
             if (this.toggleShare) this.toggleShare(false);
+            return true;
+        }
+
+        const pinModal = document.getElementById('pin-modal');
+        if (pinModal?.classList.contains('show')) {
+            document.getElementById('pin-modal-close')?.click();
+            return true;
+        }
+
+        const showroomPanel = document.getElementById('showroom-panel');
+        if (showroomPanel?.classList.contains('show')) {
+            document.getElementById('showroom-panel-close')?.click();
+            return true;
+        }
+
+        const quickPicker = document.getElementById('quick-picker');
+        if (quickPicker?.classList.contains('show')) {
+            document.getElementById('qp-close')?.click();
+            return true;
+        }
+
+        const replaceSheet = document.getElementById('tap-replace-sheet');
+        if (replaceSheet?.classList.contains('show')) {
+            document.getElementById('tap-replace-cancel')?.click();
+            return true;
+        }
+
+        const texturePanel = document.getElementById('texture-panel');
+        if (texturePanel?.classList.contains('show')) {
+            document.getElementById('close-texture-btn')?.click();
             return true;
         }
 

@@ -30,7 +30,8 @@ test.describe('Palette UX Verification', () => {
     const panelClose = page.locator('#showroom-panel-close');
     const showroomPanel = page.locator('#showroom-panel');
     if (await showroomPanel.isVisible()) {
-        await panelClose.click();
+        // Use evaluate to click in case it's "outside viewport" according to Playwright
+        await panelClose.evaluate(el => el.click());
         await expect(showroomPanel).not.toHaveClass(/show/);
     }
   });
