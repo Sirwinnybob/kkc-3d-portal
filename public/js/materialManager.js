@@ -262,7 +262,28 @@ export class MaterialManager {
                                 mat.urlHigh = entry.bestMatch.url;
                                 mat.urlMedium = entry.bestMatch.urlMedium;
                                 mat.urlLow = entry.bestMatch.urlLow;
+                                mat.width = entry.bestMatch.width;
+                                mat.height = entry.bestMatch.height;
                                 mat.currentLODUrl = mat.urlHigh;
+
+                                // Auto-replace texture if it's an exact/very close match
+                                if (entry.distance !== undefined && entry.distance <= 5) {
+                                    const texUrl = mat.urlLow || mat.urlHigh; // Load lowest res first to be fast
+                                    if (texUrl) {
+                                        // We trigger the same logic as onApplyTexture but silently
+                                        this.onApplyTexture(
+                                            this.detectedMaterials.indexOf(mat),
+                                            mat.urlHigh,
+                                            mat.urlMedium,
+                                            mat.urlLow,
+                                            mat.matchedName,
+                                            null,
+                                            true,
+                                            mat.width,
+                                            mat.height
+                                        );
+                                    }
+                                }
                             }
                         } else {
                             mat.matchedName = null;
@@ -508,7 +529,27 @@ export class MaterialManager {
                 mat.urlHigh = data.bestMatch.url;
                 mat.urlMedium = data.bestMatch.urlMedium;
                 mat.urlLow = data.bestMatch.urlLow;
+                mat.width = data.bestMatch.width;
+                mat.height = data.bestMatch.height;
                 mat.currentLODUrl = mat.urlHigh;
+
+                // Auto-replace texture if it's an exact/very close match
+                if (data.distance !== undefined && data.distance <= 5) {
+                    const texUrl = mat.urlLow || mat.urlHigh;
+                    if (texUrl) {
+                        this.onApplyTexture(
+                            this.detectedMaterials.indexOf(mat),
+                            mat.urlHigh,
+                            mat.urlMedium,
+                            mat.urlLow,
+                            mat.matchedName,
+                            null,
+                            true,
+                            mat.width,
+                            mat.height
+                        );
+                    }
+                }
             }
         } else {
             mat.matchedName = null;
@@ -675,7 +716,7 @@ export class MaterialManager {
             btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
             btn.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
-                indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true));
+                indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height));
             };
             this.textureGrid.appendChild(btn);
         });
@@ -891,7 +932,7 @@ export class MaterialManager {
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
             btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
             btn.addEventListener('click', () => {
-                this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll);
+                this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll, tex.width, tex.height);
 
                 this.qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => {
                     b.classList.toggle('active', b.querySelector('span')?.textContent === tex.name);
@@ -928,7 +969,11 @@ export class MaterialManager {
         if (this.qpLastColorHex) {
             this.onApplyColor(idx, this.qpLastColorHex, mesh, false);
         } else {
-            this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false);
+            // Retrieve width/height from the current Qp textures
+            const texData = this.qpCurrentTextures.find(t => t.url === this.qpLastTextureUrl);
+            const tWidth = texData ? texData.width : null;
+            const tHeight = texData ? texData.height : null;
+            this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false, tWidth, tHeight);
         }
         return true;
     }
