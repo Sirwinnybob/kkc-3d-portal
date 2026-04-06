@@ -1,5 +1,6 @@
 import { UIManager } from './uiManager.js';
 import { MaterialManager } from './materialManager.js';
+import { ShowroomManager } from './showroomManager.js';
 // Resolved via importmap in viewer.html
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -60,15 +61,7 @@ function clearMeshHighlight() {
 // Showroom state
 let isShowroomMode = false;
 let materialManager = null;
-let showroomPin = null;
-let showroomCategories = {};
-let showroomParts = {};       // { category: { group, style, file, tagData } }
-let kitchenMaterials = [];
-let islandMaterials = [];
-let kitchenStyle = 'face_frame';
-let overlayStyle = 'full';
-let islandOverlayStyle = 'full';
-let islandStyle = 'face_frame';
+let showroomManager = null;
 const MILKY_GRAY = 0xC8C8C8;
 
 // Bridge populated by setupTexturePanel so handleSingleTap (init scope) can open the picker
@@ -497,7 +490,126 @@ async function init() {
         // --- SHOWROOM MODE BRANCH ---
         if (isShowroomMode) {
             window.setupTexturePanel = () => initMaterialManager(null, null); // Expose for showroom mode
-            await initShowroomMode(loadPin);
+
+            showroomManager = new ShowroomManager({
+                scene, camera, renderer, controls, composer,
+                callbacks: {
+                    onStatusUpdate: updateStatus,
+                    onMeshesUpdated: (action, data) => {
+                        if (action === 'remove') {
+                            detectedMaterials = detectedMaterials.filter(m => !m.meshes.some(mesh => data.has(mesh)));
+                        } else if (action === 'add') {
+                            const newGroup = data;
+                            const materialMap = new Map();
+                            // Re-run the material grouping logic from GLTFLoader on the new meshes
+                            newGroup.traverse((child) => {
+                                if (!child.isMesh) return;
+                                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                                mats.forEach(mat => {
+                                    if (mat.map) {
+                                        const texSrc = mat.map.uuid;
+                                        if (!materialMap.has(texSrc)) {
+                                            materialMap.set(texSrc, {
+                                                material: mat, meshes: [], hasTexture: true,
+                                                originalMap: texSrc, name: mat.name
+                                            });
+                                        }
+                                        if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
+                                    } else {
+                                        const colorHex = mat.color.getHexString();
+                                        if (!materialMap.has(colorHex)) {
+                                            materialMap.set(colorHex, {
+                                                material: mat, meshes: [], hasTexture: false,
+                                                originalMap: null, name: mat.name
+                                            });
+                                        }
+                                        if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                                    }
+                                });
+                            });
+                            // Push the newly grouped materials into detectedMaterials
+                            for (const matGroup of materialMap.values()) {
+                                detectedMaterials.push(matGroup);
+                            }
+                        }
+
+                        // Re-initialize Material Manager
+                        if (materialManager) {
+                            materialManager.destroy(); // Optional if you added a cleanup method
+                        }
+                        initMaterialManager(null, null);
+
+                    },
+                    getDetectedMaterials: () => detectedMaterials,
+                    onRefineMaterials: (config) => {
+                        if (!materialManager) return;
+
+                        const applyConfigTextures = async () => {
+                            const texLoader = new THREE.TextureLoader();
+                            for (const mat of detectedMaterials) {
+                                if (!mat.hasTexture) continue;
+                                const section = mat.isIsland ? config.island : config.kitchen;
+                                if (!section) continue;
+                                const savedMat = section.textures[mat.name];
+                                if (!savedMat) continue;
+
+                                if (savedMat.type === 'color') {
+                                    mat.meshes.forEach(m => {
+                                        const mats = Array.isArray(m.material) ? m.material : [m.material];
+                                        mats.forEach(material => {
+                                            if (material.map) material.map = null;
+                                            material.color.setHex(parseInt(savedMat.hex, 16));
+                                            material.needsUpdate = true;
+                                        });
+                                    });
+                                    mat.isColor = true;
+                                    mat.colorHex = savedMat.hex;
+                                    mat.hasPartialChange = true;
+                                } else if (savedMat.type === 'texture' && savedMat.name) {
+                                    try {
+                                        const mfstResp = await fetch('/api/textures/manifest');
+                                        const manifests = await mfstResp.json();
+                                        const man = manifests[savedMat.category];
+                                        if (man) {
+                                            const texData = man.textures.find(t => t.name === savedMat.name);
+                                            if (texData && texData.urlLow) {
+                                                const newTex = await new Promise((res, rej) => texLoader.load(texData.urlLow, res, undefined, rej));
+                                                newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                                newTex.minFilter = THREE.LinearMipmapLinearFilter;
+                                                newTex.magFilter = THREE.LinearFilter;
+                                                newTex.wrapS = THREE.RepeatWrapping;
+                                                newTex.wrapT = THREE.RepeatWrapping;
+
+                                                mat.meshes.forEach(m => {
+                                                    const mats = Array.isArray(m.material) ? m.material : [m.material];
+                                                    mats.forEach(material => {
+                                                        material.map = newTex;
+                                                        material.color.setHex(0xffffff);
+                                                        material.needsUpdate = true;
+                                                    });
+                                                });
+                                                mat.urlHigh = texData.urlHigh;
+                                                mat.urlMedium = texData.urlMedium;
+                                                mat.urlLow = texData.urlLow;
+                                                mat.currentLODUrl = texData.urlLow;
+                                                mat.matchedName = savedMat.name;
+                                                mat.isColor = false;
+                                                mat.hasPartialChange = true;
+                                            }
+                                        }
+                                    } catch(e) { console.error("Failed to load config texture", e); }
+                                }
+                            }
+                            if (composer) composer.render();
+                            else renderer.render(scene, camera);
+                            initMaterialManager(null, null); // refresh UI
+                        };
+                        applyConfigTextures();
+                    }
+                }
+            });
+            await showroomManager.initShowroomMode(loadPin);
+
             window.addEventListener('resize', onWindowResize);
             animate();
             return; // Skip standard job loading
@@ -1266,603 +1378,6 @@ async function init() {
 // SHOWROOM MODE
 // ================================================================
 
-async function initShowroomMode(pinToLoad) {
-    updateStatus('Loading Showroom...');
-
-    // Show showroom-specific UI
-    const showroomBtn = document.getElementById('showroom-btn');
-    const saveConfigBtn = document.getElementById('save-config-btn');
-    const showroomPanel = document.getElementById('showroom-panel');
-    if (showroomBtn) showroomBtn.style.display = '';
-    if (saveConfigBtn) saveConfigBtn.style.display = '';
-
-    // Hide job-specific UI (room switcher)
-    const roomSwitcher = document.getElementById('room-switcher');
-    if (roomSwitcher) roomSwitcher.style.display = 'none';
-
-    // Ensure inline display:none from HTML is removed so .show (display:flex) works
-    if (showroomPanel) showroomPanel.style.display = '';
-
-    // Toggle showroom panel
-    if (showroomBtn) {
-        showroomBtn.onclick = () => {
-            showroomPanel.classList.toggle('show');
-            const isVisible = showroomPanel.classList.contains('show');
-            showroomBtn.setAttribute('aria-expanded', isVisible.toString());
-            if (isVisible) {
-                const panelClose = document.getElementById('showroom-panel-close');
-                if (panelClose) panelClose.focus();
-            }
-        };
-    }
-    const panelClose = document.getElementById('showroom-panel-close');
-    if (panelClose) panelClose.onclick = () => {
-        showroomPanel.classList.remove('show');
-        if (showroomBtn) showroomBtn.focus();
-    };
-
-    // Fetch showroom categories
-    try {
-        const resp = await fetch('/api/showroom/categories');
-        const data = await resp.json();
-        if (data.success) showroomCategories = data.categories;
-    } catch (e) {
-        updateStatus('Failed to load showroom data', true);
-        return;
-    }
-
-    // Setup style toggles
-    setupStyleToggle('kitchen-style-toggle', (style) => {
-        kitchenStyle = style;
-        populateKitchenParts();
-    });
-    setupStyleToggle('island-style-toggle', (style) => {
-        islandStyle = style;
-        populateIslandParts();
-    });
-    // Setup overlay toggles
-    setupStyleToggle('overlay-toggle', (style) => {
-        overlayStyle = style;
-        populateKitchenParts();
-    });
-    setupStyleToggle('island-overlay-toggle', (style) => {
-        islandOverlayStyle = style;
-        populateIslandParts();
-    });
-
-
-    // Populate initial parts
-    await Promise.all([
-        populateKitchenParts(),
-        populateIslandParts()
-    ]);
-
-    if (!pinToLoad) {
-        reframeShowroomCamera();
-    }
-
-    // Setup save config button
-    if (saveConfigBtn) saveConfigBtn.onclick = saveShowroomConfig;
-
-    // PIN modal close
-    const pinModalClose = document.getElementById('pin-modal-close');
-    if (pinModalClose) pinModalClose.onclick = () => {
-        document.getElementById('pin-modal').classList.remove('show');
-        if (saveConfigBtn) saveConfigBtn.focus();
-    };
-
-    // PIN Copy Button
-    const copyPinBtn = document.getElementById('copy-pin-btn');
-    const pinDisplay = document.getElementById('pin-display');
-    if (copyPinBtn && pinDisplay) {
-        const originalSvg = copyPinBtn.innerHTML;
-        let copyTimeout = null;
-
-        copyPinBtn.onclick = () => {
-            const pin = pinDisplay.textContent;
-            navigator.clipboard.writeText(pin).then(() => {
-                if (copyTimeout) clearTimeout(copyTimeout);
-                copyPinBtn.classList.add('copied');
-                copyPinBtn.setAttribute('aria-label', 'PIN Copied!');
-                copyPinBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                `;
-                copyTimeout = setTimeout(() => {
-                    copyPinBtn.classList.remove('copied');
-                    copyPinBtn.setAttribute('aria-label', 'Copy PIN');
-                    copyPinBtn.innerHTML = originalSvg;
-                    copyTimeout = null;
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy PIN:', err);
-            });
-        };
-    }
-
-    // Setup texture panel for showroom (reuse existing)
-    initMaterialManager(jobCode, initialRoom);
-
-    // Load from PIN if provided
-    if (pinToLoad) {
-        await loadShowroomConfig(pinToLoad);
-    } else {
-        // Open showroom panel by default
-        showroomPanel.classList.add('show');
-    }
-
-    updateStatus('');
-}
-
-function setupStyleToggle(elementId, onChange) {
-    const toggle = document.getElementById(elementId);
-    if (!toggle) return;
-    const buttons = toggle.querySelectorAll('.style-btn');
-    buttons.forEach(btn => {
-        btn.onclick = () => {
-            buttons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            onChange(btn.dataset.style);
-        };
-    });
-}
-
-
-
-// ── Constants mirroring server.js ──────────────────────────────────────────
-// Must stay in sync with server.js:
-//   OVERLAY_CATEGORIES    = ['doors', 'drawer_fronts']
-//   NON_OVERLAY_CATEGORIES = ['finished_ends']  (sub-cats: flat, paneled)
-//   DIRECT_CATEGORIES     = ['base', 'crown', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor']
-const OVERLAY_CATEGORIES_V    = ['doors', 'drawer_fronts'];
-const NON_OVERLAY_CATEGORIES_V = ['finished_ends'];
-const DIRECT_CATEGORIES_V     = ['base', 'crown', 'drawers', 'case_parts', 'wall', 'counter_top', 'floor'];
-const KITCHEN_CATS = [...DIRECT_CATEGORIES_V, ...OVERLAY_CATEGORIES_V, ...NON_OVERLAY_CATEGORIES_V];
-const ISLAND_CATS  = [...DIRECT_CATEGORIES_V, ...OVERLAY_CATEGORIES_V, ...NON_OVERLAY_CATEGORIES_V];
-
-// Flatten a category tree node into flat entries for part buttons.
-// prefix: relative URL prefix up to (not incl.) the filename.
-function flattenCatTree(node, prefix) {
-    if (!node) return [];
-    if (Array.isArray(node.files)) {
-        return node.files.map(f => ({
-            label: f.name, file: f.file,
-            deepPath: `${prefix}/${f.file}`, subLabel: null
-        }));
-    }
-    const entries = [];
-    for (const [key, child] of Object.entries(node)) {
-        if (!child) continue;
-        if (Array.isArray(child.files)) {
-            child.files.forEach(f => entries.push({
-                label: f.name, file: f.file,
-                deepPath: `${prefix}/${key}/${f.file}`,
-                subLabel: key.replace(/_/g, ' ')
-            }));
-        } else if (typeof child === 'object') {
-            // Two levels: slab → long/cross
-            for (const [grain, leaf] of Object.entries(child)) {
-                if (leaf && Array.isArray(leaf.files)) {
-                    leaf.files.forEach(f => entries.push({
-                        label: f.name, file: f.file,
-                        deepPath: `${prefix}/${key}/${grain}/${f.file}`,
-                        subLabel: `${key.replace(/_/g,' ')} – ${grain}`
-                    }));
-                }
-            }
-        }
-    }
-    return entries;
-}
-
-// Resolve a cat node + URL prefix from the categories tree.
-// Returns { node, prefix } or null if no data exists.
-function resolveCatNode(catData, cat, style, overlay) {
-    if (!catData) return null;
-    // Direct categories live at ctx root level
-    if (DIRECT_CATEGORIES_V.includes(cat)) {
-        return catData[cat] ? { node: catData[cat], prefix: cat } : null;
-    }
-    if (!style) return null;
-    if (style === 'face_frame') {
-        // Overlay categories: ctx/face_frame/<overlay>/<cat>
-        if (OVERLAY_CATEGORIES_V.includes(cat)) {
-            const ov = overlay || 'full_overlay';
-            const node = catData[style]?.[ov]?.[cat];
-            return node ? { node, prefix: `${style}/${ov}/${cat}` } : null;
-        }
-        // Non-overlay categories: ctx/face_frame/<cat>
-        if (NON_OVERLAY_CATEGORIES_V.includes(cat)) {
-            const node = catData[style]?.[cat];
-            return node ? { node, prefix: `${style}/${cat}` } : null;
-        }
-    } else {
-        // frameless / full_inset: overlay doesn't apply
-        const node = catData[style]?.[cat];
-        return node ? { node, prefix: `${style}/${cat}` } : null;
-    }
-    return null;
-}
-
-async function populateContextParts(ctx, panelId, style, overlay) {
-    const catData = showroomCategories?.[ctx];
-    const categories = ctx === 'kitchen' ? KITCHEN_CATS : ISLAND_CATS;
-
-    const overlaySection = document.getElementById(
-        ctx === 'kitchen' ? 'overlay-section' : 'island-overlay-section'
-    );
-    if (overlaySection) overlaySection.style.display = (style === 'face_frame') ? '' : 'none';
-
-    const promises = categories.map(cat => {
-        const container = document.querySelector(`#${panelId} .part-options[data-category="${cat}"]`);
-        const catWrapper = document.querySelector(`#${panelId} .part-category[data-category="${cat}"]`);
-        if (!container) return Promise.resolve();
-
-        const resolved = resolveCatNode(catData, cat, style, overlay);
-        const entries  = resolved ? flattenCatTree(resolved.node, `${ctx}/${resolved.prefix}`) : [];
-
-        if (catWrapper) catWrapper.style.display = entries.length > 0 ? '' : 'none';
-        renderPartOptions(container, cat, ctx, entries);
-
-        const buttons = container.querySelectorAll('.part-option-btn');
-        if (buttons.length > 0) {
-            const hasActive = Array.from(buttons).some(b => b.classList.contains('active'));
-            if (!hasActive) {
-                const btn = buttons[0];
-                return loadShowroomPart(cat, ctx, btn.dataset.deeppath, btn);
-            }
-        }
-        return Promise.resolve();
-    });
-    await Promise.all(promises);
-}
-
-async function populateKitchenParts() {
-    const ov = overlayStyle === 'full' ? 'full_overlay' : 'half_overlay';
-    await populateContextParts('kitchen', 'kitchen-parts', kitchenStyle, ov);
-}
-
-async function populateIslandParts() {
-    const ov = islandOverlayStyle === 'full' ? 'full_overlay' : 'half_overlay';
-    await populateContextParts('island', 'island-parts', islandStyle, ov);
-}
-
-function renderPartOptions(container, category, ctx, entries) {
-    container.innerHTML = '';
-    if (entries.length === 0) {
-        const span = document.createElement('span');
-        span.className = 'part-options-empty';
-        span.textContent = 'No parts available';
-        container.appendChild(span);
-        return;
-    }
-    let lastSubLabel = undefined;
-    entries.forEach(entry => {
-        if (entry.subLabel !== null && entry.subLabel !== lastSubLabel) {
-            const lbl = document.createElement('div');
-            lbl.className = 'part-sub-label';
-            lbl.textContent = entry.subLabel;
-            container.appendChild(lbl);
-            lastSubLabel = entry.subLabel;
-        }
-        const btn = document.createElement('button');
-        btn.className = 'part-option-btn';
-        btn.textContent = entry.label;
-        btn.dataset.deeppath = entry.deepPath;
-
-        const current = showroomParts[`${ctx}/${category}`];
-        if (current && current.deepPath === entry.deepPath) btn.classList.add('active');
-
-        btn.onclick = () => loadShowroomPart(category, ctx, entry.deepPath, btn);
-        container.appendChild(btn);
-    });
-}
-
-async function loadShowroomPart(category, ctx, deepPath, btnEl) {
-    if (!renderer || !deepPath) return;
-    const partKey = `${ctx}/${category}`;
-
-    if (btnEl) {
-        btnEl.parentElement.querySelectorAll('.part-option-btn').forEach(b => b.classList.remove('active'));
-        btnEl.classList.add('active', 'loading');
-    }
-
-    if (showroomParts[partKey]) {
-        if (category === 'finished_ends') restoreBasePaneledEndMeshes(ctx);
-        scene.remove(showroomParts[partKey].group);
-        const oldMeshes = new Set();
-        showroomParts[partKey].group.traverse(c => { if (c.isMesh) oldMeshes.add(c); });
-        detectedMaterials = detectedMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
-        kitchenMaterials  = kitchenMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
-        islandMaterials   = islandMaterials.filter(m => !m.meshes.some(mesh => oldMeshes.has(mesh)));
-        delete showroomParts[partKey];
-    }
-
-    let tagData = null;
-    try {
-        const tagsResp = await fetch(`/api/showroom/tags/${deepPath}`);
-        if (tagsResp.ok) { const td = await tagsResp.json(); if (td.success) tagData = td.tags; }
-    } catch { /* no tags */ }
-
-    const glbUrl = `/showroom/${deepPath}`;
-    const loader = new GLTFLoader();
-    if (scene) { const isLightMode = localStorage.getItem("lightMode") === "true";
-        scene.background = new THREE.Color(isLightMode ? 0xf0f0f0 : 0x111111); }
-    const isIsland = (ctx === 'island');
-
-    return new Promise((resolve) => {
-        loader.load(glbUrl, (gltf) => {
-            const group = gltf.scene;
-            const materialMap = new Map();
-            let meshIdx = 0;
-            group.traverse((child) => {
-                if (!child.isMesh) return;
-                let originalIndex = meshIdx;
-                if (gltf.parser?.associations) {
-                    const assoc = gltf.parser.associations.get(child);
-                    if (assoc && assoc.nodes !== undefined) originalIndex = assoc.nodes;
-                }
-                if (!child.name || child.name.startsWith('Mesh_')) child.name = `Node_${originalIndex}`;
-                meshIdx++;
-
-                if (tagData?.taggedMeshes && !tagData.taggedMeshes.includes(child.name)) {
-                    child.visible = false; return;
-                }
-
-                const prevMats = Array.isArray(child.material) ? child.material : [child.material];
-                const newMats = prevMats.map(prevMat => {
-                    return new THREE.MeshLambertMaterial({
-                        map: prevMat.map,
-                        color: prevMat.map ? 0xffffff : prevMat.color,
-                        transparent: prevMat.transparent,
-                        opacity: prevMat.opacity,
-                        side: THREE.DoubleSide,
-                        polygonOffset: true,
-                        polygonOffsetFactor: 1,
-                        polygonOffsetUnits: 1,
-                        name: prevMat.name || 'Material'
-                    });
-                });
-                child.material = Array.isArray(child.material) ? newMats : newMats[0];
-
-                newMats.forEach((mat, i) => {
-                    const prevMat = prevMats[i];
-                    if (mat.map) {
-                        const texSrc = prevMat.map?.source?.uuid || prevMat.map?.uuid || prevMat.uuid;
-                        if (!materialMap.has(texSrc)) {
-                            materialMap.set(texSrc, {
-                                material: mat, meshes: [], hasTexture: true,
-                                originalMap: texSrc, name: mat.name
-                            });
-                        }
-                        if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
-                    } else {
-                        const colorHex = mat.color.getHexString();
-                        if (!materialMap.has(colorHex)) {
-                            materialMap.set(colorHex, {
-                                material: mat, meshes: [], hasTexture: false,
-                                originalMap: null, name: mat.name
-                            });
-                        }
-                        if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
-                    }
-                });
-
-                child.castShadow = true;
-                child.receiveShadow = true;
-            });
-
-            if (category === 'finished_ends') handlePaneledEndSwap(ctx, deepPath);
-
-            if (btnEl) btnEl.classList.remove('loading');
-            resolve();
-        }, undefined, (err) => {
-            console.error(`[Showroom] Failed to load /showroom/${deepPath}`, err);
-            if (btnEl) btnEl.classList.remove('loading');
-            resolve();
-        });
-    });
-}
-
-// --- PANELED END REPLACEMENT LOGIC ---
-
-function handlePaneledEndSwap(ctx, deepPath) {
-    if (!/paneled/i.test(deepPath)) { restoreBasePaneledEndMeshes(ctx); return; }
-    const basePart = showroomParts[`${ctx}/base`];
-    if (!basePart?.tagData?.paneledEndReplacements) return;
-    const replaceableNames = new Set(basePart.tagData.paneledEndReplacements);
-    basePart.group.traverse(child => {
-        if (child.isMesh && replaceableNames.has(child.name)) {
-            child.visible = false;
-            child.userData._hiddenByPaneledEnd = true;
-        }
-    });
-}
-
-function restoreBasePaneledEndMeshes(ctx) {
-    const basePart = showroomParts[`${ctx}/base`];
-    if (!basePart) return;
-    basePart.group.traverse(child => {
-        if (child.isMesh && child.userData._hiddenByPaneledEnd) {
-            child.visible = true;
-            delete child.userData._hiddenByPaneledEnd;
-        }
-    });
-}
-
-
-
-
-function reframeShowroomCamera() {
-    const box = new THREE.Box3();
-    let hasContent = false;
-    for (const part of Object.values(showroomParts)) {
-        const partBox = new THREE.Box3().setFromObject(part.group);
-        if (!partBox.isEmpty()) {
-            box.union(partBox);
-            hasContent = true;
-        }
-    }
-    if (!hasContent) return;
-
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    camera.position.set(center.x + maxDim, center.y + maxDim * 0.7, center.z + maxDim);
-    camera.lookAt(center);
-    controls.target.copy(center);
-    controls.update();
-}
-
-// --- SAVE / LOAD CONFIG ---
-
-async function saveShowroomConfig() {
-    const config = {
-        kitchen: {
-            style: kitchenStyle,
-            parts: {},
-            textures: {}
-        },
-        island: {
-            style: islandStyle,
-            parts: {},
-            textures: {}
-        },
-        camera: {
-            position: [camera.position.x, camera.position.y, camera.position.z],
-            target: [controls.target.x, controls.target.y, controls.target.z]
-        }
-    };
-
-    // Record selected parts ( partKey = "ctx/category" )
-    for (const [partKey, part] of Object.entries(showroomParts)) {
-        const [ctx, cat] = partKey.split('/');
-        const section = ctx === 'island' ? config.island : config.kitchen;
-        section.parts[partKey] = { deepPath: part.deepPath };
-    }
-
-    // Record texture/color assignments
-    for (const mat of detectedMaterials) {
-        if (!mat.hasTexture) continue;
-        const section = mat.isIsland ? config.island : config.kitchen;
-        const key = mat.name;
-        if (mat.isColor) {
-            section.textures[key] = { type: 'color', hex: mat.colorHex };
-        } else if (mat.matchedName) {
-            section.textures[key] = { type: 'texture', name: mat.matchedName, category: mat.bestCategory };
-        }
-    }
-
-    updateStatus('Saving configuration...');
-    try {
-        const resp = await fetch('/api/showroom/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
-        });
-        const data = await resp.json();
-        if (data.success) {
-            showroomPin = data.pin;
-            const roomDisplay = document.getElementById('room-name-display');
-            if (roomDisplay) roomDisplay.innerText = `PIN: ${data.pin}`;
-
-            // Show PIN modal
-            const pinModal = document.getElementById('pin-modal');
-            const pinDisplay = document.getElementById('pin-display');
-            if (pinDisplay) pinDisplay.textContent = data.pin;
-            if (pinModal) {
-                pinModal.classList.add('show');
-                const closeBtn = document.getElementById('pin-modal-close');
-                if (closeBtn) closeBtn.focus();
-            }
-            updateStatus('Configuration saved!');
-            setTimeout(() => updateStatus(''), 3000);
-        } else {
-            updateStatus('Failed to save', true);
-        }
-    } catch (e) {
-        updateStatus('Save error', true);
-        console.error(e);
-    }
-}
-
-async function loadShowroomConfig(pin) {
-    updateStatus(`Loading PIN ${pin}...`);
-    try {
-        const resp = await fetch(`/api/showroom/config/${encodeURIComponent(pin)}`);
-        const data = await resp.json();
-        if (!data.success || !data.config) {
-            updateStatus('PIN not found', true);
-            return;
-        }
-
-        const config = data.config;
-        showroomPin = pin;
-
-        // Set styles
-        if (config.kitchen && config.kitchen.style) {
-            kitchenStyle = config.kitchen.style;
-            setStyleToggle('kitchen-style-toggle', kitchenStyle);
-            populateKitchenParts();
-        }
-        if (config.island && config.island.style) {
-            islandStyle = config.island.style;
-            setStyleToggle('island-style-toggle', islandStyle);
-            populateIslandParts();
-        }
-
-        // Load parts
-        const loadPromises = [];
-        const allParts = { ...(config.kitchen?.parts || {}), ...(config.island?.parts || {}) };
-        for (const [partKey, partInfo] of Object.entries(allParts)) {
-            const [ctx, cat] = partKey.split('/');
-            if (partInfo.deepPath) {
-                loadPromises.push(loadShowroomPart(cat, ctx, partInfo.deepPath, null));
-            }
-        }
-        await Promise.all(loadPromises);
-
-        // Apply textures/colors
-        const allTextures = { ...(config.kitchen?.textures || {}), ...(config.island?.textures || {}) };
-        for (const [matName, texInfo] of Object.entries(allTextures)) {
-            const mat = detectedMaterials.find(m => m.name === matName);
-            if (!mat) continue;
-
-            if (texInfo.type === 'color') {
-                applySolidColor(mat, texInfo.hex);
-            } else if (texInfo.type === 'texture' && texInfo.name) {
-                // Try to find and apply the texture from catalog
-                mat.matchedName = texInfo.name;
-                mat.bestCategory = texInfo.category;
-            }
-        }
-
-        // Restore camera
-        if (config.camera) {
-            const pos = config.camera.position;
-            const tgt = config.camera.target;
-            if (pos) camera.position.set(pos[0], pos[1], pos[2]);
-            if (tgt) controls.target.set(tgt[0], tgt[1], tgt[2]);
-            controls.update();
-        } else {
-            reframeShowroomCamera();
-        }
-
-        updateStatus('');
-    } catch (e) {
-        updateStatus('Failed to load PIN', true);
-        console.error(e);
-    }
-}
-
-function setStyleToggle(elementId, style) {
-    const toggle = document.getElementById(elementId);
-    if (!toggle) return;
-    toggle.querySelectorAll('.style-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.style === style);
-    });
-}
 
 function onWindowResize() {
     if (camera && renderer && composer) {
