@@ -2172,6 +2172,9 @@ app.use((err, req, res, next) => {
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`KKC PORTAL v${APP_VERSION} ACTIVE ON PORT ${PORT}`);
+
+        // Build texture index on startup to initialize texture_dimensions.json
+        buildTextureHashIndex().then(() => console.log('[Texture] Initial index build complete.'));
         const scan = async (dir) => {
             try {
                 const hasAccess = await fs.promises.access(dir).then(() => true).catch(() => false);
