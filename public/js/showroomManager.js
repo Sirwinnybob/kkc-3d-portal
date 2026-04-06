@@ -46,7 +46,10 @@ export class ShowroomManager {
         if (roomSwitcher) roomSwitcher.style.display = 'none';
 
         // Ensure inline display:none from HTML is removed so .show (display:flex) works
-        if (showroomPanel) showroomPanel.style.display = '';
+        if (showroomPanel) {
+            showroomPanel.style.display = '';
+            showroomPanel.classList.add('show');
+        }
 
         // Toggle showroom panel
         if (showroomBtn) {
