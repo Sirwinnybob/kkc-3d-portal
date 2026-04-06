@@ -2,11 +2,9 @@ import { UIManager } from './uiManager.js';
 import { MaterialManager } from './materialManager.js';
 import { ShowroomManager } from './showroomManager.js';
 import { CoreEngine } from './engine.js';
+import { loadModel } from './modelLoader.js';
 // Resolved via importmap in viewer.html
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -917,411 +915,52 @@ async function init() {
 
         // --- LOAD MODEL ---
         updateStatus("Loading Design...");
-                const isObj = urlData.url.toLowerCase().endsWith('.obj');
 
-        if (isObj) {
-            const mtlUrl = urlData.url.substring(0, urlData.url.lastIndexOf('.')) + '.mtl';
-            const mtlDir = mtlUrl.substring(0, mtlUrl.lastIndexOf('/') + 1);
-
-            // Set up a LoadingManager to sanitize material URLs from SketchUp
-            const manager = new THREE.LoadingManager();
-            manager.setURLModifier((url) => {
-                console.error("URLModifier input:", url);
-                // Ignore data URIs or already-resolved URLs
-                if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http')) {
-                    console.error("URLModifier skipped:", url);
-                    return url;
+        const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+        const { model, detectedMaterials: parsedMaterials } = await loadModel(
+            urlData.url,
+            maxAnisotropy,
+            (xhr) => {
+                if (xhr.lengthComputable) {
+                    const p = Math.round((xhr.loaded / xhr.total) * 100);
+                    updateStatus(`Downloading: ${p}%`);
                 }
-
-                // Fix Windows backslashes sometimes exported by SketchUp
-                let cleanUrl = url.replace(/\\/g, '/');
-
-                // Encode hash characters (#) so they aren't parsed as URL fragments
-                cleanUrl = cleanUrl.replace(/#/g, '%23');
-                cleanUrl = cleanUrl.replace(/\?/g, '%3F');
-
-                console.error("URLModifier output:", cleanUrl);
-                return cleanUrl;
-            });
-
-            manager.onError = function ( url ) {
-                console.error( 'There was an error loading ' + url );
-            };
-
-            const mtlLoader = new MTLLoader(manager);
-            // Crucial: Set resource path so textures resolve relative to the .mtl folder
-            mtlLoader.setResourcePath(mtlDir);
-
-            mtlLoader.load(mtlUrl, function(materials) {
-                // Manually parse materials to ensure textures are mapped
-                console.error("Manual MTL Parse Check");
-                for (const matName in materials.materialsInfo) {
-                    const info = materials.materialsInfo[matName];
-                    if (info.map_kd) {
-                        const texUrl = mtlDir + info.map_kd;
-                        console.error(`Material ${matName} has map_kd: ${info.map_kd} -> loading manually from ${texUrl}`);
-
-                        // We must create the material first if not exists
-                        let m = materials.materials[matName];
-                        if (!m) {
-                            m = new THREE.MeshPhongMaterial({ name: matName });
-                            materials.materials[matName] = m;
-                        }
-
-                        const tex = new THREE.TextureLoader().load(
-                            texUrl,
-                            function(loadedTex) {
-                                loadedTex.colorSpace = THREE.SRGBColorSpace;
-                                loadedTex.flipY = true;
-                                m.map = loadedTex;
-                                m.needsUpdate = true;
-                                console.log(`✅ TEXTURE FULLY LOADED: ${texUrl}`);
-                            },
-                            undefined,
-                            function(err) {
-                                console.error(`Failed to load texture from: ${texUrl}`, err);
-                            }
-                        );
-
-                        m.map = tex;
-                        m.map.wrapS = THREE.RepeatWrapping;
-                        m.map.wrapT = THREE.RepeatWrapping;
-                        m.color.setHex(0xffffff);
-                        if (m.emissive) m.emissive.setHex(0x000000);
-                        if (m.specular) m.specular.setHex(0x111111);
-                        m.needsUpdate = true;
-                    }
-                }
-
-                console.error("MTL loaded!");
-                materials.preload();
-                console.error("MTL materials created:", Object.keys(materials.materials));
-                Object.values(materials.materials).forEach(m => {
-                    console.error("MTL material name:", m.name, "Has map:", !!m.map);
-                    if (m.map) {
-                        console.error("Map src:", m.map.image ? m.map.image.src : m.map.name);
-                    }
-                });
-                materials.preload();
-                const objLoader = new OBJLoader(manager);
-                objLoader.setMaterials(materials);
-
-                const fileLoader = new THREE.FileLoader(manager);
-                fileLoader.load(urlData.url, function(text) {
-                    const lines = text.substring(0, 1024).split('\n');
-                    let scale = 1.0;
-                    for (const line of lines) {
-                        if (line.startsWith('# File units = ')) {
-                            const unit = line.split('=')[1].trim().toLowerCase();
-                            if (unit === 'inches') scale = 0.0254;
-                            else if (unit === 'millimeters' || unit === 'millimeter' || unit === 'mm') scale = 0.001;
-                            else if (unit === 'centimeters' || unit === 'centimeter' || unit === 'cm') scale = 0.01;
-                            else if (unit === 'meters' || unit === 'meter' || unit === 'm') scale = 1.0;
-                            else if (unit === 'feet' || unit === 'foot' || unit === 'ft') scale = 0.3048;
-                            break;
-                        }
-                    }
-
-                    console.error("==== MTL DUMP ====");
-                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
-
-                    const obj = objLoader.parse(text);
-                    // Apply SketchUp rotation fix and scale
-                    // // obj.rotation.x = -Math.PI / 2; // Assuming Y is up // Assuming Y is up
-                    obj.scale.set(scale, scale, scale);
-                    obj.updateMatrixWorld(true);
-
-                    const model = obj;
-
-                    console.error("====== PARSED OBJ ======");
-                    model.traverse(child => {
-                        if (child.isMesh && child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(m => {
-                                    if (m.map) console.error("Found map on " + child.name + " -> " + m.name + ": " + (m.map.image ? m.map.image.src : 'no image object'));
-                                });
-                            } else {
-                                if (child.material.map) console.error("Found map on " + child.name + " -> " + child.material.name + ": " + (child.material.map.image ? child.material.map.image.src : 'no image object'));
-                            }
-                        }
-                    });
-                    loadedModel = model;
-                    detectedMaterials = [];
-                    const materialMap = new Map();
-
-                    model.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-
-                            // Ensure UVs exist, otherwise textures won't render
-                            if (!child.geometry.attributes.uv) {
-                                console.warn("No UV map on " + child.name);
-                            }
-
-                            // Keep the material created by MTLLoader, but adjust properties
-                            const mats = Array.isArray(child.material) ? child.material : [child.material];
-
-                            mats.forEach(mat => {
-                                mat.side = THREE.DoubleSide;
-                                mat.polygonOffset = true;
-                                mat.polygonOffsetFactor = 1;
-                                mat.polygonOffsetUnits = 1;
-
-                                // MTL files often use map_Kd, which becomes map
-                                // Or map_Ka, which becomes map, etc.
-                                // If it has a map, enforce white base color.
-                                if (mat.map) {
-                                    // SketchUp MTLs often set dark Kd values which multiply with the texture map,
-                                    // making them look black/blank. Force the diffuse color to pure white.
-                                    mat.color.setHex(0xffffff);
-                                    mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                    mat.map.minFilter  = THREE.LinearMipmapLinearFilter;
-                                    mat.map.magFilter  = THREE.LinearFilter;
-                                    // Also clear any emission/specular darkening to be safe
-                                    if (mat.emissive) mat.emissive.setHex(0x000000);
-                                    if (mat.specular) mat.specular.setHex(0x111111);
-                                }
-
-                                const hasTexture = !!mat.map;
-
-                                if (hasTexture) {
-                                    const texSrc = mat.map.source?.data?.src || mat.map.image?.src || 'obj_texture';
-                                    if (!materialMap.has(texSrc)) {
-                                        materialMap.set(texSrc, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture, originalMap: texSrc });
-                                    }
-                                    if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
-                                } else {
-                        const colorHex = prevMat.uuid; // precise UUID instead of flat color grouping
-                        if (!materialMap.has(colorHex)) {
-                                        materialMap.set(colorHex, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture: false, originalMap: null });
-                                    }
-                                if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
-                                }
-                            });
-                        }
-                    });
-
-                    // Finish processing materials
-                    detectedMaterials = Array.from(materialMap.values());
-                    initMaterialManager(jobCode, initialRoom);
-
-                    scene.add(model);
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
-                    camera.lookAt(center);
-                    controls.target.copy(center);
-                    controls.update();
-                    updateStatus("");
-
-                    // DEBUG LOGGING
-                    let report = "\n==== DEBUG MATERIAL REPORT ====\n";
-                    model.traverse(child => {
-                        if (child.isMesh) {
-                            report += `Mesh: ${child.name}\n`;
-                            report += `  Has UVs: ${child.geometry.attributes.uv !== undefined}\n`;
-                            const mats = Array.isArray(child.material) ? child.material : [child.material];
-                            mats.forEach(m => {
-                                report += `  Material: ${m.name}\n`;
-                                report += `    Has Map: ${!!m.map}\n`;
-                                report += `    Color: #${m.color.getHexString()}\n`;
-                                if (m.map) {
-                                    report += `    ColorSpace: ${m.map.colorSpace}\n`;
-                                    if (m.map.image) {
-                                        report += `    Image Src: ${m.map.image.src}\n`;
-                                    }
-                                }
-                            });
-                        }
-                    });
-                    console.log(report);
-
-                    // Force a single final re-render now that the model is fully added and textures are async loading
-                    setTimeout(() => {
-                        if (typeof renderer !== 'undefined' && renderer && scene && camera) {
-                            scene.traverse((obj) => {
-                                if (obj.isMesh && obj.material) {
-                                    obj.material.needsUpdate = true;
-                                }
-                            });
-                            if (typeof composer !== 'undefined' && composer) {
-                                console.log('✅ FINAL FORCING RE-RENDER WITH COMPOSER AFTER OBJ LOAD');
-                                composer.render();
-                            } else {
-                                renderer.render(scene, camera);
-                            }
-                        }
-                    }, 100);
-                });
-            }, undefined, function(err) {
-                console.warn('MTL load failed, loading OBJ without materials:', err);
-                const objLoader = new OBJLoader(manager);
-                const fileLoader = new THREE.FileLoader(manager);
-                fileLoader.load(urlData.url, function(text) {
-                    const lines = text.substring(0, 1024).split('\n');
-                    let scale = 1.0;
-                    for (const line of lines) {
-                        if (line.startsWith('# File units = ')) {
-                            const unit = line.split('=')[1].trim().toLowerCase();
-                            if (unit === 'inches') scale = 0.0254;
-                            else if (unit === 'millimeters' || unit === 'millimeter' || unit === 'mm') scale = 0.001;
-                            else if (unit === 'centimeters' || unit === 'centimeter' || unit === 'cm') scale = 0.01;
-                            else if (unit === 'meters' || unit === 'meter' || unit === 'm') scale = 1.0;
-                            else if (unit === 'feet' || unit === 'foot' || unit === 'ft') scale = 0.3048;
-                            break;
-                        }
-                    }
-
-                    console.error("==== MTL DUMP ====");
-                    console.error("materialsInfo: ", JSON.stringify(materials.materialsInfo));
-
-                    const obj = objLoader.parse(text);
-                    obj.scale.set(scale, scale, scale);
-                    obj.updateMatrixWorld(true);
-
-                    const model = obj;
-                    loadedModel = model;
-                    detectedMaterials = [];
-                    const materialMap = new Map();
-
-                    model.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                            child.material = new THREE.MeshLambertMaterial({ color: 0xcccccc, side: THREE.DoubleSide });
-                        }
-                    });
-
-                    scene.add(model);
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
-                    camera.lookAt(center);
-                    controls.target.copy(center);
-                    controls.update();
-                    updateStatus("");
-
-                    // DEBUG LOGGING
-                    let report = "\n==== DEBUG MATERIAL REPORT ====\n";
-                    model.traverse(child => {
-                        if (child.isMesh) {
-                            report += `Mesh: ${child.name}\n`;
-                            report += `  Has UVs: ${child.geometry.attributes.uv !== undefined}\n`;
-                            const mats = Array.isArray(child.material) ? child.material : [child.material];
-                            mats.forEach(m => {
-                                report += `  Material: ${m.name}\n`;
-                                report += `    Has Map: ${!!m.map}\n`;
-                                report += `    Color: #${m.color.getHexString()}\n`;
-                                if (m.map) {
-                                    report += `    ColorSpace: ${m.map.colorSpace}\n`;
-                                    if (m.map.image) {
-                                        report += `    Image Src: ${m.map.image.src}\n`;
-                                    }
-                                }
-                            });
-                        }
-                    });
-                    console.log(report);
-                });
-            });
-        } else {
-            const loader = new GLTFLoader();
-        loader.load(urlData.url, (gltf) => {
-            const model = gltf.scene;
-            loadedModel = model;
-            detectedMaterials = [];
-
-            // Track unique materials to avoid listing every face
-            const materialMap = new Map(); // texSrc -> { material, meshes[], name, hasTexture, originalMap }
-
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    const prevMats = Array.isArray(child.material) ? child.material : [child.material];
-                    const newMats = prevMats.map(prevMat => {
-                        const newMat = new THREE.MeshLambertMaterial({
-                            map: prevMat.map,
-                            color: prevMat.map ? 0xffffff : prevMat.color,
-                            transparent: prevMat.transparent,
-                            opacity: prevMat.opacity,
-                            side: THREE.DoubleSide,
-                            polygonOffset: true,
-                            polygonOffsetFactor: 1,
-                            polygonOffsetUnits: 1,
-                            name: prevMat.name
-                        });
-                        if (newMat.map) {
-                            newMat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                            newMat.map.minFilter  = THREE.LinearMipmapLinearFilter;
-                            newMat.map.magFilter  = THREE.LinearFilter;
-                        }
-                        return newMat;
-                    });
-                    child.material = Array.isArray(child.material) ? newMats : newMats[0];
-
-                    newMats.forEach((mat, i) => {
-                        const prevMat = prevMats[i];
-                        const hasTexture = !!mat.map;
-                        if (hasTexture) {
-                            const texSrc = prevMat.map?.source?.uuid || prevMat.map?.uuid || prevMat.uuid;
-                            if (!materialMap.has(texSrc)) {
-                                materialMap.set(texSrc, {
-                                    name: mat.name || child.name || `Material_${materialMap.size}`,
-                                    material: mat,
-                                    meshes: [],
-                                    hasTexture: true,
-                                    originalMap: mat.map,
-                                    colorHex: mat.color.getHexString()
-                                });
-                            }
-                            if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
-                        } else {
-                            const colorHex = prevMat.uuid; // Use UUID for colors too, to ensure precise grouping per material
-                            if (!materialMap.has(colorHex)) {
-                                materialMap.set(colorHex, {
-                                    name: mat.name || child.name || `Material_${materialMap.size}`,
-                                    material: mat,
-                                    meshes: [],
-                                    hasTexture: false,
-                                    originalMap: null,
-                                    colorHex: colorHex
-                                });
-                            }
-                            if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
-                        }
-                    });
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
-
-            // Convert map to array
-            detectedMaterials = Array.from(materialMap.values());
-            scene.add(model);
-            const box    = new THREE.Box3().setFromObject(model);
-            const center = box.getCenter(new THREE.Vector3());
-            const size   = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
-            camera.lookAt(center);
-            controls.target.copy(center);
-            controls.update();
-            updateStatus("");
-
-            // Setup texture panel and start matching
-            initMaterialManager(jobCode, initialRoom);
-
-        }, (xhr) => {
-            if (xhr.lengthComputable) {
-                const p = Math.round((xhr.loaded / xhr.total) * 100);
-                updateStatus(`Downloading: ${p}%`);
             }
-        });
-        } // Close else block
+        );
+
+        loadedModel = model;
+        detectedMaterials = parsedMaterials;
+        scene.add(loadedModel);
+
+        const box = new THREE.Box3().setFromObject(loadedModel);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
+        camera.lookAt(center);
+        controls.target.copy(center);
+        controls.update();
+        updateStatus("");
+
+        // Setup texture panel and start matching
+        initMaterialManager(jobCode, initialRoom);
+
+        // Force a single final re-render now that the model is fully added and textures are async loading
+        setTimeout(() => {
+            if (typeof renderer !== 'undefined' && renderer && scene && camera) {
+                scene.traverse((obj) => {
+                    if (obj.isMesh && obj.material) {
+                        obj.material.needsUpdate = true;
+                    }
+                });
+                if (typeof composer !== 'undefined' && composer) {
+                    console.log('✅ FINAL FORCING RE-RENDER WITH COMPOSER AFTER MODEL LOAD');
+                    composer.render();
+                } else {
+                    renderer.render(scene, camera);
+                }
+            }
+        }, 100);
 
     } catch (e) {
         console.error(e);
