@@ -575,6 +575,25 @@ async function buildTextureHashIndex() {
             console.error(`[Texture] Index build error: ${e.message}`);
         }
 
+        // Flatten index for high-speed Hamming distance searches
+        const flatLibrary = [];
+        for (const [category, textures] of Object.entries(index)) {
+            for (const tex of textures) {
+                flatLibrary.push({ ...tex, category });
+            }
+        }
+        const flatLow = new Uint32Array(flatLibrary.length);
+        const flatHigh = new Uint32Array(flatLibrary.length);
+        for (let i = 0; i < flatLibrary.length; i++) {
+            flatLow[i] = flatLibrary[i].hLow;
+            flatHigh[i] = flatLibrary[i].hHigh;
+        }
+
+        // Use non-enumerable properties to hide the flat arrays from JSON.stringify
+        Object.defineProperty(index, '_flatLibrary', { value: flatLibrary, enumerable: false });
+        Object.defineProperty(index, '_flatLow', { value: flatLow, enumerable: false });
+        Object.defineProperty(index, '_flatHigh', { value: flatHigh, enumerable: false });
+
         textureHashCache = index;
         app.locals.clearTextureCache = () => { textureHashCache = null; };
         textureHashCacheTime = Date.now();
@@ -658,27 +677,32 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         // Build/load hash index
         const index = await buildTextureHashIndex();
 
-        // Find best match across all categories (excluding hidden)
-        let bestMatch = null;
+        // Find best match using pre-flattened library for O(N) bitwise matching
+        let bestMatchIdx = -1;
         let bestDistance = Infinity;
         const allMatches = [];
 
-        for (const [category, textures] of Object.entries(index)) {
-            for (const tex of textures) {
-                const distance = hammingDistance(inLow, inHigh, tex.hLow, tex.hHigh);
+        const flatLibrary = index._flatLibrary;
+        const flatLow = index._flatLow;
+        const flatHigh = index._flatHigh;
 
-                // Track absolute best match including hidden ones
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestMatch = { ...tex, category };
-                }
+        for (let i = 0; i < flatLibrary.length; i++) {
+            const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
+                             popcount32((inHigh ^ flatHigh[i]) >>> 0);
 
-                // Track similar non-hidden matches for the catalog view
-                if (distance <= 20 && !tex.hidden) {
-                    allMatches.push({ ...tex, category, distance });
-                }
+            // Track absolute best match including hidden ones
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestMatchIdx = i;
+            }
+
+            // Track similar non-hidden matches for the catalog view
+            if (distance <= 20 && !flatLibrary[i].hidden) {
+                allMatches.push({ ...flatLibrary[i], distance });
             }
         }
+
+        const bestMatch = bestMatchIdx !== -1 ? flatLibrary[bestMatchIdx] : null;
 
         // Sort matches by distance
         allMatches.sort((a, b) => a.distance - b.distance);
@@ -986,20 +1010,10 @@ async function generateTextureManifest(glbPath) {
         // Cache full matching results (as promises) to prevent redundant processing of shared textures
         const imageMatchCache = new Map();
 
-        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
-        // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
-        const flatLibrary = [];
-        for (const [category, textures] of Object.entries(libraryIndex)) {
-            for (const tex of textures) {
-                flatLibrary.push({ ...tex, category });
-            }
-        }
-        const flatLow = new Uint32Array(flatLibrary.length);
-        const flatHigh = new Uint32Array(flatLibrary.length);
-        for (let i = 0; i < flatLibrary.length; i++) {
-            flatLow[i] = flatLibrary[i].hLow;
-            flatHigh[i] = flatLibrary[i].hHigh;
-        }
+        // Use pre-flattened library from the shared index
+        const flatLibrary = libraryIndex._flatLibrary;
+        const flatLow = libraryIndex._flatLow;
+        const flatHigh = libraryIndex._flatHigh;
 
         const getImageData = (imageIdx) => {
             const image = gltf.images[imageIdx];
