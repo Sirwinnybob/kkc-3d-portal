@@ -137,6 +137,7 @@ function initMaterialManager(jobCode, room) {
                                 const repeatY = faceHeight / realHeight;
 
                                 if (realWidth > 0 && realHeight > 0) {
+                                    console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". Real size: ${realWidth}x${realHeight}". Repeating: ${repeatX.toFixed(2)}x${repeatY.toFixed(2)}.`);
                                     newTex.wrapS = THREE.RepeatWrapping;
                                     newTex.wrapT = THREE.RepeatWrapping;
                                     newTex.repeat.set(repeatX, repeatY);
