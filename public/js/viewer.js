@@ -116,31 +116,149 @@ function initMaterialManager(jobCode, room) {
 
                             // Real-world scaling logic
                             if (realWidth !== undefined && realWidth !== null && realHeight !== undefined && realHeight !== null) {
-                                // Compute bounding box of this mesh to figure out face dimensions
                                 if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
                                 const box = mesh.geometry.boundingBox;
 
-                                // To get world size, we should apply mesh scale
                                 const size = new THREE.Vector3();
                                 box.getSize(size);
-                                size.multiply(mesh.scale);
+                                const worldScale = new THREE.Vector3();
+                                mesh.getWorldScale(worldScale);
+                                size.multiply(worldScale);
 
-                                // We assume the two largest dimensions form the main "face" of the part
-                                const dims = [size.x, size.y, size.z].sort((a,b) => b - a);
+                                const dims = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a,b) => b - a);
                                 const faceWidth = dims[1]; // Usually width
                                 const faceHeight = dims[0]; // Usually height
 
-                                // Since we don't strictly know UV orientation, we try to map the texture
-                                // to the bounding box aspect naturally.
-                                // The user inputs realWidth/realHeight in inches.
-                                const repeatX = faceWidth / realWidth;
-                                const repeatY = faceHeight / realHeight;
-
                                 if (realWidth > 0 && realHeight > 0) {
-                                    console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". Real size: ${realWidth}x${realHeight}". Repeating: ${repeatX.toFixed(2)}x${repeatY.toFixed(2)}.`);
-                                    newTex.wrapS = THREE.RepeatWrapping;
-                                    newTex.wrapT = THREE.RepeatWrapping;
-                                    newTex.repeat.set(repeatX, repeatY);
+                                    // Assimp converts DAE (Inches) to GLB (Meters).
+                                    // The mesh size dimensions are in meters. We must multiply by 39.3701 to get Inches.
+                                    const INCHES_PER_METER = 39.3701;
+
+                                    if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
+                                        const uvs = mesh.geometry.attributes.uv;
+                                        const pos = mesh.geometry.attributes.position;
+
+                                        if (!mesh.geometry.userData.uvNormalized) {
+                                            // Calculate bounding box of UVs and Positions to find the correlation
+                                            let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+                                            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+
+                                            for (let i = 0; i < uvs.count; i++) {
+                                                const u = uvs.getX(i);
+                                                const v = uvs.getY(i);
+                                                if (u < minU) minU = u;
+                                                if (u > maxU) maxU = u;
+                                                if (v < minV) minV = v;
+                                                if (v > maxV) maxV = v;
+
+                                                const px = pos.getX(i);
+                                                const py = pos.getY(i);
+                                                const pz = pos.getZ(i);
+                                                if (px < minX) minX = px;
+                                                if (px > maxX) maxX = px;
+                                                if (py < minY) minY = py;
+                                                if (py > maxY) maxY = py;
+                                                if (pz < minZ) minZ = pz;
+                                                if (pz > maxZ) maxZ = pz;
+                                            }
+
+                                            const rangeU = (maxU - minU) || 1;
+                                            const rangeV = (maxV - minV) || 1;
+
+                                            // Normalize the baked UVs so they strictly fit inside a 0-1 box bounds
+                                            for (let i = 0; i < uvs.count; i++) {
+                                                let u = uvs.getX(i);
+                                                let v = uvs.getY(i);
+                                                uvs.setX(i, (u - minU) / rangeU);
+                                                uvs.setY(i, (v - minV) / rangeV);
+                                            }
+                                            uvs.needsUpdate = true;
+
+                                            // Determine physical size associated with U and V axes
+                                            // We map the physical ranges (X, Y, Z) to U and V
+                                            const rangeX = (maxX - minX) * Math.abs(mesh.scale.x * worldScale.x);
+                                            const rangeY = (maxY - minY) * Math.abs(mesh.scale.y * worldScale.y);
+                                            const rangeZ = (maxZ - minZ) * Math.abs(mesh.scale.z * worldScale.z);
+
+                                            const sortedDims = [
+                                                { axis: 'X', size: rangeX },
+                                                { axis: 'Y', size: rangeY },
+                                                { axis: 'Z', size: rangeZ }
+                                            ].sort((a, b) => b.size - a.size);
+
+                                            // A simple heuristic: check the first triangle's edges to see which axis maps to U and V
+                                            let varianceUX = 0, varianceUY = 0, varianceUZ = 0;
+                                            let varianceVX = 0, varianceVY = 0, varianceVZ = 0;
+
+                                            if (uvs.count >= 3) {
+                                                const u0 = uvs.getX(0), v0 = uvs.getY(0);
+                                                const u1 = uvs.getX(1), v1 = uvs.getY(1);
+                                                const u2 = uvs.getX(2), v2 = uvs.getY(2);
+
+                                                const dP1x = pos.getX(1) - pos.getX(0);
+                                                const dP1y = pos.getY(1) - pos.getY(0);
+                                                const dP1z = pos.getZ(1) - pos.getZ(0);
+
+                                                const dP2x = pos.getX(2) - pos.getX(0);
+                                                const dP2y = pos.getY(2) - pos.getY(0);
+                                                const dP2z = pos.getZ(2) - pos.getZ(0);
+
+                                                const dU1 = u1 - u0, dV1 = v1 - v0;
+                                                const dU2 = u2 - u0, dV2 = v2 - v0;
+
+                                                varianceUX = Math.abs(dP1x * dU1) + Math.abs(dP2x * dU2);
+                                                varianceUY = Math.abs(dP1y * dU1) + Math.abs(dP2y * dU2);
+                                                varianceUZ = Math.abs(dP1z * dU1) + Math.abs(dP2z * dU2);
+
+                                                varianceVX = Math.abs(dP1x * dV1) + Math.abs(dP2x * dV2);
+                                                varianceVY = Math.abs(dP1y * dV1) + Math.abs(dP2y * dV2);
+                                                varianceVZ = Math.abs(dP1z * dV1) + Math.abs(dP2z * dV2);
+                                            }
+
+                                            let primaryAxisU = sortedDims[0].axis;
+                                            let primaryAxisV = sortedDims[1].axis;
+
+                                            const maxVarU = Math.max(varianceUX, varianceUY, varianceUZ);
+                                            if (maxVarU === varianceUX) primaryAxisU = 'X';
+                                            else if (maxVarU === varianceUY) primaryAxisU = 'Y';
+                                            else if (maxVarU === varianceUZ) primaryAxisU = 'Z';
+
+                                            const maxVarV = Math.max(varianceVX, varianceVY, varianceVZ);
+                                            if (maxVarV === varianceVX) primaryAxisV = 'X';
+                                            else if (maxVarV === varianceVY) primaryAxisV = 'Y';
+                                            else if (maxVarV === varianceVZ) primaryAxisV = 'Z';
+
+                                            if (primaryAxisU === primaryAxisV || maxVarU === 0 || maxVarV === 0) {
+                                                primaryAxisU = sortedDims[1].axis; // Assume U is width (2nd largest)
+                                                primaryAxisV = sortedDims[0].axis; // Assume V is height (largest)
+                                            }
+
+                                            let physicalSizeU = (primaryAxisU === 'X' ? rangeX : (primaryAxisU === 'Y' ? rangeY : rangeZ)) * INCHES_PER_METER;
+                                            let physicalSizeV = (primaryAxisV === 'X' ? rangeX : (primaryAxisV === 'Y' ? rangeY : rangeZ)) * INCHES_PER_METER;
+
+                                            if (physicalSizeU === 0) physicalSizeU = 1;
+                                            if (physicalSizeV === 0) physicalSizeV = 1;
+
+                                            mesh.geometry.userData.uvNormalized = true;
+                                            mesh.geometry.userData.physicalU = physicalSizeU;
+                                            mesh.geometry.userData.physicalV = physicalSizeV;
+                                        }
+
+                                        const repeatX = mesh.geometry.userData.physicalU / realWidth;
+                                        const repeatY = mesh.geometry.userData.physicalV / realHeight;
+
+                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Mesh Face (U,V): ${mesh.geometry.userData.physicalU.toFixed(2)}x${mesh.geometry.userData.physicalV.toFixed(2)}". Texture: ${realWidth}x${realHeight}". Repeating: ${repeatX.toFixed(2)}x${repeatY.toFixed(2)}.`);
+
+                                        newTex.wrapS = THREE.RepeatWrapping;
+                                        newTex.wrapT = THREE.RepeatWrapping;
+                                        newTex.repeat.set(repeatX, repeatY);
+                                    } else {
+                                        const repeatX = (faceWidth * INCHES_PER_METER) / realWidth;
+                                        const repeatY = (faceHeight * INCHES_PER_METER) / realHeight;
+                                        newTex.wrapS = THREE.RepeatWrapping;
+                                        newTex.wrapT = THREE.RepeatWrapping;
+                                        newTex.repeat.set(repeatX, repeatY);
+                                    }
                                 }
                             } else {
                                 // Default fallback to original UV mapping (no repeat set manually)
