@@ -10,6 +10,17 @@ export class UIManager {
         this.setupHelp();
         this.setupTour();
         this.setupLightMode();
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                    active.blur();
+                    return;
+                }
+                this.closeActiveModals();
+            }
+        });
     }
 
     setupShare() {
@@ -240,28 +251,66 @@ export class UIManager {
     }
 
     closeActiveModals() {
+        // Priority 1: Product Tour
         const tour = document.getElementById('product-tour');
         if (tour?.classList.contains('show')) {
             document.getElementById('tour-skip')?.click();
             return true;
         }
 
+        // Priority 2: Help Modal
         const helpModal = document.getElementById('help-modal');
         if (helpModal?.classList.contains('show')) {
-            if (this.toggleHelp) this.toggleHelp(false);
+            document.getElementById('close-help-btn')?.click();
             return true;
         }
 
+        // Priority 3: Share Modal
         const shareModal = document.getElementById('share-modal');
         if (shareModal?.classList.contains('show')) {
-            if (this.toggleShare) this.toggleShare(false);
+            document.getElementById('share-modal-close')?.click();
             return true;
         }
 
+        // Priority 4: PIN Modal
+        const pinModal = document.getElementById('pin-modal');
+        if (pinModal?.classList.contains('show')) {
+            document.getElementById('pin-modal-close')?.click();
+            return true;
+        }
+
+        // Priority 5: Showroom Panel
+        const showroomPanel = document.getElementById('showroom-panel');
+        if (showroomPanel?.classList.contains('show')) {
+            document.getElementById('showroom-panel-close')?.click();
+            return true;
+        }
+
+        // Priority 6: Quick Picker
+        const quickPicker = document.getElementById('quick-picker');
+        if (quickPicker?.classList.contains('show')) {
+            document.getElementById('qp-close')?.click();
+            return true;
+        }
+
+        // Priority 7: Tap-to-Replace Sheet
+        const tapReplaceSheet = document.getElementById('tap-replace-sheet');
+        if (tapReplaceSheet?.classList.contains('show')) {
+            document.getElementById('tap-replace-cancel')?.click();
+            return true;
+        }
+
+        // Priority 8: Texture Panel
+        const texturePanel = document.getElementById('texture-panel');
+        if (texturePanel?.classList.contains('show')) {
+            document.getElementById('close-texture-btn')?.click();
+            return true;
+        }
+
+        // Priority 9: Dropdown Menu
         const dropdown = document.getElementById('dropdown-menu');
         if (dropdown?.classList.contains('show')) {
-            dropdown.classList.remove('show');
-            document.getElementById('menu-btn')?.setAttribute('aria-expanded', 'false');
+            document.getElementById('menu-btn')?.click();
             return true;
         }
 
