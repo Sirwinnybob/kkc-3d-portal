@@ -17,7 +17,7 @@ const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
-const APP_VERSION = "2.1.9";
+const APP_VERSION = "2.1.10";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;

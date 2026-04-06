@@ -27,10 +27,11 @@ test.describe('Palette UX Verification', () => {
 
     // The app opens showroom panel by default in the test environment because it's first run
     // Let's ensure it's closed first for clean tests
-    const panelClose = page.locator('#showroom-panel-close');
     const showroomPanel = page.locator('#showroom-panel');
+    // Wait for the panel to potentially appear
+    await page.waitForTimeout(500);
     if (await showroomPanel.isVisible()) {
-        await panelClose.click();
+        await page.keyboard.press('Escape');
         await expect(showroomPanel).not.toHaveClass(/show/);
     }
   });

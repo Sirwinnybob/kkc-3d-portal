@@ -10,6 +10,12 @@ export class UIManager {
         this.setupHelp();
         this.setupTour();
         this.setupLightMode();
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeActiveModals();
+            }
+        });
     }
 
     setupShare() {
@@ -240,6 +246,15 @@ export class UIManager {
     }
 
     closeActiveModals() {
+        // 1. Two-step dismissal: Blur focused inputs first
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+            document.activeElement.blur();
+            return true;
+        }
+
+        // 2. Prioritized closure order
+        // Order: Tour -> Help -> Share -> PIN -> Showroom -> Quick Picker -> Tap-to-Replace -> Texture Panel -> Dropdown
+
         const tour = document.getElementById('product-tour');
         if (tour?.classList.contains('show')) {
             document.getElementById('tour-skip')?.click();
@@ -248,20 +263,49 @@ export class UIManager {
 
         const helpModal = document.getElementById('help-modal');
         if (helpModal?.classList.contains('show')) {
-            if (this.toggleHelp) this.toggleHelp(false);
+            document.getElementById('close-help-btn')?.click();
             return true;
         }
 
         const shareModal = document.getElementById('share-modal');
         if (shareModal?.classList.contains('show')) {
-            if (this.toggleShare) this.toggleShare(false);
+            document.getElementById('share-modal-close')?.click();
+            return true;
+        }
+
+        const pinModal = document.getElementById('pin-modal');
+        if (pinModal?.classList.contains('show')) {
+            document.getElementById('pin-modal-close')?.click();
+            return true;
+        }
+
+        const showroomPanel = document.getElementById('showroom-panel');
+        if (showroomPanel?.classList.contains('show')) {
+            document.getElementById('showroom-panel-close')?.click();
+            return true;
+        }
+
+        const quickPicker = document.getElementById('quick-picker');
+        if (quickPicker?.classList.contains('show')) {
+            document.getElementById('qp-close')?.click();
+            return true;
+        }
+
+        const tapReplace = document.getElementById('tap-replace-sheet');
+        if (tapReplace?.classList.contains('show')) {
+            document.getElementById('tap-replace-cancel')?.click();
+            return true;
+        }
+
+        const texturePanel = document.getElementById('texture-panel');
+        if (texturePanel?.classList.contains('show')) {
+            document.getElementById('close-texture-btn')?.click();
             return true;
         }
 
         const dropdown = document.getElementById('dropdown-menu');
         if (dropdown?.classList.contains('show')) {
-            dropdown.classList.remove('show');
-            document.getElementById('menu-btn')?.setAttribute('aria-expanded', 'false');
+            document.getElementById('menu-btn')?.click();
             return true;
         }
 
