@@ -95,7 +95,7 @@ function initMaterialManager(jobCode, room) {
             onStatusUpdate: updateStatus,
             onHighlightMesh: highlightMesh,
             onClearHighlight: clearMeshHighlight,
-            onApplyTexture: (matGroupIndex, url, urlMedium, urlLow, name, tappedMesh, replaceAll) => {
+            onApplyTexture: (matGroupIndex, url, urlMedium, urlLow, name, tappedMesh, replaceAll, realWidth, realHeight) => {
                 const matGroup = detectedMaterials[matGroupIndex];
                 const texLoader = new THREE.TextureLoader();
                 texLoader.load(url, (newTex) => {
@@ -105,27 +105,59 @@ function initMaterialManager(jobCode, room) {
                     newTex.wrapS = THREE.RepeatWrapping;
                     newTex.wrapT = THREE.RepeatWrapping;
 
-                    if (replaceAll) {
-                        matGroup.meshes.forEach(mesh => {
-                            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                            mats.forEach(m => {
-                                m.map = newTex;
-                                if (m.color) m.color.setHex(0xffffff);
-                                m.needsUpdate = true;
-                            });
-                        });
-                        matGroup.urlHigh = url;
-                        matGroup.urlMedium = urlMedium;
-                        matGroup.urlLow = urlLow;
-                        matGroup.currentLODUrl = url;
-                        matGroup.previewCache = null;
-                    } else if (tappedMesh) {
-                        const tappedMats = Array.isArray(tappedMesh.material) ? tappedMesh.material : [tappedMesh.material];
-                        tappedMats.forEach(m => {
+                    const targetMeshes = replaceAll ? matGroup.meshes : (tappedMesh ? [tappedMesh] : []);
+
+                    targetMeshes.forEach(mesh => {
+                        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                        mats.forEach(m => {
                             m.map = newTex;
                             if (m.color) m.color.setHex(0xffffff);
                             m.needsUpdate = true;
+
+                            // Real-world scaling logic
+                            if (realWidth !== undefined && realWidth !== null && realHeight !== undefined && realHeight !== null) {
+                                // Compute bounding box of this mesh to figure out face dimensions
+                                if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                                const box = mesh.geometry.boundingBox;
+
+                                // To get world size, we should apply mesh scale
+                                const size = new THREE.Vector3();
+                                box.getSize(size);
+                                size.multiply(mesh.scale);
+
+                                // We assume the two largest dimensions form the main "face" of the part
+                                const dims = [size.x, size.y, size.z].sort((a,b) => b - a);
+                                const faceWidth = dims[1]; // Usually width
+                                const faceHeight = dims[0]; // Usually height
+
+                                // Since we don't strictly know UV orientation, we try to map the texture
+                                // to the bounding box aspect naturally.
+                                // The user inputs realWidth/realHeight in inches.
+                                const repeatX = faceWidth / realWidth;
+                                const repeatY = faceHeight / realHeight;
+
+                                if (realWidth > 0 && realHeight > 0) {
+                                    newTex.wrapS = THREE.RepeatWrapping;
+                                    newTex.wrapT = THREE.RepeatWrapping;
+                                    newTex.repeat.set(repeatX, repeatY);
+                                }
+                            } else {
+                                // Default fallback to original UV mapping (no repeat set manually)
+                                newTex.wrapS = THREE.RepeatWrapping;
+                                newTex.wrapT = THREE.RepeatWrapping;
+                            }
                         });
+                    });
+
+                    if (replaceAll) {
+                        matGroup.urlHigh = url;
+                        matGroup.urlMedium = urlMedium;
+                        matGroup.urlLow = urlLow;
+                        matGroup.width = realWidth;
+                        matGroup.height = realHeight;
+                        matGroup.currentLODUrl = url;
+                        matGroup.previewCache = null;
+                    } else if (tappedMesh) {
                         matGroup.hasPartialChange = true;
                     }
 

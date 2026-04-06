@@ -454,6 +454,17 @@ async function buildTextureHashIndex() {
     textureHashInProgress = (async () => {
         const index = {};
         try {
+            const dimPath = path.join(TEXTURES_DIR, "texture_dimensions.json");
+            let dimensions = {};
+            let dimsModified = false;
+            try {
+                if (fs.existsSync(dimPath)) {
+                    dimensions = JSON.parse(await fs.promises.readFile(dimPath, "utf8"));
+                }
+            } catch (e) {
+                console.error(`[Texture] Error reading dimensions: ${e.message}`);
+            }
+
             const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
 
             // Process categories in parallel
@@ -462,6 +473,11 @@ async function buildTextureHashIndex() {
 
                 const categoryPath = path.join(TEXTURES_DIR, entry.name);
                 const isHidden = entry.name === 'Hidden';
+
+                    if (!isHidden && !dimensions[entry.name]) {
+                        dimensions[entry.name] = {};
+                        dimsModified = true;
+                    }
                 const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
                 const categoryTextures = [];
 
@@ -474,6 +490,19 @@ async function buildTextureHashIndex() {
                     if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
 
                     try {
+                        let width = null;
+                        let height = null;
+
+                        if (!isHidden) {
+                            if (!dimensions[entry.name][file]) {
+                                dimensions[entry.name][file] = { width: null, height: null };
+                                dimsModified = true;
+                            } else {
+                                width = dimensions[entry.name][file].width;
+                                height = dimensions[entry.name][file].height;
+                            }
+                        }
+
                         const filePath = path.join(categoryPath, file);
                         const buffer = await fs.promises.readFile(filePath);
                         const hash = await computePhash(buffer);
@@ -514,6 +543,8 @@ async function buildTextureHashIndex() {
                             url: isHidden ? null : `/textures/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
                             urlMedium: urlMedium,
                             urlLow: urlLow,
+                            width: width,
+                            height: height,
                             hidden: isHidden,
                             hash: hash.toString(),
                             hLow: Number(hash & 0xFFFFFFFFn),
@@ -555,6 +586,8 @@ async function buildTextureHashIndex() {
                                     name: canonical.name,
                                     file: canonical.file,
                                     url: canonical.url,
+                                    width: canonical.width,
+                                    height: canonical.height,
                                     hidden: canonical.hidden,
                                     hash: hash.toString(),
                                     hLow: Number(hash & 0xFFFFFFFFn),
@@ -571,6 +604,15 @@ async function buildTextureHashIndex() {
                     }));
                 }
             }));
+
+            if (dimsModified) {
+                try {
+                    await fs.promises.writeFile(dimPath, JSON.stringify(dimensions, null, 2), 'utf8');
+                    console.log('[Texture] Updated texture_dimensions.json');
+                } catch (e) {
+                    console.error(`[Texture] Failed to save dimensions: ${e.message}`);
+                }
+            }
         } catch (e) {
             console.error(`[Texture] Index build error: ${e.message}`);
         }
@@ -588,7 +630,18 @@ async function buildTextureHashIndex() {
 // GET /api/textures - List all categories
 app.get('/api/textures', async (req, res) => {
     try {
-        const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
+        const dimPath = path.join(TEXTURES_DIR, "texture_dimensions.json");
+            let dimensions = {};
+            let dimsModified = false;
+            try {
+                if (fs.existsSync(dimPath)) {
+                    dimensions = JSON.parse(await fs.promises.readFile(dimPath, "utf8"));
+                }
+            } catch (e) {
+                console.error(`[Texture] Error reading dimensions: ${e.message}`);
+            }
+
+            const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
         const categories = entries
             .filter(e => e.isDirectory() && e.name !== 'Uncategorized' && e.name !== 'Hidden')
             .map(e => e.name);
@@ -622,7 +675,9 @@ app.get('/api/textures/:category', async (req, res) => {
                     name: nameOnly,
                     url: `/textures/${encodeURIComponent(category)}/${encodeURIComponent(f)}`,
                     urlMedium: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_medium' + ext)}`,
-                    urlLow: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_low' + ext)}`
+                    urlLow: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_low' + ext)}`,
+                    width: textureHashCache && textureHashCache[category] ? (textureHashCache[category].find(t => t.file === f)?.width || null) : null,
+                    height: textureHashCache && textureHashCache[category] ? (textureHashCache[category].find(t => t.file === f)?.height || null) : null
                 };
             });
         res.json({ success: true, category, textures });
@@ -707,6 +762,8 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
                 urlMedium: bestMatch.urlMedium,
                 urlLow: bestMatch.urlLow,
                 category: bestMatch.category,
+                width: bestMatch.width,
+                height: bestMatch.height,
                 hidden: bestMatch.hidden
             } : null,
             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
@@ -718,6 +775,8 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
                 urlMedium: t.urlMedium,
                 urlLow: t.urlLow,
                 category: t.category,
+                width: t.width,
+                height: t.height,
                 distance: t.distance
             }))
         });
@@ -1065,7 +1124,9 @@ async function generateTextureManifest(glbPath) {
                                 url: bestMatch.url,
                                 urlMedium: bestMatch.urlMedium,
                                 urlLow: bestMatch.urlLow,
-                                category: bestMatch.category
+                                category: bestMatch.category,
+                                width: bestMatch.width,
+                                height: bestMatch.height
                             } : null,
                             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
                             isHidden: isMatched && bestMatch && !!bestMatch.hidden,
@@ -1076,6 +1137,8 @@ async function generateTextureManifest(glbPath) {
                                 urlMedium: t.urlMedium,
                                 urlLow: t.urlLow,
                                 category: t.category,
+                                width: t.width,
+                                height: t.height,
                                 distance: t.distance
                             }))
                         };
