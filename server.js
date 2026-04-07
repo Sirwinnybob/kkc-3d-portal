@@ -1378,6 +1378,15 @@ async function processQueue() {
     const safeOutputPath = `${pathPrefix}${outputGlb}`;
 
     execFile(ASSIMP_PATH, ['export', safeInputPath, safeOutputPath, 'glb2', '-tri', '-gn', '-jiv', '-et', '-emb'], { cwd: dir }, async (err, stdout, stderr) => {
+        // Filter out known harmless warnings
+        if (stderr) {
+            stderr = stderr.split('\n').filter(line => {
+                return !line.includes('FB_ngon_encoding') && 
+                       !line.includes('Missing optional extension') &&
+                       line.trim() !== '';
+            }).join('\n');
+        }
+        
         if (err) console.error(`!!! [FAILED] ${roomName}: ${stderr || err.message}`);
         else {
             const genGlb = path.join(dir, outputGlb);
