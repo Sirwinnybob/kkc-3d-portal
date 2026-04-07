@@ -155,6 +155,7 @@ function initMaterialManager(jobCode, room) {
                             newTex.wrapT = THREE.RepeatWrapping;
                             newTex.repeat.set(1, 1);
                     });
+                    });
 
                     if (replaceAll) {
                         matGroup.urlHigh = url;
