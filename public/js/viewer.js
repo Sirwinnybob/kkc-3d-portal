@@ -141,49 +141,60 @@ function initMaterialManager(jobCode, room) {
                                     } else if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
                                         const uvs = mesh.geometry.attributes.uv;
 
-                                        if (!mesh.geometry.userData.scaleCalculated) {
-                                            // Find the original UV span baked into the mesh
-                                            let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+                                                                                // Calculate the target repeats based strictly on the physical face size
+                                        const scaleWidth = faceWidth / realWidth;
+                                        const scaleHeight = faceHeight / realHeight;
 
-                                            for (let i = 0; i < uvs.count; i++) {
-                                                const u = uvs.getX(i);
-                                                const v = uvs.getY(i);
-                                                if (u < minU) minU = u;
-                                                if (u > maxU) maxU = u;
-                                                if (v < minV) minV = v;
-                                                if (v > maxV) maxV = v;
-                                            }
+                                        // Find the original UV span baked into the mesh to determine orientation
+                                        let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
 
-                                            let uvSpanU = Math.abs(maxU - minU);
-                                            let uvSpanV = Math.abs(maxV - minV);
-
-                                            if (uvSpanU === 0) uvSpanU = 1;
-                                            if (uvSpanV === 0) uvSpanV = 1;
-
-                                            // Determine how many physical inches 1.0 unit of U and V represented in the original mapping.
-                                            const originalPhysicalWidthU = faceWidth / uvSpanU;
-                                            const originalPhysicalHeightV = faceHeight / uvSpanV;
-
-                                            mesh.geometry.userData.scaleCalculated = true;
-                                            mesh.geometry.userData.originalPhysicalU = originalPhysicalWidthU;
-                                            mesh.geometry.userData.originalPhysicalV = originalPhysicalHeightV;
+                                        for (let i = 0; i < uvs.count; i++) {
+                                            const u = uvs.getX(i);
+                                            const v = uvs.getY(i);
+                                            if (u < minU) minU = u;
+                                            if (u > maxU) maxU = u;
+                                            if (v < minV) minV = v;
+                                            if (v > maxV) maxV = v;
                                         }
 
-                                        const repeatX = mesh.geometry.userData.originalPhysicalU / realWidth;
-                                        const repeatY = mesh.geometry.userData.originalPhysicalV / realHeight;
+                                        let uvSpanU = Math.abs(maxU - minU);
+                                        let uvSpanV = Math.abs(maxV - minV);
 
-                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". Original Baked Scale: ${mesh.geometry.userData.originalPhysicalU.toFixed(2)}x${mesh.geometry.userData.originalPhysicalV.toFixed(2)}". New Texture: ${realWidth}x${realHeight}". Repeating: ${repeatX.toFixed(3)}x${repeatY.toFixed(3)}.`);
+                                        if (uvSpanU === 0) uvSpanU = 1;
+                                        if (uvSpanV === 0) uvSpanV = 1;
 
-                                        // Apply scale directly to UVs to avoid sharing the scale across all meshes using this texture
+                                        // Determine orientation based on UV spans
+                                        let repeatU, repeatV;
+                                        if (uvSpanU >= uvSpanV) {
+                                            // Horizontal mapping
+                                            repeatU = scaleWidth;
+                                            repeatV = scaleHeight;
+                                        } else {
+                                            // Vertical mapping (grain rotated 90 deg)
+                                            repeatU = scaleHeight;
+                                            repeatV = scaleWidth;
+                                        }
+
+                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". UV Span: ${uvSpanU.toFixed(2)}x${uvSpanV.toFixed(2)}. New Texture: ${realWidth}x${realHeight}". Target Repeat: ${repeatU.toFixed(3)}x${repeatV.toFixed(3)}.`);
+
+                                        // Apply scale directly to UVs, normalizing them first to completely erase the baked scale
                                         if (!mesh.geometry.userData.uvsScaled) {
                                             // Clone geometry to avoid modifying shared geometries across multiple meshes
                                             mesh.geometry = mesh.geometry.clone();
                                             const newUvs = mesh.geometry.attributes.uv;
                                             for (let i = 0; i < newUvs.count; i++) {
+                                                const u = newUvs.getX(i);
+                                                const v = newUvs.getY(i);
+
+                                                // Normalize the UV to a 0.0 - 1.0 range based on its span
+                                                const normalizedU = (u - minU) / uvSpanU;
+                                                const normalizedV = (v - minV) / uvSpanV;
+
+                                                // Apply the new physical scale
                                                 newUvs.setXY(
                                                     i,
-                                                    newUvs.getX(i) * repeatX,
-                                                    newUvs.getY(i) * repeatY
+                                                    normalizedU * repeatU,
+                                                    normalizedV * repeatV
                                                 );
                                             }
                                             newUvs.needsUpdate = true;
