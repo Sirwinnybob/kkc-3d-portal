@@ -95,8 +95,9 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'sha256-eGFYqAHm7QB8cassdFBbBxhusmh76P1pfh3ymxPZOUw='", "https://unpkg.com"],
-            connectSrc: ["'self'", "https://unpkg.com"],
+            // Security: Restrict unpkg.com to the exact three.js package version to prevent CSP bypass
+            scriptSrc: ["'self'", "'sha256-eGFYqAHm7QB8cassdFBbBxhusmh76P1pfh3ymxPZOUw='", "https://unpkg.com/three@0.160.0/"],
+            connectSrc: ["'self'", "https://unpkg.com/three@0.160.0/"],
             imgSrc: ["'self'", "data:", "blob:"],
             // Security: 'unsafe-inline' is required for frontend JS that sets inline styles
             styleSrc: ["'self'", "'unsafe-inline'"],
