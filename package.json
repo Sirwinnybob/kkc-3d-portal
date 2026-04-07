@@ -39,5 +39,9 @@
   "bugs": {
     "url": "https://github.com/Sirwinnybob/kkc-3d-portal/issues"
   },
-  "homepage": "https://github.com/Sirwinnybob/kkc-3d-portal#readme"
+  "homepage": "https://github.com/Sirwinnybob/kkc-3d-portal#readme",
+  "engines": {
+    "node": "^20.17.0 || >=22.9.0",
+    "npm": "^11.0.0"
+  }
 }
