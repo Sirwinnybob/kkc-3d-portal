@@ -72,11 +72,12 @@ const MILKY_GRAY = 0xC8C8C8;
 
 const statusEl   = document.getElementById('status');
 const statusText = document.getElementById('status-text');
-const updateStatus = (msg, isError = false) => {
+const updateStatus = (msg, state = null) => {
     if (statusEl) {
         if (statusText) statusText.innerText = msg;
         else statusEl.innerText = msg;
-        statusEl.classList.toggle('error', isError);
+        statusEl.classList.toggle('error', state === 'error' || state === true);
+        statusEl.classList.toggle('success', state === 'success');
         statusEl.classList.toggle('visible', msg.length > 0);
     }
 };
@@ -1055,7 +1056,7 @@ async function init() {
                     : `KKC_${jobCode}_${initialRoom.replace(/ /g, '_')}.jpg`;
                 a.click();
 
-                updateStatus("Photo Saved");
+                updateStatus("Photo Saved", "success");
                 setTimeout(() => updateStatus(""), 3000);
 
                 // Restore dynamic LOD
