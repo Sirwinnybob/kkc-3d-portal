@@ -135,7 +135,13 @@ function initMaterialManager(jobCode, room) {
                                     // Since we proved that Assimp preserved the exact raw INCHES in the vertex positions,
                                     // the physical bounding box `size` is ALREADY perfectly in inches!
 
-                                    if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
+                                    // Tiny hardware/trim pieces (< 1") produce near-zero UV spans and nonsensical baked scales — skip them.
+                                    if (faceHeight < 1.0) {
+                                        newTex.wrapS = THREE.RepeatWrapping;
+                                        newTex.wrapT = THREE.RepeatWrapping;
+                                        newTex.repeat.set(1, 1);
+                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}' — tiny mesh (${faceHeight.toFixed(2)}"), using repeat 1x1.`);
+                                    } else if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
                                         const uvs = mesh.geometry.attributes.uv;
                                         const pos = mesh.geometry.attributes.position;
 
@@ -158,20 +164,10 @@ function initMaterialManager(jobCode, room) {
                                             if (uvSpanU === 0) uvSpanU = 1;
                                             if (uvSpanV === 0) uvSpanV = 1;
 
-                                            // Determine how many physical inches 1.0 unit of U and V represented in the original mapping
-                                            // A 13.88" tall door with a UV V-span of 1.47 means 1.0 UV = 9.43 physical inches.
-                                            let originalPhysicalWidthU = faceWidth / uvSpanU;
-                                            let originalPhysicalHeightV = faceHeight / uvSpanV;
-
-                                            // Ensure the physical ratios map robustly. Since UV span can be arbitrary,
-                                            // we map the largest UV variance to the largest physical dimension.
-                                            if (uvSpanU > uvSpanV) {
-                                                originalPhysicalWidthU = faceHeight / uvSpanU;
-                                                originalPhysicalHeightV = faceWidth / uvSpanV;
-                                            } else {
-                                                originalPhysicalWidthU = faceWidth / uvSpanU;
-                                                originalPhysicalHeightV = faceHeight / uvSpanV;
-                                            }
+                                            // Determine how many physical inches 1.0 unit of U and V represented in the original mapping.
+                                            // Direct mapping: U span → faceWidth (2nd largest axis), V span → faceHeight (largest axis).
+                                            const originalPhysicalWidthU = faceWidth / uvSpanU;
+                                            const originalPhysicalHeightV = faceHeight / uvSpanV;
 
                                             mesh.geometry.userData.scaleCalculated = true;
                                             mesh.geometry.userData.originalPhysicalU = originalPhysicalWidthU;
