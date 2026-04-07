@@ -1256,14 +1256,21 @@ function convertPhElements(content) {
     );
 }
 
+function fixWindowsPaths(content) {
+    return content.replace(/<init_from>([\s\S]*?)<\/init_from>/g, (match, path) => {
+        return `<init_from>${path.replace(/\\\\/g, '/').replace(/\\/g, '/')}<\/init_from>`;
+    });
+}
+
 async function cleanDae(filePath) {
     try {
         let content = await fs.promises.readFile(filePath, 'utf8');
         let cleaned = content;
         cleaned = cleaned.replace(/\t/g, ' ').replace(/ +/g, ' ');
-        cleaned = cleaned.replace(/> /g, '>').replace(/ <\//g, '</');
+        cleaned = cleaned.replace(/> /g, '>').replace(/ <\//g, '<\/');
         cleaned = convertPhElements(cleaned);
         cleaned = fixTransparency(cleaned);
+        cleaned = fixWindowsPaths(cleaned);
         if (content !== cleaned) await fs.promises.writeFile(filePath, cleaned, 'utf8');
     } catch (e) { console.error(`!!! [Cleaner] Error: ${e.message}`); }
 }
