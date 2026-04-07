@@ -137,13 +137,9 @@ function initMaterialManager(jobCode, room) {
 
                                     // Tiny hardware/trim pieces (< 1") produce near-zero UV spans and nonsensical baked scales — skip them.
                                     if (faceHeight < 1.0) {
-                                        newTex.wrapS = THREE.RepeatWrapping;
-                                        newTex.wrapT = THREE.RepeatWrapping;
-                                        newTex.repeat.set(1, 1);
                                         console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}' — tiny mesh (${faceHeight.toFixed(2)}"), using repeat 1x1.`);
                                     } else if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
                                         const uvs = mesh.geometry.attributes.uv;
-                                        const pos = mesh.geometry.attributes.position;
 
                                         if (!mesh.geometry.userData.scaleCalculated) {
                                             // Find the original UV span baked into the mesh
@@ -165,7 +161,6 @@ function initMaterialManager(jobCode, room) {
                                             if (uvSpanV === 0) uvSpanV = 1;
 
                                             // Determine how many physical inches 1.0 unit of U and V represented in the original mapping.
-                                            // Direct mapping: U span → faceWidth (2nd largest axis), V span → faceHeight (largest axis).
                                             const originalPhysicalWidthU = faceWidth / uvSpanU;
                                             const originalPhysicalHeightV = faceHeight / uvSpanV;
 
@@ -174,30 +169,50 @@ function initMaterialManager(jobCode, room) {
                                             mesh.geometry.userData.originalPhysicalV = originalPhysicalHeightV;
                                         }
 
-                                        // The new texture needs to repeat based on how its physical size compares to the original baked physical size.
-                                        // e.g. If the original mapped 9.43" to 1.0 UV, and the new texture is 40",
-                                        // the new texture should repeat 9.43 / 40 = 0.235 times per 1.0 UV!
                                         const repeatX = mesh.geometry.userData.originalPhysicalU / realWidth;
                                         const repeatY = mesh.geometry.userData.originalPhysicalV / realHeight;
 
                                         console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". Original Baked Scale: ${mesh.geometry.userData.originalPhysicalU.toFixed(2)}x${mesh.geometry.userData.originalPhysicalV.toFixed(2)}". New Texture: ${realWidth}x${realHeight}". Repeating: ${repeatX.toFixed(3)}x${repeatY.toFixed(3)}.`);
 
-                                        newTex.wrapS = THREE.RepeatWrapping;
-                                        newTex.wrapT = THREE.RepeatWrapping;
-                                        newTex.repeat.set(repeatX, repeatY);
+                                        // Apply scale directly to UVs to avoid sharing the scale across all meshes using this texture
+                                        if (!mesh.geometry.userData.uvsScaled) {
+                                            // Clone geometry to avoid modifying shared geometries across multiple meshes
+                                            mesh.geometry = mesh.geometry.clone();
+                                            const newUvs = mesh.geometry.attributes.uv;
+                                            for (let i = 0; i < newUvs.count; i++) {
+                                                newUvs.setXY(
+                                                    i,
+                                                    newUvs.getX(i) * repeatX,
+                                                    newUvs.getY(i) * repeatY
+                                                );
+                                            }
+                                            newUvs.needsUpdate = true;
+                                            mesh.geometry.userData.uvsScaled = true;
+                                        }
                                     } else {
                                         const repeatX = faceWidth / realWidth;
                                         const repeatY = faceHeight / realHeight;
-                                        newTex.wrapS = THREE.RepeatWrapping;
-                                        newTex.wrapT = THREE.RepeatWrapping;
-                                        newTex.repeat.set(repeatX, repeatY);
+                                        if (!mesh.geometry.userData.uvsScaled && mesh.geometry.attributes.uv) {
+                                            mesh.geometry = mesh.geometry.clone();
+                                            const newUvs = mesh.geometry.attributes.uv;
+                                            for (let i = 0; i < newUvs.count; i++) {
+                                                newUvs.setXY(
+                                                    i,
+                                                    newUvs.getX(i) * repeatX,
+                                                    newUvs.getY(i) * repeatY
+                                                );
+                                            }
+                                            newUvs.needsUpdate = true;
+                                            mesh.geometry.userData.uvsScaled = true;
+                                        }
                                     }
                                 }
-                            } else {
-                                // Default fallback to original UV mapping (no repeat set manually)
-                                newTex.wrapS = THREE.RepeatWrapping;
-                                newTex.wrapT = THREE.RepeatWrapping;
                             }
+
+                            // Always default fallback to repeat wrap without overriding global repeat.
+                            newTex.wrapS = THREE.RepeatWrapping;
+                            newTex.wrapT = THREE.RepeatWrapping;
+                            newTex.repeat.set(1, 1);
                         });
                     });
 
