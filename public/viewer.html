@@ -89,7 +89,7 @@
 
     <div id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <div class="modal-content">
-            <button id="close-help-x" class="close-help" aria-label="Close help">&times;</button>
+            <button id="close-help-x" class="close-help" aria-label="Close help" title="Close help">&times;</button>
             <h3 id="help-title" class="controls-title">Controls</h3>
             <div class="controls-body">
                 <div class="help-section-label">Navigation</div>
@@ -143,7 +143,7 @@
     <div id="texture-panel" role="dialog" aria-label="Texture Catalog">
         <div class="texture-panel-header">
             <h3 id="catalog-title">Materials</h3>
-            <button id="close-texture-btn" aria-label="Close">&times;</button>
+            <button id="close-texture-btn" aria-label="Close" title="Close">&times;</button>
         </div>
         <div class="texture-panel-body">
             <!-- Materials View -->
@@ -202,7 +202,7 @@
                     <input type="text" id="qp-search-input" placeholder="Search..." autocomplete="off" aria-label="Search quick textures" style="width:100px; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.3); color:white; font-size:0.85em; transition: width 0.2s;" onfocus="this.style.width='160px'" onblur="this.style.width='100px'">
                     <button id="qp-clear-search" aria-label="Clear search" style="display:none; background:none; border:none; color:rgba(255,255,255,0.6); margin-left:-20px; cursor:pointer;">&times;</button>
                 </div>
-            <button id="qp-close" aria-label="Close Quick Picker">&#xD7;</button>
+            <button id="qp-close" aria-label="Close Quick Picker" title="Close Quick Picker">&#xD7;</button>
             </div>
         </div>
         <div id="qp-views-container">
@@ -233,7 +233,7 @@
     <div id="showroom-panel" style="display:none">
         <div class="showroom-panel-header">
             <h3>Virtual Showroom</h3>
-            <button id="showroom-panel-close" aria-label="Close">&times;</button>
+            <button id="showroom-panel-close" aria-label="Close" title="Close">&times;</button>
         </div>
         <div class="showroom-panel-body">
             <!-- Kitchen Style Selector -->

@@ -21,3 +21,15 @@
 ## 2025-10-24 - Context Preservation via Focus Restoration in Dynamic Lists
 **Learning:** In interfaces where users navigate from a list (e.g., Materials) to a detail/selection view (e.g., Catalog) and back, maintaining the user's scroll and focus position is critical for orientation. Restoring focus to the specific list item that triggered the transition, rather than just the top of the list or the panel itself, prevents "focus reset" disorientation for keyboard and screen reader users.
 **Action:** Use `data-index` or similar unique identifiers on list items. When returning from a sub-view, use `requestAnimationFrame` to ensure the list has rendered before programmatically calling `.focus()` on the previously selected item.
+
+## 2025-11-12 - Tactile Feedback for Perceived Responsiveness
+**Learning:** Adding a subtle `transform: scale(0.97)` to the `:active` state of interactive elements (buttons, thumbnails, list items) provides immediate, tactile confirmation of a user's interaction. This is especially important in 3D applications where state changes or renders might not be instantaneous, as it bridges the "interaction gap" with instant visual feedback.
+**Action:** Always include `:active` scale-down transforms for primary interactive components to enhance perceived responsiveness.
+
+## 2025-11-12 - Persistent State Indicators in Configuration Tasks
+**Learning:** Providing clear, persistent indicators of state changes (e.g., changing a label from "Customizable" to "Modified") helps users track their progress in complex configuration tasks. This reduces cognitive load and prevents disorientation, as users can easily see which items have already been adjusted without relying on memory.
+**Action:** Implement dynamic status labels or badges that reflect user modifications in configuration-heavy interfaces.
+
+## 2025-11-12 - Positive Reinforcement via Success States
+**Learning:** Interfaces that only provide feedback for errors or "loading" states can feel incomplete or anxiety-inducing. Adding a dedicated "success" state (e.g., green theme, hiding progress spinners) for actions like saving or exporting provides positive reinforcement and clear task closure.
+**Action:** Ensure the global status/notification system supports a "success" state and use it to confirm successful completion of user-triggered asynchronous actions.

@@ -415,12 +415,13 @@ export class MaterialManager {
 
         const previewHtml = mat.previewCache;
         const displayName = group.displayName;
+        const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
         btn.innerHTML = `
             <div class="material-item-left">
                 ${previewHtml}
                 <div class="material-info">
                     <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
-                    <span class="material-status">Customizable</span>
+                    <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
                 </div>
             </div>
             <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
@@ -459,12 +460,13 @@ export class MaterialManager {
 
         const previewHtml = mat.previewCache;
         const displayName = mat.matchedName || mat.name;
+        const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
         btn.innerHTML = `
             <div class="material-item-left">
                 ${previewHtml}
                 <div class="material-info">
                     <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
-                    <span class="material-status">Customizable</span>
+                    <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
                 </div>
             </div>
             <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
