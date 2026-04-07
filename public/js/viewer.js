@@ -141,11 +141,7 @@ function initMaterialManager(jobCode, room) {
                                     } else if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
                                         const uvs = mesh.geometry.attributes.uv;
 
-                                                                                // Calculate the target repeats based strictly on the physical face size
-                                        const scaleWidth = faceWidth / realWidth;
-                                        const scaleHeight = faceHeight / realHeight;
-
-                                        // Find the original UV span baked into the mesh to determine orientation
+                                                                                                                        // Find the original UV span baked into the mesh
                                         let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
 
                                         for (let i = 0; i < uvs.count; i++) {
@@ -163,21 +159,27 @@ function initMaterialManager(jobCode, room) {
                                         if (uvSpanU === 0) uvSpanU = 1;
                                         if (uvSpanV === 0) uvSpanV = 1;
 
-                                        // Determine orientation based on UV spans
-                                        let repeatU, repeatV;
-                                        if (uvSpanU >= uvSpanV) {
-                                            // Horizontal mapping
-                                            repeatU = scaleWidth;
-                                            repeatV = scaleHeight;
-                                        } else {
-                                            // Vertical mapping (grain rotated 90 deg)
-                                            repeatU = scaleHeight;
-                                            repeatV = scaleWidth;
+                                        // Determine the implicit physical size of 1.0 unit of the original U and V mapping
+                                        // e.g., if a 41" wide door spans 1.18 U, then 1.0 U originally represented 34.95".
+                                        let originalPhysicalU = faceWidth / uvSpanU;
+                                        let originalPhysicalV = faceHeight / uvSpanV;
+
+                                        // Ensure we map the physical dimensions correctly to U and V regardless of orientation.
+                                        // The larger UV span usually corresponds to the larger physical dimension.
+                                        if ((uvSpanU > uvSpanV && faceWidth < faceHeight) || (uvSpanV > uvSpanU && faceHeight < faceWidth)) {
+                                            // The UVs are rotated 90 degrees relative to the bounding box axes
+                                            originalPhysicalU = faceHeight / uvSpanU;
+                                            originalPhysicalV = faceWidth / uvSpanV;
                                         }
 
-                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". UV Span: ${uvSpanU.toFixed(2)}x${uvSpanV.toFixed(2)}. New Texture: ${realWidth}x${realHeight}". Target Repeat: ${repeatU.toFixed(3)}x${repeatV.toFixed(3)}.`);
+                                        // Calculate the scale ratios to convert the original mapping to the new real-world dimensions.
+                                        // If the original texture was 35" and the new one is 40", the scale is 35/40 = 0.875
+                                        const scaleU = originalPhysicalU / realWidth;
+                                        const scaleV = originalPhysicalV / realHeight;
 
-                                        // Apply scale directly to UVs, normalizing them first to completely erase the baked scale
+                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". UV Span: ${uvSpanU.toFixed(2)}x${uvSpanV.toFixed(2)}. Original Baked Scale: ${originalPhysicalU.toFixed(2)}x${originalPhysicalV.toFixed(2)}". New Texture: ${realWidth}x${realHeight}". Target Repeat: ${scaleU.toFixed(3)}x${scaleV.toFixed(3)}.`);
+
+                                        // Apply the scalar multipliers directly to the original cloned UV coordinates
                                         if (!mesh.geometry.userData.uvsScaled) {
                                             // Clone geometry to avoid modifying shared geometries across multiple meshes
                                             mesh.geometry = mesh.geometry.clone();
@@ -186,15 +188,11 @@ function initMaterialManager(jobCode, room) {
                                                 const u = newUvs.getX(i);
                                                 const v = newUvs.getY(i);
 
-                                                // Normalize the UV to a 0.0 - 1.0 range based on its span
-                                                const normalizedU = (u - minU) / uvSpanU;
-                                                const normalizedV = (v - minV) / uvSpanV;
-
-                                                // Apply the new physical scale
+                                                // Multiply the original coordinate by the new physical scale ratio
                                                 newUvs.setXY(
                                                     i,
-                                                    normalizedU * repeatU,
-                                                    normalizedV * repeatV
+                                                    u * scaleU,
+                                                    v * scaleV
                                                 );
                                             }
                                             newUvs.needsUpdate = true;
