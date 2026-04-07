@@ -115,72 +115,21 @@ function initMaterialManager(jobCode, room) {
                             if (m.color) m.color.setHex(0xffffff);
                             m.needsUpdate = true;
 
-                            // Real-world scaling logic
+                            // Real-world scaling logic based STRICTLY on relative texture dimensions
                             if (realWidth !== undefined && realWidth !== null && realHeight !== undefined && realHeight !== null) {
-                                if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                                const box = mesh.geometry.boundingBox;
+                                // If the material group has a current width/height (from initial load or previous swap)
+                                const currentWidth = matGroup.width;
+                                const currentHeight = matGroup.height;
 
-                                const size = new THREE.Vector3();
-                                box.getSize(size);
+                                if (currentWidth > 0 && currentHeight > 0 && realWidth > 0 && realHeight > 0) {
+                                    // Calculate the mathematically perfect ratio to preserve the original mapped UV layout!
+                                    const scaleU = currentWidth / realWidth;
+                                    const scaleV = currentHeight / realHeight;
 
-                                // Multiply by the local scale of the mesh (often 1.0, but just in case)
-                                size.multiply(mesh.scale);
+                                    if (scaleU !== 1.0 || scaleV !== 1.0) {
+                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Scaling UVs relative to original size: (${currentWidth}x${currentHeight}") -> New Texture (${realWidth}x${realHeight}"). Target Multipliers: ${scaleU.toFixed(3)}x${scaleV.toFixed(3)}.`);
 
-                                // Find the two largest physical dimensions to represent the face of the mesh
-                                const dims = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a,b) => b - a);
-                                const faceWidth = dims[1]; // Usually physical width
-                                const faceHeight = dims[0]; // Usually physical height
-
-                                if (realWidth > 0 && realHeight > 0) {
-                                    // Since we proved that Assimp preserved the exact raw INCHES in the vertex positions,
-                                    // the physical bounding box `size` is ALREADY perfectly in inches!
-
-                                    // Tiny hardware/trim pieces (< 1") produce near-zero UV spans and nonsensical baked scales — skip them.
-                                    if (faceHeight < 1.0) {
-                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}' — tiny mesh (${faceHeight.toFixed(2)}"), using repeat 1x1.`);
-                                    } else if (mesh.geometry.attributes.uv && mesh.geometry.attributes.position) {
-                                        const uvs = mesh.geometry.attributes.uv;
-
-                                                                                                                        // Find the original UV span baked into the mesh
-                                        let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-
-                                        for (let i = 0; i < uvs.count; i++) {
-                                            const u = uvs.getX(i);
-                                            const v = uvs.getY(i);
-                                            if (u < minU) minU = u;
-                                            if (u > maxU) maxU = u;
-                                            if (v < minV) minV = v;
-                                            if (v > maxV) maxV = v;
-                                        }
-
-                                        let uvSpanU = Math.abs(maxU - minU);
-                                        let uvSpanV = Math.abs(maxV - minV);
-
-                                        if (uvSpanU === 0) uvSpanU = 1;
-                                        if (uvSpanV === 0) uvSpanV = 1;
-
-                                        // Determine orientation based on original UV span (horizontal or vertical grain)
-                                        let isHorizontalGrain = uvSpanU >= uvSpanV;
-
-                                        // We want to scale strictly to the physical face size.
-                                        let repeatU, repeatV;
-
-                                        if (isHorizontalGrain) {
-                                            // Grain is horizontal (U maps to Width, V maps to Height)
-                                            repeatU = faceWidth / realWidth;
-                                            repeatV = faceHeight / realHeight;
-                                        } else {
-                                            // Grain is vertical (U maps to Height, V maps to Width - rotated 90 degrees)
-                                            repeatU = faceHeight / realHeight;
-                                            repeatV = faceWidth / realWidth;
-                                        }
-
-                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Face size: ${faceWidth.toFixed(2)}x${faceHeight.toFixed(2)}". UV Span: ${uvSpanU.toFixed(2)}x${uvSpanV.toFixed(2)}. Horizontal Grain: ${isHorizontalGrain}. New Texture: ${realWidth}x${realHeight}". Target Repeat: ${repeatU.toFixed(3)}x${repeatV.toFixed(3)}.`);
-
-                                        // Apply the new physical scale directly to the UVs.
-                                        // We must normalize the existing UVs first (0.0 - 1.0) to completely erase any bizarre stretching or scales baked into the original model.
-                                        // This guarantees the texture is applied perfectly proportionally to the physical face dimensions.
-                                        if (!mesh.geometry.userData.uvsScaled) {
+                                        if (mesh.geometry.attributes.uv) {
                                             // Clone geometry to avoid modifying shared geometries across multiple meshes
                                             mesh.geometry = mesh.geometry.clone();
                                             const newUvs = mesh.geometry.attributes.uv;
@@ -188,45 +137,23 @@ function initMaterialManager(jobCode, room) {
                                                 const u = newUvs.getX(i);
                                                 const v = newUvs.getY(i);
 
-                                                // Normalize the UV to a 0.0 - 1.0 range based on its span
-                                                const normalizedU = (u - minU) / uvSpanU;
-                                                const normalizedV = (v - minV) / uvSpanV;
-
-                                                // Multiply the normalized coordinate by the new physical scale ratio
+                                                // Multiply the coordinate by the scale ratio
                                                 newUvs.setXY(
                                                     i,
-                                                    normalizedU * repeatU,
-                                                    normalizedV * repeatV
+                                                    u * scaleU,
+                                                    v * scaleV
                                                 );
                                             }
                                             newUvs.needsUpdate = true;
-                                            mesh.geometry.userData.uvsScaled = true;
-                                        }
-                                    } else {
-                                        const repeatX = faceWidth / realWidth;
-                                        const repeatY = faceHeight / realHeight;
-                                        if (!mesh.geometry.userData.uvsScaled && mesh.geometry.attributes.uv) {
-                                            mesh.geometry = mesh.geometry.clone();
-                                            const newUvs = mesh.geometry.attributes.uv;
-                                            for (let i = 0; i < newUvs.count; i++) {
-                                                newUvs.setXY(
-                                                    i,
-                                                    newUvs.getX(i) * repeatX,
-                                                    newUvs.getY(i) * repeatY
-                                                );
-                                            }
-                                            newUvs.needsUpdate = true;
-                                            mesh.geometry.userData.uvsScaled = true;
                                         }
                                     }
                                 }
                             }
 
-                            // Always default fallback to repeat wrap without overriding global repeat.
+                            // Keep the global texture repeat neutral so the shared texture object isn't warped
                             newTex.wrapS = THREE.RepeatWrapping;
                             newTex.wrapT = THREE.RepeatWrapping;
-                            newTex.repeat.set(1, 1);
-                        });
+                            newTex.repeat.set(1, 1););
                     });
 
                     if (replaceAll) {
