@@ -33,3 +33,7 @@
 ## 2025-11-12 - Positive Reinforcement via Success States
 **Learning:** Interfaces that only provide feedback for errors or "loading" states can feel incomplete or anxiety-inducing. Adding a dedicated "success" state (e.g., green theme, hiding progress spinners) for actions like saving or exporting provides positive reinforcement and clear task closure.
 **Action:** Ensure the global status/notification system supports a "success" state and use it to confirm successful completion of user-triggered asynchronous actions.
+
+## 2024-04-07 - Add missing aria-labels to buttons
+**Learning:** Found several icon-only buttons or dynamically updated buttons in `index.html` and `viewer.html` without explicit `aria-label`s, which is critical for screen reader users to understand their purpose.
+**Action:** Added `aria-label` to various style option buttons, close buttons, and primary action buttons to ensure better accessibility moving forward.
