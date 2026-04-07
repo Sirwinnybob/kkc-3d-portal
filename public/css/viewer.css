@@ -219,6 +219,7 @@ body {
 }
 
 #status.error { color: #ff6b6b; }
+#status.success { color: #4ade80; }
 
 .status-spin {
     width: 13px;
@@ -230,7 +231,8 @@ body {
     flex-shrink: 0;
 }
 
-#status.error .status-spin { display: none; }
+#status.error .status-spin,
+#status.success .status-spin { display: none; }
 
 @keyframes statusSpin {
     to { transform: rotate(360deg); }
@@ -450,6 +452,10 @@ body {
     border-color: #007bff;
 }
 
+.material-item:active {
+    transform: scale(0.97);
+}
+
 .material-item-left {
     display: flex;
     align-items: center;
@@ -648,6 +654,10 @@ body {
 .texture-thumb:hover {
     border-color: #007bff;
     transform: scale(1.03);
+}
+
+.texture-thumb:active {
+    transform: scale(0.97);
 }
 
 .texture-thumb:focus-visible {
@@ -1075,10 +1085,15 @@ body {
     scroll-snap-align: center;
 }
 
-.qp-category-btn:hover,
+.qp-category-btn:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.22);
+}
+
 .qp-category-btn:active {
     background: rgba(255,255,255,0.12);
     border-color: rgba(255,255,255,0.22);
+    transform: scale(0.97);
 }
 
 .qp-category-btn.current-cat {
@@ -1107,7 +1122,14 @@ body {
 #qp-texture-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
 
 .qp-tex-item {
-    flex-shrink: 0;
+    transition: transform 0.1s;
+}
+
+.qp-tex-item:active {
+    transform: scale(0.97);
+}
+
+.qp-tex-item {
     width: 80px;
     display: flex;
     flex-direction: column;
@@ -1335,6 +1357,7 @@ body {
 }
 .style-btn.active { background: #6c5ce7; color: #fff; }
 .style-btn:hover:not(.active) { background: rgba(255,255,255,0.08); color: #ccc; }
+.style-btn:active { transform: scale(0.97); }
 
 .showroom-hr {
     border: none; border-top: 1px solid rgba(255,255,255,0.08);
@@ -1360,6 +1383,7 @@ body {
 .part-option-btn:hover:not(.active) {
     border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
 }
+.part-option-btn:active { transform: scale(0.97); }
 .part-option-btn.loading { opacity: 0.5; pointer-events: none; }
 .part-options-empty {
     font-size: 0.78em; color: #666; font-style: italic; padding: 4px 0;
