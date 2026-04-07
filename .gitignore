@@ -8,3 +8,4 @@ AssimpAndroid/
 .env
 .DS_Store
 test/benchmark_jobs/
+bun.lockb

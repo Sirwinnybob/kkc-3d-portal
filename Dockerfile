@@ -1,5 +1,5 @@
-# Use Node.js as base
-FROM node:20
+# Use Node.js 22 as base for npm 11 compatibility (requires >=22.9.0 || ^20.17.0)
+FROM node:22
 
 # Install Assimp and its dependencies
 RUN apt-get update && apt-get install -y \
