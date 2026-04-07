@@ -296,12 +296,43 @@ app.get('/api/job/:code/:room/textures', async (req, res) => {
         return res.status(404).json({ success: false, error: 'No texture manifest found' });
     }
 
-    res.sendFile(manifestPath, (err) => {
-        if (err) {
-            if (res.headersSent) return;
-            res.status(500).json({ success: false, error: 'Failed to read manifest' });
+    try {
+        const [manifestRaw, dimRaw] = await Promise.all([
+            fs.promises.readFile(manifestPath, 'utf8'),
+            fs.promises.readFile(path.join(TEXTURES_DIR, 'texture_dimensions.json'), 'utf8').catch(() => '{}'),
+        ]);
+        const manifest = JSON.parse(manifestRaw);
+        const dimensions = JSON.parse(dimRaw);
+
+        // Overlay current dimensions onto each bestMatch so stale cached nulls are always overridden
+        if (manifest.materials) {
+            for (const mat of Object.values(manifest.materials)) {
+                if (mat.bestMatch && mat.bestMatch.category && mat.bestMatch.file) {
+                    const catDims = dimensions[mat.bestMatch.category];
+                    if (catDims && catDims[mat.bestMatch.file]) {
+                        mat.bestMatch.width  = catDims[mat.bestMatch.file].width;
+                        mat.bestMatch.height = catDims[mat.bestMatch.file].height;
+                    }
+                }
+                // Same for similarTextures list
+                if (Array.isArray(mat.similarTextures)) {
+                    for (const sim of mat.similarTextures) {
+                        if (sim.category && sim.file) {
+                            const catDims = dimensions[sim.category];
+                            if (catDims && catDims[sim.file]) {
+                                sim.width  = catDims[sim.file].width;
+                                sim.height = catDims[sim.file].height;
+                            }
+                        }
+                    }
+                }
+            }
         }
-    });
+
+        res.json(manifest);
+    } catch (err) {
+        if (!res.headersSent) res.status(500).json({ success: false, error: 'Failed to read manifest' });
+    }
 });
 
 // --- TEXTURE CATALOG API ---
