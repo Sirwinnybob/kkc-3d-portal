@@ -1,3 +1,17 @@
 KKC PORTAL v2.1.9 ACTIVE ON PORT 5021
 GET /api/textures 200 32 - 20.639 ms
 GET /api/textures/Cherry 404 46 - 9.642 ms
+[Texture] change: /app/textures/Uncategorized/unknown_room_material.jpg
+[Texture] change: /app/textures/Uncategorized/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.jpg
+[Texture] change: /app/textures/Uncategorized/______etc_passwd_secret_room____.jpg
+[Texture] addDir: /app/textures/TestCategory
+[Texture] addDir: /app/textures/TestCategory/hashes
+[Texture] unlinkDir: /app/textures/TestCategory/hashes
+[Texture] unlinkDir: /app/textures/TestCategory
+[Texture] Library changed — regenerating all texture manifests...
+[Texture] All manifests regenerated.
+GET / 200 4544 - 59.758 ms
+GET /css/index.css?v=301 200 5201 - 9.035 ms
+GET /js/index.js?v=301 200 4908 - 5.756 ms
+GET /images/kkc_logo.jpg 200 1125941 - 11.116 ms
+GET /service-worker.js 200 270 - 3.953 ms
