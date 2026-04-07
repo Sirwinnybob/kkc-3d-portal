@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Copy package files and install
 COPY package*.json ./
-RUN npm install --production
+RUN npm install -g npm@11 && npm install --omit=dev
 
 # Copy app source
 COPY . .
