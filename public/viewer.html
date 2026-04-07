@@ -160,7 +160,7 @@
                 </div>
                 <div id="texture-search-empty" class="texture-empty-state" style="display:none">
                     No textures match your search.
-                    <button id="clear-search-empty" class="back-btn" style="margin-top:10px; width:auto; padding:6px 12px;">Clear Search</button>
+                    <button id="clear-search-empty" class="back-btn" style="margin-top:10px; width:auto; padding:6px 12px;" aria-label="Clear Search">Clear Search</button>
                 </div>
                 <div id="texture-grid"></div>
             </div>
@@ -223,8 +223,8 @@
             <h3 id="tour-title"></h3>
             <p id="tour-desc"></p>
             <div id="tour-actions">
-                <button id="tour-skip">Skip tour</button>
-                <button id="tour-next">Next →</button>
+                <button id="tour-skip" aria-label="Skip tour">Skip tour</button>
+                <button id="tour-next" aria-label="Next tour step">Next →</button>
             </div>
         </div>
     </div>
@@ -240,9 +240,9 @@
             <div class="showroom-section">
                 <div class="showroom-section-title">Kitchen Style</div>
                 <div class="style-toggle" id="kitchen-style-toggle">
-                    <button data-style="face_frame" class="style-btn active">Face Frame</button>
-                    <button data-style="full_inset" class="style-btn">Full Inset</button>
-                    <button data-style="frameless" class="style-btn">Frameless</button>
+                    <button data-style="face_frame" class="style-btn active" aria-label="Select Face Frame style">Face Frame</button>
+                    <button data-style="full_inset" class="style-btn" aria-label="Select Full Inset style">Full Inset</button>
+                    <button data-style="frameless" class="style-btn" aria-label="Select Frameless style">Frameless</button>
                 </div>
             </div>
 
@@ -250,8 +250,8 @@
             <div class="showroom-section" id="overlay-section">
                 <div class="showroom-section-title">Overlay</div>
                 <div class="style-toggle" id="overlay-toggle">
-                    <button data-style="full" class="style-btn active">Full (11/16")</button>
-                    <button data-style="half" class="style-btn">1/2"</button>
+                    <button data-style="full" class="style-btn active" aria-label="Select Full Overlay">Full (11/16")</button>
+                    <button data-style="half" class="style-btn" aria-label="Select Half Overlay">1/2"</button>
                 </div>
             </div>
 
@@ -307,9 +307,9 @@
             <div class="showroom-section">
                 <div class="showroom-section-title">Island Style</div>
                 <div class="style-toggle" id="island-style-toggle">
-                    <button data-style="face_frame" class="style-btn active">Face Frame</button>
-                    <button data-style="full_inset" class="style-btn">Full Inset</button>
-                    <button data-style="frameless" class="style-btn">Frameless</button>
+                    <button data-style="face_frame" class="style-btn active" aria-label="Select Face Frame style">Face Frame</button>
+                    <button data-style="full_inset" class="style-btn" aria-label="Select Full Inset style">Full Inset</button>
+                    <button data-style="frameless" class="style-btn" aria-label="Select Frameless style">Frameless</button>
                 </div>
             </div>
 
@@ -317,8 +317,8 @@
             <div class="showroom-section" id="island-overlay-section">
                 <div class="showroom-section-title">Island Overlay</div>
                 <div class="style-toggle" id="island-overlay-toggle">
-                    <button data-style="full" class="style-btn active">Full (11/16")</button>
-                    <button data-style="half" class="style-btn">1/2"</button>
+                    <button data-style="full" class="style-btn active" aria-label="Select Full Overlay">Full (11/16")</button>
+                    <button data-style="half" class="style-btn" aria-label="Select Half Overlay">1/2"</button>
                 </div>
             </div>
 
@@ -396,7 +396,7 @@
                 </button>
             </div>
             <p class="pin-hint">Share this PIN to let others view your exact configuration. It will also appear in screenshots.</p>
-            <button id="pin-modal-close" class="pin-modal-btn">Got it</button>
+            <button id="pin-modal-close" class="pin-modal-btn" aria-label="Close PIN modal">Got it</button>
         </div>
     </div>
 
@@ -416,7 +416,7 @@
                     <span>Copy Link</span>
                 </button>
             </div>
-            <button id="share-modal-close" class="pin-modal-btn" style="background: #3b82f6; width: 100%;">Close</button>
+            <button id="share-modal-close" class="pin-modal-btn" style="background: #3b82f6; width: 100%;" aria-label="Close share modal">Close</button>
         </div>
     </div>
 

@@ -1,17 +1,318 @@
 KKC PORTAL v2.1.9 ACTIVE ON PORT 5021
-GET /api/textures 200 32 - 20.639 ms
-GET /api/textures/Cherry 404 46 - 9.642 ms
-[Texture] change: /app/textures/Uncategorized/unknown_room_material.jpg
-[Texture] change: /app/textures/Uncategorized/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.jpg
-[Texture] change: /app/textures/Uncategorized/______etc_passwd_secret_room____.jpg
+[Texture] Initial index build complete.
+[Texture] addDir: /app/textures/Uncategorized
+[Texture] add: /app/textures/Uncategorized/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.jpg
+[Texture] add: /app/textures/Uncategorized/unknown_room_material.jpg
+[Texture] add: /app/textures/Uncategorized/______etc_passwd_secret_room____.jpg
 [Texture] addDir: /app/textures/TestCategory
 [Texture] addDir: /app/textures/TestCategory/hashes
 [Texture] unlinkDir: /app/textures/TestCategory/hashes
 [Texture] unlinkDir: /app/textures/TestCategory
+[Texture] add: /app/textures/texture_dimensions.json
 [Texture] Library changed — regenerating all texture manifests...
 [Texture] All manifests regenerated.
-GET / 200 4544 - 59.758 ms
-GET /css/index.css?v=301 200 5201 - 9.035 ms
-GET /js/index.js?v=301 200 4908 - 5.756 ms
-GET /images/kkc_logo.jpg 200 1125941 - 11.116 ms
-GET /service-worker.js 200 270 - 3.953 ms
+[Texture] addDir: /app/textures/Wood
+[Texture] add: /app/textures/Wood/Oak.jpg
+[Texture] add: /app/textures/Wood/Walnut.jpg
+[Texture] Library changed — regenerating all texture manifests...
+[Texture] All manifests regenerated.
+ms
+GET /css/viewer.css?v=1880 200 37603 - 1.662 ms
+GET /js/viewer.js?v=1882 200 49593 - 2.711 ms
+GET /js/uiManager.js 200 13723 - 7.249 ms
+GET /js/materialManager.js 200 44251 - 4.295 ms
+GET /js/showroomManager.js 200 25323 - 3.999 ms
+GET /js/engine.js 200 7653 - 3.794 ms
+GET /js/modelLoader.js 200 11252 - 2.624 ms
+GET / 304 - - 0.398 ms
+GET /css/index.css?v=303 304 - - 0.678 ms
+GET /images/kkc_logo.jpg 304 - - 0.860 ms
+GET /js/index.js?v=303 304 - - 0.415 ms
+GET /service-worker.js 304 - - 0.675 ms
+GET / 200 4748 - 1.177 ms
+GET /css/index.css?v=303 200 5201 - 2.835 ms
+GET /js/index.js?v=303 200 4908 - 3.915 ms
+GET /images/kkc_logo.jpg 200 1125941 - 3.949 ms
+GET /service-worker.js 200 270 - 0.867 ms
+GET /viewer.html 200 25006 - 0.823 ms
+GET /css/viewer.css?v=1880 200 37603 - 3.359 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.326 ms
+GET /js/uiManager.js 200 13723 - 0.677 ms
+GET /js/materialManager.js 200 44251 - 1.064 ms
+GET /js/showroomManager.js 200 25323 - 1.573 ms
+GET /js/engine.js 200 7653 - 0.915 ms
+GET /js/modelLoader.js 200 11252 - 1.090 ms
+GET / 304 - - 1.397 ms
+GET /css/index.css?v=303 304 - - 0.821 ms
+GET /images/kkc_logo.jpg 304 - - 1.464 ms
+GET /js/index.js?v=303 304 - - 0.895 ms
+GET /service-worker.js 304 - - 0.570 ms
+GET / 200 4748 - 1.890 ms
+GET /css/index.css?v=303 200 5201 - 3.278 ms
+GET /js/index.js?v=303 200 4908 - 3.990 ms
+GET /images/kkc_logo.jpg 200 1125941 - 3.901 ms
+GET /service-worker.js 200 270 - 1.077 ms
+GET /viewer.html 200 25006 - 2.323 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.726 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.868 ms
+GET /js/uiManager.js 200 13723 - 1.023 ms
+GET /js/materialManager.js 200 44251 - 0.826 ms
+GET /js/showroomManager.js 200 25323 - 3.580 ms
+GET /js/engine.js 200 7653 - 3.639 ms
+GET /js/modelLoader.js 200 11252 - 3.953 ms
+GET / 304 - - 0.652 ms
+GET /css/index.css?v=303 304 - - 0.553 ms
+GET /images/kkc_logo.jpg 304 - - 0.905 ms
+GET /js/index.js?v=303 304 - - 0.790 ms
+GET /service-worker.js 304 - - 0.578 ms
+GET / 200 4748 - 1.482 ms
+GET /css/index.css?v=303 200 5201 - 3.882 ms
+GET /js/index.js?v=303 200 4908 - 3.961 ms
+GET /images/kkc_logo.jpg 200 1125941 - 3.996 ms
+GET /service-worker.js 200 270 - 1.116 ms
+GET /viewer.html 200 25006 - 0.971 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.602 ms
+GET /css/viewer.css?v=1880 200 37603 - 2.604 ms
+GET /js/uiManager.js 200 13723 - 0.943 ms
+GET /js/materialManager.js 200 44251 - 7.477 ms
+GET /js/showroomManager.js 200 25323 - 7.983 ms
+GET /js/engine.js 200 7653 - 5.967 ms
+GET /js/modelLoader.js 200 11252 - 5.731 ms
+GET / 304 - - 0.430 ms
+GET /css/index.css?v=303 304 - - 2.734 ms
+GET /images/kkc_logo.jpg 304 - - 0.940 ms
+GET /js/index.js?v=303 304 - - 0.309 ms
+GET / 200 4748 - 0.957 ms
+GET /css/index.css?v=303 200 5201 - 4.335 ms
+GET /js/index.js?v=303 200 4908 - 5.229 ms
+GET /images/kkc_logo.jpg 200 1125941 - 5.269 ms
+GET /service-worker.js 200 270 - 0.648 ms
+GET /viewer.html 200 25006 - 0.825 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.216 ms
+GET /js/viewer.js?v=1882 200 49593 - 2.546 ms
+GET /js/uiManager.js 200 13723 - 0.919 ms
+GET /js/materialManager.js 200 44251 - 6.704 ms
+GET /js/showroomManager.js 200 25323 - 6.319 ms
+GET /js/engine.js 200 7653 - 5.328 ms
+GET /js/modelLoader.js 200 11252 - 3.942 ms
+GET / 304 - - 0.784 ms
+GET /css/index.css?v=303 304 - - 2.020 ms
+GET /images/kkc_logo.jpg 304 - - 1.042 ms
+GET /js/index.js?v=303 304 - - 1.489 ms
+GET / 200 4748 - 0.630 ms
+GET /css/index.css?v=303 200 5201 - 4.958 ms
+GET /js/index.js?v=303 200 4908 - 4.961 ms
+GET /images/kkc_logo.jpg 200 1125941 - 5.037 ms
+GET /service-worker.js 200 270 - 0.893 ms
+GET /viewer.html 200 25006 - 1.767 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.495 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.440 ms
+GET /js/uiManager.js 200 13723 - 0.678 ms
+GET /js/materialManager.js 200 44251 - 1.690 ms
+GET /js/showroomManager.js 200 25323 - 2.347 ms
+GET /js/engine.js 200 7653 - 1.668 ms
+GET /js/modelLoader.js 200 11252 - 1.762 ms
+GET / 304 - - 0.521 ms
+GET /css/index.css?v=303 304 - - 1.234 ms
+GET /images/kkc_logo.jpg 304 - - 1.302 ms
+GET /js/index.js?v=303 304 - - 1.259 ms
+GET / 200 4748 - 0.989 ms
+GET /css/index.css?v=303 200 5201 - 5.837 ms
+GET /js/index.js?v=303 200 4908 - 6.190 ms
+GET /images/kkc_logo.jpg 200 1125941 - 6.423 ms
+GET /service-worker.js 200 270 - 0.964 ms
+GET /viewer.html 200 25006 - 1.483 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.607 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.615 ms
+GET /js/uiManager.js 200 13723 - 1.393 ms
+GET /js/materialManager.js 200 44251 - 1.319 ms
+GET /js/showroomManager.js 200 25323 - 0.786 ms
+GET /js/engine.js 200 7653 - 1.965 ms
+GET /js/modelLoader.js 200 11252 - 2.010 ms
+GET / 304 - - 0.392 ms
+GET /css/index.css?v=303 304 - - 2.000 ms
+GET /images/kkc_logo.jpg 304 - - 1.858 ms
+GET /js/index.js?v=303 304 - - 1.626 ms
+GET / 200 4748 - 0.901 ms
+GET /css/index.css?v=303 200 5201 - 2.323 ms
+GET /js/index.js?v=303 200 4908 - 4.383 ms
+GET /images/kkc_logo.jpg 200 1125941 - 2.950 ms
+GET /service-worker.js 200 270 - 1.063 ms
+[Texture] addDir: /app/textures/Uncategorized
+[Texture] add: /app/textures/Uncategorized/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC.jpg
+[Texture] add: /app/textures/Uncategorized/unknown_room_material.jpg
+[Texture] add: /app/textures/Uncategorized/______etc_passwd_secret_room____.jpg
+[Texture] addDir: /app/textures/TestCategory
+[Texture] addDir: /app/textures/TestCategory/hashes
+[Texture] unlinkDir: /app/textures/TestCategory/hashes
+[Texture] unlinkDir: /app/textures/TestCategory
+[Texture] add: /app/textures/texture_dimensions.json
+[Texture] Library changed — regenerating all texture manifests...
+[Texture] All manifests regenerated.
+GET / 200 4748 - 1.046 ms
+GET / 200 4748 - 0.779 ms
+[Texture] addDir: /app/textures/Wood
+[Texture] add: /app/textures/Wood/Oak.jpg
+[Texture] add: /app/textures/Wood/Walnut.jpg
+[Texture] Library changed — regenerating all texture manifests...
+[Texture] All manifests regenerated.
+GET / 200 4748 - 1.593 ms
+GET / 200 4748 - 0.663 ms
+GET /viewer.html?job=123&room=Kitchen 200 25006 - 0.654 ms
+GET /viewer.html?job=123&room=Kitchen 200 25006 - 0.799 ms
+GET /css/viewer.css?v=1880 200 37603 - 4.632 ms
+GET /js/viewer.js?v=1882 200 49593 - 4.801 ms
+GET /css/viewer.css?v=1880 200 37603 - 2.317 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.163 ms
+GET /js/uiManager.js 200 13723 - 5.446 ms
+GET /js/materialManager.js 200 44251 - 10.356 ms
+GET /js/showroomManager.js 200 25323 - 13.835 ms
+GET /js/engine.js 200 7653 - 17.356 ms
+GET /js/modelLoader.js 200 11252 - 10.927 ms
+GET /js/uiManager.js 200 13723 - 7.113 ms
+GET /js/materialManager.js 200 44251 - 3.395 ms
+GET /js/showroomManager.js 200 25323 - 4.310 ms
+GET /js/engine.js 200 7653 - 4.312 ms
+GET /js/modelLoader.js 200 11252 - 5.257 ms
+GET /viewer.html?job=123&room=Kitchen 200 25006 - 0.652 ms
+GET /css/viewer.css?v=1880 200 37603 - 2.058 ms
+GET /js/viewer.js?v=1882 200 49593 - 2.483 ms
+GET /js/uiManager.js 200 13723 - 0.631 ms
+GET /js/materialManager.js 200 44251 - 2.323 ms
+GET /js/showroomManager.js 200 25323 - 10.366 ms
+GET /js/engine.js 200 7653 - 3.173 ms
+GET /js/modelLoader.js 200 11252 - 7.024 ms
+GET /textures/Wood/Oak.jpg 200 8 - 4.577 ms
+GET /viewer.html?mode=showroom 200 25006 - 4.200 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.203 ms
+GET /js/viewer.js?v=1882 200 49593 - 5.805 ms
+GET /js/uiManager.js 200 13723 - 6.623 ms
+GET /js/materialManager.js 200 44251 - 6.676 ms
+GET /js/showroomManager.js 200 25323 - 6.688 ms
+GET /js/engine.js 200 7653 - 6.609 ms
+GET /js/modelLoader.js 200 11252 - 6.556 ms
+GET /viewer.html?mode=showroom 200 25006 - 4.225 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.285 ms
+GET /js/viewer.js?v=1882 200 49593 - 4.167 ms
+GET /js/uiManager.js 200 13723 - 1.575 ms
+GET /js/materialManager.js 200 44251 - 5.698 ms
+GET /js/showroomManager.js 200 25323 - 5.029 ms
+GET /js/engine.js 200 7653 - 5.511 ms
+GET /js/modelLoader.js 200 11252 - 5.815 ms
+GET /viewer.html?job=TEXTEST&room=ROOM1 200 25006 - 5.166 ms
+GET /css/viewer.css?v=1880 200 37603 - 0.845 ms
+GET /js/viewer.js?v=1882 200 49593 - 0.666 ms
+GET /js/uiManager.js 200 13723 - 1.302 ms
+GET /js/materialManager.js 200 44251 - 1.218 ms
+GET /js/showroomManager.js 200 25323 - 3.448 ms
+GET /js/engine.js 200 7653 - 4.118 ms
+GET /js/modelLoader.js 200 11252 - 3.668 ms
+GET /jobs/TEXTEST/ROOM1/ROOM1.glb 200 - - 1.261 ms
+GET /viewer.html?mode=showroom 200 25006 - 0.699 ms
+GET /css/viewer.css?v=1880 200 37603 - 3.383 ms
+GET /js/viewer.js?v=1882 200 49593 - 4.163 ms
+GET /js/uiManager.js 200 13723 - 0.731 ms
+GET /js/materialManager.js 200 44251 - 10.319 ms
+GET /js/showroomManager.js 200 25323 - 10.597 ms
+GET /js/engine.js 200 7653 - 12.788 ms
+GET /js/modelLoader.js 200 11252 - 12.782 ms
+GET /viewer.html?job=TEXTEST&room=ROOM1 200 25006 - 0.847 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.064 ms
+GET /js/viewer.js?v=1882 200 49593 - 3.611 ms
+GET /js/uiManager.js 200 13723 - 0.840 ms
+GET /js/materialManager.js 200 44251 - 2.318 ms
+GET /js/showroomManager.js 200 25323 - 2.687 ms
+GET /js/engine.js 200 7653 - 7.046 ms
+GET /js/modelLoader.js 200 11252 - 6.569 ms
+GET /jobs/TEXTEST/ROOM1/ROOM1.glb 200 - - 0.920 ms
+GET /viewer.html?job=TEXTEST&room=ROOM1 200 25006 - 5.566 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.087 ms
+GET /js/viewer.js?v=1882 200 49593 - 2.495 ms
+GET /js/uiManager.js 200 13723 - 3.083 ms
+GET /js/materialManager.js 200 44251 - 2.953 ms
+GET /js/showroomManager.js 200 25323 - 3.075 ms
+GET /js/engine.js 200 7653 - 2.104 ms
+GET /js/modelLoader.js 200 11252 - 1.254 ms
+GET /jobs/TEXTEST/ROOM1/ROOM1.glb 200 - - 0.954 ms
+GET /viewer.html 200 25006 - 0.776 ms
+GET /css/viewer.css?v=1880 200 37603 - 1.267 ms
+GET /js/viewer.js?v=1882 200 49593 - 1.247 ms
+GET /js/uiManager.js 200 13723 - 18.308 ms
+GET /js/materialManager.js 200 44251 - 15.998 ms
+GET /js/showroomManager.js 200 25323 - 14.421 ms
+GET /js/engine.js 200 7653 - 12.177 ms
+GET /js/modelLoader.js 200 11252 - 12.065 ms
+GET / 200 4748 - 0.725 ms
+GET /css/index.css?v=303 200 5201 - 3.005 ms
+GET /js/index.js?v=303 200 4908 - 2.264 ms
+GET /images/kkc_logo.jpg 200 1125941 - 3.373 ms
+GET /service-worker.js 200 270 - 1.968 ms
+GET /viewer.html?job=TESTJOB&room=TESTROOM 200 25006 - 0.618 ms
+GET /css/viewer.css?v=1880 200 37603 - 2.151 ms
+GET /js/viewer.js?v=1882 200 49593 - 6.836 ms
+GET /js/uiManager.js 200 13723 - 1.424 ms
+GET /js/materialManager.js 200 44251 - 5.832 ms
+GET /js/showroomManager.js 200 25323 - 6.958 ms
+GET /js/engine.js 200 7653 - 3.921 ms
+GET /js/modelLoader.js 200 11252 - 3.898 ms
+GET /api/job/TESTJOB 200 37 - 25.384 ms
+GET /api/job/TESTJOB/TESTROOM 200 56 - 3.295 ms
+GET /jobs/TESTJOB/TESTROOM/mock.glb 200 16 - 0.806 ms
+GET /viewer.html?job=TESTJOB&room=TESTROOM 200 25006 - 0.596 ms
+GET /css/viewer.css?v=1880 200 37603 - 7.859 ms
+GET /js/viewer.js?v=1882 200 49593 - 4.875 ms
+GET /js/uiManager.js 200 13723 - 5.402 ms
+GET /js/materialManager.js 200 44251 - 1.972 ms
+GET /js/showroomManager.js 200 25323 - 2.460 ms
+GET /js/engine.js 200 7653 - 2.045 ms
+GET /js/modelLoader.js 200 11252 - 2.071 ms
+GET /api/job/TESTJOB 200 37 - 1.826 ms
+GET /api/job/TESTJOB/TESTROOM 200 56 - 2.581 ms
+GET /jobs/TESTJOB/TESTROOM/mock.glb 200 16 - 1.028 ms
+GET /viewer.html?job=TESTJOB&room=TESTROOM 200 25006 - 4.152 ms
+GET /css/viewer.css?v=1880 200 37603 - 0.604 ms
+GET /js/viewer.js?v=1882 200 49593 - 0.600 ms
+GET /js/uiManager.js 200 13723 - 2.445 ms
+GET /js/materialManager.js 200 44251 - 2.052 ms
+GET /js/showroomManager.js 200 25323 - 3.083 ms
+GET /js/engine.js 200 7653 - 3.175 ms
+GET /js/modelLoader.js 200 11252 - 3.142 ms
+GET /api/job/TESTJOB 200 37 - 2.036 ms
+GET /api/job/TESTJOB/TESTROOM 200 56 - 1.354 ms
+GET /jobs/TESTJOB/TESTROOM/mock.glb 200 16 - 1.070 ms
+GET /viewer.html?job=TESTJOB&room=TESTROOM 200 25006 - 2.604 ms
+GET /css/viewer.css?v=1880 200 37603 - 2.321 ms
+GET /js/viewer.js?v=1882 200 49593 - 2.500 ms
+GET /js/uiManager.js 200 13723 - 6.875 ms
+GET /js/materialManager.js 200 44251 - 5.655 ms
+GET /js/showroomManager.js 200 25323 - 5.567 ms
+GET /js/engine.js 200 7653 - 3.303 ms
+GET /js/modelLoader.js 200 11252 - 3.137 ms
+GET /mock.glb 404 147 - 2.928 ms
+GET /viewer.html?job=MULTI_ROOM&room=ROOM1 200 25006 - 0.615 ms
+GET /css/viewer.css?v=1880 200 37603 - 7.652 ms
+GET /js/viewer.js?v=1882 200 49593 - 7.960 ms
+GET /js/uiManager.js 200 13723 - 0.628 ms
+GET /js/materialManager.js 200 44251 - 6.162 ms
+GET /js/showroomManager.js 200 25323 - 3.991 ms
+GET /js/engine.js 200 7653 - 3.980 ms
+GET /js/modelLoader.js 200 11252 - 3.462 ms
+GET /mock.glb 404 147 - 1.455 ms
+GET /viewer.html?job=ERROR_JOB&room=ANYROOM 200 25006 - 0.612 ms
+GET /css/viewer.css?v=1880 200 37603 - 2.396 ms
+GET /js/viewer.js?v=1882 200 49593 - 0.748 ms
+GET /js/uiManager.js 200 13723 - 1.492 ms
+GET /js/materialManager.js 200 44251 - 1.468 ms
+GET /js/showroomManager.js 200 25323 - 2.823 ms
+GET /js/engine.js 200 7653 - 3.646 ms
+GET /js/modelLoader.js 200 11252 - 4.569 ms
+GET /api/job/ERROR_JOB/ANYROOM 404 17 - 1.390 ms
+GET /viewer.html?job=TESTJOB&room=TESTROOM 200 25006 - 0.745 ms
+GET /css/viewer.css?v=1880 200 37603 - 4.784 ms
+GET /js/viewer.js?v=1882 200 49593 - 3.225 ms
+GET /js/uiManager.js 200 13723 - 2.339 ms
+GET /js/materialManager.js 200 44251 - 2.734 ms
+GET /js/showroomManager.js 200 25323 - 6.826 ms
+GET /js/engine.js 200 7653 - 8.902 ms
+GET /js/modelLoader.js 200 11252 - 4.279 ms
+GET /mock.glb 404 147 - 0.526 ms
