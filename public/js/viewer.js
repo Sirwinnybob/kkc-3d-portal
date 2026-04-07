@@ -153,7 +153,7 @@ function initMaterialManager(jobCode, room) {
                             // Keep the global texture repeat neutral so the shared texture object isn't warped
                             newTex.wrapS = THREE.RepeatWrapping;
                             newTex.wrapT = THREE.RepeatWrapping;
-                            newTex.repeat.set(1, 1););
+                            newTex.repeat.set(1, 1);
                     });
 
                     if (replaceAll) {
