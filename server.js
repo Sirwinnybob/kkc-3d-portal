@@ -495,7 +495,8 @@ async function buildTextureHashIndex() {
             let dimensions = {};
             let dimsModified = false;
             try {
-                if (fs.existsSync(dimPath)) {
+                const hasDims = await fs.promises.access(dimPath).then(() => true).catch(() => false);
+                if (hasDims) {
                     dimensions = JSON.parse(await fs.promises.readFile(dimPath, "utf8"));
                 }
             } catch (e) {
@@ -550,21 +551,23 @@ async function buildTextureHashIndex() {
                         if (!isHidden) {
                             // Generate LODs
                             const lodCatDir = path.join(LOD_DIR, entry.name);
-                            if (!fs.existsSync(lodCatDir)) fs.mkdirSync(lodCatDir, { recursive: true });
+                            await fs.promises.mkdir(lodCatDir, { recursive: true });
 
                             const nameOnly = path.basename(file, ext);
                             const medPath = path.join(lodCatDir, `${nameOnly}_medium${ext}`);
                             const lowPath = path.join(lodCatDir, `${nameOnly}_low${ext}`);
 
                             // Create medium if doesn't exist
-                            if (!fs.existsSync(medPath)) {
+                            const hasMed = await fs.promises.access(medPath).then(() => true).catch(() => false);
+                            if (!hasMed) {
                                 await sharp(buffer)
                                     .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
                                     .toFile(medPath);
                             }
 
                             // Create low if doesn't exist
-                            if (!fs.existsSync(lowPath)) {
+                            const hasLow = await fs.promises.access(lowPath).then(() => true).catch(() => false);
+                            if (!hasLow) {
                                 await sharp(buffer)
                                     .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
                                     .toFile(lowPath);
@@ -596,7 +599,8 @@ async function buildTextureHashIndex() {
 
                 // 2. Process variant hashes in the 'hashes/' sub-folder in parallel (once main textures are indexed)
                 const hashFolderPath = path.join(categoryPath, 'hashes');
-                if (fs.existsSync(hashFolderPath)) {
+                const hasHashes = await fs.promises.access(hashFolderPath).then(() => true).catch(() => false);
+                if (hasHashes) {
                     // Create a Map for O(1) canonical texture lookups
                     const canonicalMap = new Map();
                     for (const t of index[entry.name]) {
