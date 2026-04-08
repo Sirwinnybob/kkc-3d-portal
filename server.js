@@ -708,6 +708,11 @@ app.get('/api/textures/:category', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid category' });
     }
 
+    const lowerCat = category.toLowerCase();
+    if (lowerCat === 'hidden' || lowerCat === 'uncategorized') {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
     const categoryPath = path.join(TEXTURES_DIR, path.basename(category));
     const rel = path.relative(TEXTURES_DIR, categoryPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -792,7 +797,8 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 
         // If no good match found, copy to Uncategorized
         const MATCH_THRESHOLD = 15; // Stricter threshold to avoid false matches
-        const isMatched = bestDistance <= MATCH_THRESHOLD;
+        // Also ensure that we don't accidentally match 0n against 0n in the catalog
+        const isMatched = bestDistance <= MATCH_THRESHOLD && inputHash !== 0n;
 
         if (!isMatched) {
             const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
