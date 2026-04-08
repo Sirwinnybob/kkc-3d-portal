@@ -112,11 +112,20 @@ export class ShowroomManager {
         if (saveConfigBtn) saveConfigBtn.onclick = () => this.saveShowroomConfig();
 
         // PIN modal close
+        const pinModal = document.getElementById('pin-modal');
         const pinModalClose = document.getElementById('pin-modal-close');
         if (pinModalClose) pinModalClose.onclick = () => {
-            document.getElementById('pin-modal').classList.remove('show');
+            if (pinModal) pinModal.classList.remove('show');
             if (saveConfigBtn) saveConfigBtn.focus();
         };
+        if (pinModal) {
+            pinModal.addEventListener('click', (e) => {
+                if (e.target === pinModal) {
+                    pinModal.classList.remove('show');
+                    if (saveConfigBtn) saveConfigBtn.focus();
+                }
+            });
+        }
 
         // PIN Copy Button
         const copyPinBtn = document.getElementById('copy-pin-btn');

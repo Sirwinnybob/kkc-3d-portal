@@ -56,6 +56,11 @@ export class UIManager {
 
         if (shareBtn) shareBtn.onclick = () => this.toggleShare(true);
         if (shareModalClose) shareModalClose.onclick = () => this.toggleShare(false);
+        if (shareModal) {
+            shareModal.addEventListener('click', (e) => {
+                if (e.target === shareModal) this.toggleShare(false);
+            });
+        }
 
         let shareCopyTimeout;
         if (copyShareLinkBtn) {
@@ -130,6 +135,11 @@ export class UIManager {
         if (helpBtn) helpBtn.onclick = () => this.toggleHelp(true);
         if (closeHelpX) closeHelpX.onclick = () => this.toggleHelp(false);
         if (closeHelpBtn) closeHelpBtn.onclick = () => this.toggleHelp(false);
+        if (helpModal) {
+            helpModal.addEventListener('click', (e) => {
+                if (e.target === helpModal) this.toggleHelp(false);
+            });
+        }
 
         if (localStorage.getItem('kkc_help_shown') !== 'true' && localStorage.getItem('kkc_tutorial_v1') === 'true') {
             this.toggleHelp(true);
