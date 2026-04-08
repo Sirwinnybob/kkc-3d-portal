@@ -1332,11 +1332,14 @@ async function sanitizeGlbSamplers(glbPath) {
             for (const mat of gltf.materials) {
                 if (mat.pbrMetallicRoughness) {
                     const pbr = mat.pbrMetallicRoughness;
-                    if (pbr.baseColorTexture && pbr.metallicFactor === undefined && pbr.roughnessFactor === undefined) {
-                        // Assimp sometimes misses these or sets defaults poorly for Lambert
-                        pbr.metallicFactor = 0.0;
-                        pbr.roughnessFactor = 0.8;
-                        modified = true;
+                    if (pbr.baseColorTexture) {
+                        // Enforce 0 metallic and 0.8 roughness for all textured materials
+                        // This counteracts SketchUp's overblown defaults and ensures wood/paint look natural
+                        if (pbr.metallicFactor !== 0.0 || pbr.roughnessFactor !== 0.8) {
+                            pbr.metallicFactor = 0.0;
+                            pbr.roughnessFactor = 0.8;
+                            modified = true;
+                        }
                     }
                 }
             }
@@ -2428,3 +2431,4 @@ module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
 module.exports.SHOWROOM_DIR = SHOWROOM_DIR;
 module.exports.hammingDistance = hammingDistance;
 module.exports.popcount32 = popcount32;
+module.exports.sanitizeGlbSamplers = sanitizeGlbSamplers;
