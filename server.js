@@ -411,6 +411,14 @@ for (let u = 0; u < DCT_N; u++) {
     DCT_C_TABLE[u] = u === 0 ? Math.sqrt(1.0 / DCT_N) : Math.sqrt(2.0 / DCT_N);
 }
 
+// Precompute combined scaling factors for 2D DCT
+const DCT_C2_TABLE = new Float64Array(DCT_N * DCT_N);
+for (let u = 0; u < DCT_N; u++) {
+    for (let v = 0; v < DCT_N; v++) {
+        DCT_C2_TABLE[u * DCT_N + v] = DCT_C_TABLE[u] * DCT_C_TABLE[v];
+    }
+}
+
 /**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
@@ -442,7 +450,7 @@ function performDCT(pixels, N) {
     const intermediate = new Float64Array(DCT_N * DCT_N);
     const dct = new Float64Array(DCT_N * DCT_N);
 
-    // DCT along rows
+    // DCT along rows (transpose the output to intermediate for contiguous second pass)
     for (let x = 0; x < DCT_N; x++) {
         const offset = x * DCT_N;
         for (let v = 0; v < DCT_N; v++) {
@@ -451,19 +459,20 @@ function performDCT(pixels, N) {
             for (let y = 0; y < DCT_N; y++) {
                 sum += pixels[offset + y] * DCT_COS_TABLE[cosOffset + y];
             }
-            intermediate[offset + v] = sum;
+            intermediate[v * DCT_N + x] = sum;
         }
     }
 
-    // DCT along columns
+    // DCT along columns (accessing intermediate contiguously now)
     for (let v = 0; v < DCT_N; v++) {
+        const intOffset = v * DCT_N;
         for (let u = 0; u < DCT_N; u++) {
             let sum = 0;
             const cosOffset = u * DCT_N;
             for (let x = 0; x < DCT_N; x++) {
-                sum += intermediate[x * DCT_N + v] * DCT_COS_TABLE[cosOffset + x];
+                sum += intermediate[intOffset + x] * DCT_COS_TABLE[cosOffset + x];
             }
-            dct[u * DCT_N + v] = DCT_C_TABLE[u] * DCT_C_TABLE[v] * sum;
+            dct[u * DCT_N + v] = DCT_C2_TABLE[u * DCT_N + v] * sum;
         }
     }
 
