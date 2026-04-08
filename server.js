@@ -2433,6 +2433,7 @@ module.exports = app;
 module.exports.cleanDae = cleanDae;
 module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
 module.exports.SHOWROOM_DIR = SHOWROOM_DIR;
+module.exports.safeShowroomPath = safeShowroomPath;
 module.exports.hammingDistance = hammingDistance;
 module.exports.popcount32 = popcount32;
 module.exports.sanitizeGlbSamplers = sanitizeGlbSamplers;
