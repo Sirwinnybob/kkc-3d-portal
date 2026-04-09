@@ -1672,7 +1672,10 @@ function safeShowroomPath(...segments) {
 
 // GET /api/showroom/part/{*path} - Serve GLB URL for a showroom part at any depth
 app.get('/api/showroom/part/{*path}', (req, res) => {
-    const deepPath = req.params.path;
+    let deepPath = req.params.path;
+    if (!deepPath) return res.status(400).json({ success: false, error: 'Invalid path' });
+    if (Array.isArray(deepPath)) deepPath = deepPath.join('/');
+
     if (!deepPath || !/\.glb$/i.test(deepPath)) return res.status(400).json({ success: false, error: 'Invalid path' });
 
     const filePath = safeShowroomPath(deepPath);
@@ -1684,7 +1687,10 @@ app.get('/api/showroom/part/{*path}', (req, res) => {
 
 // GET /api/showroom/tags/{*path} - Get tags for a showroom part at any depth
 app.get('/api/showroom/tags/{*path}', async (req, res) => {
-    const deepPath = req.params.path;
+    let deepPath = req.params.path;
+    if (!deepPath) return res.status(400).json({ success: false, error: 'Invalid path' });
+    if (Array.isArray(deepPath)) deepPath = deepPath.join('/');
+
     const baseName = path.basename(deepPath, '.glb').replace(/\.tags$/, '');
     const dir = path.dirname(deepPath);
     const tagsPath = safeShowroomPath(dir, `${baseName}.tags.json`);
@@ -1701,7 +1707,10 @@ app.get('/api/showroom/tags/{*path}', async (req, res) => {
 
 // POST /api/showroom/tags/{*path} - Save tags for a showroom part at any depth
 app.post('/api/showroom/tags/{*path}', adminAuth, express.json(), async (req, res) => {
-    const deepPath = req.params.path;
+    let deepPath = req.params.path;
+    if (!deepPath) return res.status(400).json({ success: false, error: 'Invalid path' });
+    if (Array.isArray(deepPath)) deepPath = deepPath.join('/');
+
     const baseName = path.basename(deepPath, '.glb');
     if (!/^[a-zA-Z0-9\-_ ]+$/.test(baseName)) return res.status(400).json({ success: false, error: 'Invalid file name' });
 
@@ -1775,7 +1784,10 @@ app.get('/api/showroom/config/:pin', async (req, res) => {
 
 // GET /api/showroom/meshes/{*path} - List mesh names in a GLB at any depth (for tagger)
 app.get('/api/showroom/meshes/{*path}', async (req, res) => {
-    const deepPath = req.params.path;
+    let deepPath = req.params.path;
+    if (!deepPath) return res.status(400).json({ success: false, error: 'Invalid path' });
+    if (Array.isArray(deepPath)) deepPath = deepPath.join('/');
+
     if (!deepPath || !/\.glb$/i.test(deepPath)) return res.status(400).json({ success: false, error: 'Invalid path' });
 
     const filePath = safeShowroomPath(deepPath);
