@@ -734,18 +734,24 @@ app.get('/api/textures/:category', async (req, res) => {
 
     try {
         const files = await fs.promises.readdir(categoryPath);
+
+        // Optimize metadata lookups by using a Map for O(1) access instead of O(N) array searching.
+        const catCache = textureHashCache && textureHashCache[category];
+        const cacheMap = catCache ? new Map(catCache.map(t => [t.file, t])) : null;
+
         const textures = files
             .filter(f => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(f).toLowerCase()))
             .map(f => {
                 const ext = path.extname(f);
                 const nameOnly = path.basename(f, ext);
+                const cached = cacheMap ? cacheMap.get(f) : null;
                 return {
                     name: nameOnly,
                     url: `/textures/${encodeURIComponent(category)}/${encodeURIComponent(f)}`,
                     urlMedium: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_medium' + ext)}`,
                     urlLow: `/textures/Hidden/LOD/${encodeURIComponent(category)}/${encodeURIComponent(nameOnly + '_low' + ext)}`,
-                    width: textureHashCache && textureHashCache[category] ? (textureHashCache[category].find(t => t.file === f)?.width || null) : null,
-                    height: textureHashCache && textureHashCache[category] ? (textureHashCache[category].find(t => t.file === f)?.height || null) : null
+                    width: cached ? (cached.width || null) : null,
+                    height: cached ? (cached.height || null) : null
                 };
             });
         res.json({ success: true, category, textures });
