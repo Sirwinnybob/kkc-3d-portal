@@ -519,6 +519,17 @@ async function buildTextureHashIndex() {
                 const items = await fs.promises.readdir(categoryPath, { withFileTypes: true });
                 const categoryTextures = [];
 
+                // Pre-check LOD directory and existing files once per category to avoid redundant I/O
+                let lodFilesSet = new Set();
+                if (!isHidden) {
+                    const lodCatDir = path.join(LOD_DIR, entry.name);
+                    await fs.promises.mkdir(lodCatDir, { recursive: true });
+                    try {
+                        const existingLodFiles = await fs.promises.readdir(lodCatDir);
+                        lodFilesSet = new Set(existingLodFiles);
+                    } catch (e) { /* lodCatDir might be new or empty */ }
+                }
+
                 // 1. Process main textures first in parallel
                 await Promise.all(items.map(async (item) => {
                     if (item.isDirectory()) return;
@@ -549,32 +560,29 @@ async function buildTextureHashIndex() {
                         let urlLow = null;
 
                         if (!isHidden) {
-                            // Generate LODs
                             const lodCatDir = path.join(LOD_DIR, entry.name);
-                            await fs.promises.mkdir(lodCatDir, { recursive: true });
-
                             const nameOnly = path.basename(file, ext);
-                            const medPath = path.join(lodCatDir, `${nameOnly}_medium${ext}`);
-                            const lowPath = path.join(lodCatDir, `${nameOnly}_low${ext}`);
+                            const medFile = `${nameOnly}_medium${ext}`;
+                            const lowFile = `${nameOnly}_low${ext}`;
+                            const medPath = path.join(lodCatDir, medFile);
+                            const lowPath = path.join(lodCatDir, lowFile);
 
-                            // Create medium if doesn't exist
-                            const hasMed = await fs.promises.access(medPath).then(() => true).catch(() => false);
-                            if (!hasMed) {
+                            // Create medium if doesn't exist (O(1) Set lookup replaces O(N) fs.access)
+                            if (!lodFilesSet.has(medFile)) {
                                 await sharp(buffer)
                                     .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
                                     .toFile(medPath);
                             }
 
                             // Create low if doesn't exist
-                            const hasLow = await fs.promises.access(lowPath).then(() => true).catch(() => false);
-                            if (!hasLow) {
+                            if (!lodFilesSet.has(lowFile)) {
                                 await sharp(buffer)
                                     .resize({ width: 256, height: 256, fit: 'inside', withoutEnlargement: true })
                                     .toFile(lowPath);
                             }
 
-                            urlMedium = `/textures/Hidden/LOD/${encodeURIComponent(entry.name)}/${encodeURIComponent(nameOnly + '_medium' + ext)}`;
-                            urlLow = `/textures/Hidden/LOD/${encodeURIComponent(entry.name)}/${encodeURIComponent(nameOnly + '_low' + ext)}`;
+                            urlMedium = `/textures/Hidden/LOD/${encodeURIComponent(entry.name)}/${encodeURIComponent(medFile)}`;
+                            urlLow = `/textures/Hidden/LOD/${encodeURIComponent(entry.name)}/${encodeURIComponent(lowFile)}`;
                         }
 
                         categoryTextures.push({
