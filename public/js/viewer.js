@@ -756,7 +756,11 @@ async function init() {
             const center = rect.height / 2;
             const rawInput = (center - relY) / center; 
             zoomVelocity = Math.sign(rawInput) * (rawInput * rawInput) * 0.05;
-            if (joystickHandle) joystickHandle.style.top = `${relY - 18}px`;
+            if (joystickHandle) {
+                joystickHandle.style.top = `${relY - 18}px`;
+                const percent = Math.round(((rect.height - relY) / rect.height) * 100);
+                joystickHandle.setAttribute('aria-valuenow', percent.toString());
+            }
         };
 
         if (joystickHandle) {
@@ -771,7 +775,10 @@ async function init() {
             joystickHandle.onpointerup = (e) => {
                 isDraggingJoystick = false;
                 zoomVelocity = 0;
-                if (joystickHandle) joystickHandle.style.top = (joystickContainer.offsetHeight / 2 - 18) + 'px';
+                if (joystickHandle) {
+                    joystickHandle.style.top = (joystickContainer.offsetHeight / 2 - 18) + 'px';
+                    joystickHandle.setAttribute('aria-valuenow', '50');
+                }
                 joystickHandle.releasePointerCapture(e.pointerId);
             };
         }
@@ -943,6 +950,14 @@ async function init() {
                     ? `KKC_Showroom${showroomPin ? `_${showroomPin}` : ''}.jpg`
                     : `KKC_${jobCode}_${initialRoom.replace(/ /g, '_')}.jpg`;
                 a.click();
+
+                // Trigger flash delight
+                const flash = document.getElementById('camera-flash');
+                if (flash) {
+                    flash.classList.remove('active');
+                    void flash.offsetWidth; // trigger reflow
+                    flash.classList.add('active');
+                }
 
                 updateStatus("Photo Saved", "success");
                 setTimeout(() => updateStatus(""), 3000);

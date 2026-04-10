@@ -115,7 +115,7 @@
     <!-- Zoom Joystick -->
     <div id="joystick-container">
         <div id="joystick-track"></div>
-        <div id="joystick-handle"></div>
+        <div id="joystick-handle" role="slider" aria-label="Zoom joystick handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
         <div class="joystick-label">Zoom</div>
     </div>
 
@@ -430,6 +430,7 @@
         }
     }
     </script>
+<div id="camera-flash" aria-hidden="true"></div>
 <script type="module" src="/js/viewer.js?v=1882"></script>
 </body>
 </html>
