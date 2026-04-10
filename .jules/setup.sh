@@ -22,14 +22,21 @@ if [ -d "Test Library" ]; then
 
     # Copy textures if they exist
     if [ -d "Test Library/textures" ]; then
-        cp -r "Test Library/textures/"* textures/ 2>/dev/null || true
+        # Use cp -a with . to copy all contents including hidden files
+        cp -a "Test Library/textures/." textures/ 2>/dev/null || true
+    fi
+
+    # Copy Showroom if it exists
+    if [ -d "Test Library/Showroom" ]; then
+        # Use cp -a with . to copy all contents including hidden files
+        cp -a "Test Library/Showroom/." Showroom/ 2>/dev/null || true
     fi
 
     # Loop through other items in Test Library and copy to jobs
     for item in "Test Library"/*; do
         basename_item=$(basename "$item")
-        if [ "$basename_item" != "textures" ] && [ -d "$item" ]; then
-            cp -r "$item" jobs/
+        if [ "$basename_item" != "textures" ] && [ "$basename_item" != "Showroom" ] && [ -d "$item" ]; then
+            cp -a "$item" jobs/
         fi
     done
 fi
