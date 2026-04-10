@@ -860,9 +860,6 @@ export class MaterialManager {
                     }
                     btn.classList.add('active');
                     this.qpLastTextureUrl = null;
-                    this.qpLastTextureName = hex;
-                    this.qpLastColorHex = hex;
-                    this.qpLastTextureUrl = null;
                     this.qpLastTextureName = preset.name;
                     this.qpLastColorHex = preset.hex;
                 }
