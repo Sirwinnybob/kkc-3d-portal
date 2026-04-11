@@ -802,8 +802,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         const allMatches = [];
 
         for (let i = 0; i < _flatLibrary.length; i++) {
-            const distance = popcount32((inLow ^ _flatLow[i]) >>> 0) +
-                             popcount32((inHigh ^ _flatHigh[i]) >>> 0);
+            const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
 
             // Track absolute best match including hidden ones
             if (distance < bestDistance) {
@@ -1006,8 +1005,7 @@ async function extractTexturesFromGlb(glbPath) {
 
         const { _flatLow, _flatHigh } = index;
         for (let i = 0; i < _flatLow.length; i++) {
-            const distance = popcount32((inLow ^ _flatLow[i]) >>> 0) +
-                             popcount32((inHigh ^ _flatHigh[i]) >>> 0);
+            const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
             if (distance <= 15) {
                 isMatched = true;
                 break;
@@ -1080,8 +1078,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
 
                 const { _flatLow, _flatHigh } = index;
                 for (let i = 0; i < _flatLow.length; i++) {
-                    const distance = popcount32((inLow ^ _flatLow[i]) >>> 0) +
-                                     popcount32((inHigh ^ _flatHigh[i]) >>> 0);
+                    const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
                     if (distance <= 15) {
                         isMatched = true;
                         break;
@@ -1171,8 +1168,7 @@ async function generateTextureManifest(glbPath) {
 
                         // Optimized Hamming distance loop using TypedArrays and SWAR popcount
                         for (let i = 0; i < flatLibrary.length; i++) {
-                            const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
-                                             popcount32((inHigh ^ flatHigh[i]) >>> 0);
+                            const distance = hammingDistance(inLow, inHigh, flatLow[i], flatHigh[i]);
 
                             if (distance < bestDistance) {
                                 bestDistance = distance;
