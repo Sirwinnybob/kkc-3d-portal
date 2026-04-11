@@ -82,14 +82,22 @@ button:hover { background: #0056b3; }
     height: 100%;
     background: rgba(0, 0, 0, 0.8); /* Semi-transparent black */
     backdrop-filter: blur(5px); /* Modern blur effect */
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     z-index: 10000;
     padding: 20px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s;
 }
 
-.modal-overlay.show { display: flex; }
+.modal-overlay.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
 
 .disclaimer-content {
     background: rgba(255, 255, 255, 0.98);
@@ -102,6 +110,12 @@ button:hover { background: #0056b3; }
     border-radius: 20px;
     box-shadow: 0 30px 60px rgba(0,0,0,0.6);
     overflow: hidden; /* Contains the internal scrolling */
+    transform: scale(0.9) translateY(10px);
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.modal-overlay.show .disclaimer-content {
+    transform: scale(1) translateY(0);
 }
 
 .disclaimer-content h2 {

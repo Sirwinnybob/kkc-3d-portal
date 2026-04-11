@@ -132,7 +132,27 @@ document.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') checkJob();
         });
+        input.addEventListener('input', () => {
+            const errorMsg = document.getElementById('errorMsg');
+            if (errorMsg) errorMsg.style.display = 'none';
+        });
     }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const disclaimerModal = document.getElementById('disclaimer-modal');
+            const roomContainer = document.getElementById('room-container');
+
+            if (disclaimerModal && disclaimerModal.classList.contains('show')) {
+                disclaimerModal.classList.remove('show');
+                const checkBtn = document.getElementById('btnCheckJob');
+                if (checkBtn) checkBtn.focus();
+            } else if (roomContainer && roomContainer.style.display === 'block') {
+                backToLogin();
+                if (input) input.focus();
+            }
+        }
+    });
 
     // --- SHOWROOM ---
     const showroomBtn = document.getElementById('btnShowroom');
