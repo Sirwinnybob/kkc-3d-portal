@@ -142,4 +142,26 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = '/viewer.html?mode=showroom';
         });
     }
+
+    const disclaimerModal = document.getElementById('disclaimer-modal');
+    if (disclaimerModal) {
+        disclaimerModal.addEventListener('click', (e) => {
+            if (e.target === disclaimerModal) {
+                disclaimerModal.classList.remove('show');
+            }
+        });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const disclaimerModal = document.getElementById('disclaimer-modal');
+            const roomContainer = document.getElementById('room-container');
+
+            if (disclaimerModal && disclaimerModal.classList.contains('show')) {
+                disclaimerModal.classList.remove('show');
+            } else if (roomContainer && roomContainer.style.display === 'block') {
+                backToLogin();
+            }
+        }
+    });
 });
