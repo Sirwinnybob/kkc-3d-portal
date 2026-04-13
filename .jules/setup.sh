@@ -44,4 +44,7 @@ fi
 # Run tests using the native Node test runner as mandated by memory
 node --test test/*.js test/*.test.js
 
+# Clean up test data directories to keep the git working tree clean
+rm -rf jobs textures Showroom
+
 echo "Environment setup complete!"
