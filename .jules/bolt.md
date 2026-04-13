@@ -45,3 +45,7 @@
 ## 2026-04-09 - [Optimizing Texture Category Listing with O(1) Map Lookups]
 **Learning:** Using `Array.prototype.find()` inside a `.map()` loop for metadata lookups creates an O(N²) bottleneck that degrades linearly as the library grows. For a category with 1000 textures, this resulted in a measurable ~30x slowdown in API response time.
 **Action:** Always use a `Map` or object-based lookup for matching metadata by key (like filenames) within loops to ensure O(N) complexity and consistent performance regardless of data size.
+
+## 2026-04-16 - [Redundant Data Conversion and Allocation in Bitwise Hot Paths]
+**Learning:** In V8, passing a `Uint8Array` (or `Buffer`) directly to a function that expects a numeric array allows the engine to handle access efficiently without manual copying. Furthermore, repeated allocation of `TypedArray`s inside high-frequency synchronous functions (like 2D DCT during batch hashing) triggers frequent GC cycles that degrade performance. Manually inlining complex bitwise logic can sometimes hinder V8's optimization heuristics (like Function Inlining or SIMD mapping), leading to surprising regressions.
+**Action:** Avoid manual data copying between buffers and JS arrays in hot paths. Use pre-allocated shared buffers for synchronous heavy computations. Trust the engine's ability to inline simple bitwise helpers (like `popcount32`) rather than manually unrolling them unless profiling proves a win.

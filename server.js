@@ -364,11 +364,8 @@ async function computePhash(imageBuffer) {
             .raw()
             .toBuffer({ resolveWithObject: true });
 
-        const pixels = new Float64Array(32 * 32);
-        for (let i = 0; i < 32 * 32; i++) pixels[i] = data[i];
-
         // 2D Discrete Cosine Transform (DCT)
-        const dct = performDCT(pixels, 32);
+        const dct = performDCT(data, 32);
 
         // Extract the top-left 8x8 coefficients (excluding DC at [0,0])
         const subMatrix = [];
@@ -419,6 +416,12 @@ for (let u = 0; u < DCT_N; u++) {
     }
 }
 
+// Pre-allocated shared buffers for 32x32 DCT to reduce GC pressure.
+// NOTE: This function is non-reentrant. It MUST remain synchronous to avoid
+// race conditions on these shared buffers between concurrent calls.
+const SHARED_DCT_INTERMEDIATE = new Float64Array(DCT_N * DCT_N);
+const SHARED_DCT_OUTPUT = new Float64Array(DCT_N * DCT_N);
+
 /**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
@@ -447,8 +450,8 @@ function performDCT(pixels, N) {
         return dct;
     }
 
-    const intermediate = new Float64Array(DCT_N * DCT_N);
-    const dct = new Float64Array(DCT_N * DCT_N);
+    const intermediate = SHARED_DCT_INTERMEDIATE;
+    const dct = SHARED_DCT_OUTPUT;
 
     // DCT along rows (transpose the output to intermediate for contiguous second pass)
     for (let x = 0; x < DCT_N; x++) {
@@ -701,18 +704,7 @@ async function buildTextureHashIndex() {
 // GET /api/textures - List all categories
 app.get('/api/textures', async (req, res) => {
     try {
-        const dimPath = path.join(TEXTURES_DIR, "texture_dimensions.json");
-            let dimensions = {};
-            let dimsModified = false;
-            try {
-                if (fs.existsSync(dimPath)) {
-                    dimensions = JSON.parse(await fs.promises.readFile(dimPath, "utf8"));
-                }
-            } catch (e) {
-                console.error(`[Texture] Error reading dimensions: ${e.message}`);
-            }
-
-            const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
+        const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
         const categories = entries
             .filter(e => e.isDirectory() && e.name !== 'Uncategorized' && e.name !== 'Hidden')
             .map(e => e.name);
