@@ -73,6 +73,10 @@ function proceedAfterDisclaimer() {
     }
 
     document.getElementById('disclaimer-modal').classList.remove('show');
+
+    // Return focus to check button after dismissing
+    const checkBtn = document.getElementById('btnCheckJob');
+    if (checkBtn) checkBtn.focus();
     
     if (pendingRedirectUrl) {
         window.location.href = pendingRedirectUrl;
@@ -108,6 +112,10 @@ function showRoomSelection(rooms) {
 function backToLogin() {
     document.getElementById('room-container').style.display = 'none';
     document.getElementById('login-container').style.display = 'block';
+
+    // Return focus to check button after backing out
+    const checkBtn = document.getElementById('btnCheckJob');
+    if (checkBtn) checkBtn.focus();
 }
 
 // Register Service Worker for PWA
@@ -119,6 +127,31 @@ if ('serviceWorker' in navigator) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Global Escape Key Listener
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const disclaimerModal = document.getElementById('disclaimer-modal');
+            if (disclaimerModal && disclaimerModal.classList.contains('show')) {
+                proceedAfterDisclaimer();
+            } else {
+                const roomContainer = document.getElementById('room-container');
+                if (roomContainer && roomContainer.style.display === 'block') {
+                    backToLogin();
+                }
+            }
+        }
+    });
+
+    // Backdrop click for disclaimer modal
+    const disclaimerModal = document.getElementById('disclaimer-modal');
+    if (disclaimerModal) {
+        disclaimerModal.addEventListener('click', (e) => {
+            if (e.target === disclaimerModal) {
+                proceedAfterDisclaimer();
+            }
+        });
+    }
+
     const checkBtn = document.getElementById('btnCheckJob');
     const backBtn = document.getElementById('btnBackToLogin');
     const acceptBtn = document.getElementById('btnAcceptDisclaimer');
