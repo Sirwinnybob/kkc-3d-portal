@@ -300,15 +300,17 @@ export class MaterialManager {
 
         if (!manifestLoaded) {
             this.onStatusUpdate(`Matching ${texturedMaterials.length} textures...`);
-            for (let i = 0; i < texturedMaterials.length; i++) {
-                const mat = texturedMaterials[i];
+            await Promise.all(texturedMaterials.map(async (mat) => {
                 try {
                     await this.matchTexture(mat);
                 } catch (e) {
                     console.error("Match error:", e);
                 }
-                if (this.texturePanel.classList.contains('show')) this.renderMaterialList();
-            }
+                // Re-render asynchronously to avoid blocking the parallel execution
+                requestAnimationFrame(() => {
+                    if (this.texturePanel.classList.contains('show')) this.renderMaterialList();
+                });
+            }));
         }
 
         this.isMatchingAll = false;
@@ -507,19 +509,25 @@ export class MaterialManager {
         const img = mat.originalMap.image;
         if (!img) return null;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.min(img.width || 256, 256);
-        canvas.height = Math.min(img.height || 256, 256);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        // Cache the match promise on the image object to prevent redundant encoding/fetching for shared textures
+        if (!img._matchPromise) {
+            img._matchPromise = (async () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.min(img.width || 256, 256);
+                canvas.height = Math.min(img.height || 256, 256);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
 
-        const resp = await fetch('/api/textures/match', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageData, jobCode: this.jobCode, room: this.room, materialName: mat.name })
-        });
-        const data = await resp.json();
+                const resp = await fetch('/api/textures/match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageData, jobCode: this.jobCode, room: this.room, materialName: mat.name })
+                });
+                return await resp.json();
+            })();
+        }
+        const data = await img._matchPromise;
 
         if (data.success && data.matched) {
             mat.matchedName = data.bestMatch ? data.bestMatch.name : null;
