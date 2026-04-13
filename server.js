@@ -778,6 +778,12 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
     if (room && (typeof room !== 'string' || room.length > 50)) room = room.toString().slice(0, 50);
     if (materialName && (typeof materialName !== 'string' || materialName.length > 50)) materialName = materialName.toString().slice(0, 50);
 
+    // Security: Reject path traversal or null-byte injection in metadata fields
+    const hasDangerousChars = (s) => s && (s.includes('..') || s.includes('/') || s.includes('\\') || s.includes('\0'));
+    if (hasDangerousChars(jobCode) || hasDangerousChars(room)) {
+        return res.json({ success: true, matched: false, bestMatch: null, bestCategory: null, isHidden: false, distance: Infinity, similarTextures: [] });
+    }
+
     if (!imageData) {
         return res.status(400).json({ success: false, error: 'No image data provided' });
     }
