@@ -369,10 +369,10 @@ async function computePhash(imageBuffer) {
 
         // Extract the top-left 8x8 coefficients (excluding DC at [0,0])
         const subMatrix = [];
-        for (let y = 0; y < 8; y++) {
-            for (let x = 0; x < 8; x++) {
+        for (let y = 0; y < HASH_SIZE; y++) {
+            for (let x = 0; x < HASH_SIZE; x++) {
                 if (x === 0 && y === 0) continue;
-                subMatrix.push(dct[y * 32 + x]);
+                subMatrix.push(dct[y * DCT_N + x]);
             }
         }
 
@@ -398,6 +398,7 @@ async function computePhash(imageBuffer) {
 
 // Precomputed cosine and scaling factor tables for DCT-II (N=32)
 const DCT_N = 32;
+const HASH_SIZE = 8;
 const DCT_COS_TABLE = new Float64Array(DCT_N * DCT_N);
 const DCT_C_TABLE = new Float64Array(DCT_N);
 
@@ -425,6 +426,7 @@ const SHARED_DCT_OUTPUT = new Float64Array(DCT_N * DCT_N);
 /**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
+ * Further optimized to only compute the top-left 8x8 coefficients needed for hashing.
  */
 function performDCT(pixels, N) {
     if (N !== DCT_N) {
@@ -453,12 +455,12 @@ function performDCT(pixels, N) {
     const intermediate = SHARED_DCT_INTERMEDIATE;
     const dct = SHARED_DCT_OUTPUT;
 
-    // DCT along rows (transpose the output to intermediate for contiguous second pass)
-    for (let x = 0; x < DCT_N; x++) {
-        const offset = x * DCT_N;
-        for (let v = 0; v < DCT_N; v++) {
+    // Optimized: Only compute frequencies 0 to HASH_SIZE-1 (8), and improve cache locality
+    for (let v = 0; v < HASH_SIZE; v++) {
+        const cosOffset = v * DCT_N;
+        for (let x = 0; x < DCT_N; x++) {
+            const offset = x * DCT_N;
             let sum = 0;
-            const cosOffset = v * DCT_N;
             for (let y = 0; y < DCT_N; y++) {
                 sum += pixels[offset + y] * DCT_COS_TABLE[cosOffset + y];
             }
@@ -466,12 +468,11 @@ function performDCT(pixels, N) {
         }
     }
 
-    // DCT along columns (accessing intermediate contiguously now)
-    for (let v = 0; v < DCT_N; v++) {
-        const intOffset = v * DCT_N;
-        for (let u = 0; u < DCT_N; u++) {
+    for (let u = 0; u < HASH_SIZE; u++) {
+        const cosOffset = u * DCT_N;
+        for (let v = 0; v < HASH_SIZE; v++) {
+            const intOffset = v * DCT_N;
             let sum = 0;
-            const cosOffset = u * DCT_N;
             for (let x = 0; x < DCT_N; x++) {
                 sum += intermediate[intOffset + x] * DCT_COS_TABLE[cosOffset + x];
             }
