@@ -3,6 +3,7 @@ import { MaterialManager } from './materialManager.js';
 import { ShowroomManager } from './showroomManager.js';
 import { CoreEngine } from './engine.js';
 import { loadModel } from './modelLoader.js';
+import { escapeHtml } from './utils.js';
 // Resolved via importmap in viewer.html
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -11,16 +12,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-
-function escapeHtml(unsafe) {
-    if (!unsafe || typeof unsafe !== 'string') return unsafe;
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
 let scene, camera, renderer, controls, composer, kkcShader, fxaaPass, engine;
 window.scene = scene;

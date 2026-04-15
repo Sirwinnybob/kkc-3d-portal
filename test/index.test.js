@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const indexJsPath = path.join(__dirname, '../public/js/index.js');
-const indexJsContent = fs.readFileSync(indexJsPath, 'utf8');
+const indexJsContent = fs.readFileSync(indexJsPath, 'utf8').replace("import { escapeHtml } from './utils.js';", '');
 
 test('frontend index.js proceedAfterDisclaimer', async (t) => {
     let dom;
@@ -26,6 +26,9 @@ test('frontend index.js proceedAfterDisclaimer', async (t) => {
             runScripts: 'dangerously',
             url: 'http://localhost/'
         });
+
+        // Mock escapeHtml if needed (though it might not be used in proceedAfterDisclaimer)
+        dom.window.escapeHtml = (s) => s;
 
         // Mock localStorage
         let store = {};

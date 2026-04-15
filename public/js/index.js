@@ -1,16 +1,8 @@
+import { escapeHtml } from './utils.js';
+
 let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
-
-function escapeHtml(unsafe) {
-    if (!unsafe || typeof unsafe !== 'string') return unsafe;
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
 async function checkJob() {
     const code = document.getElementById('jobCode').value.trim();
