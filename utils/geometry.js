@@ -51,25 +51,49 @@ function parseIndices(text, stride) {
 }
 
 /**
- * Ear-clipping triangulation of a simple polygon given as an array of index tuples.
- * Returns an array of triangle tuples [[a,b,c], ...].
+ * Ear-clipping triangulation of a simple polygon.
+ * Supports flat coordinate arrays [x,y,x,y...] or nested arrays [[x,y],...].
+ * Returns an array of triangles [[a,b,c], ...].
  * @param {any[]} ring
  * @returns {any[][]}
  */
 function earClip(ring) {
-    const n = ring.length;
+    if (!ring || ring.length === 0) return [];
+
+    let pts = [];
+    let items = [];
+
+    // Handle flat array [x,y,x,y...]
+    if (typeof ring[0] === 'number' && ring.length >= 6) {
+        for (let i = 0; i < ring.length; i += 2) {
+            pts.push([ring[i], ring[i + 1]]);
+        }
+        items = pts;
+    } else {
+        // Handle nested arrays or objects
+        pts = ring.map(p => {
+            if (Array.isArray(p)) return [p[0], p[1]];
+            if (p && typeof p.x === 'number') return [p.x, p.y];
+            return [0, 0];
+        });
+        items = ring;
+    }
+
+    const n = pts.length;
     if (n < 3) return [];
-    if (n === 3) return [[ring[0], ring[1], ring[2]]];
+    if (n === 3) return [[items[0], items[1], items[2]]];
 
-    // Map each ring position to a point on a unit circle so that vertices are
-    // never collinear, cross products are always well-defined, and the winding
-    // order (CCW) is guaranteed for a convex ring laid out this way.
-    const pts = ring.map((_, i) => [
-        Math.cos(2 * Math.PI * i / n),
-        Math.sin(2 * Math.PI * i / n)
-    ]);
+    let active = Array.from({ length: n }, (_, i) => i);
 
-    const active = ring.map((_, i) => i); // indices into ring[] / pts[]
+    // Ensure counter-clockwise winding (Shoelace formula: area < 0 is CCW)
+    let area = 0;
+    for (let i = 0; i < n; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % n];
+        area += (p2[0] - p1[0]) * (p2[1] + p1[1]);
+    }
+    if (area > 0) active.reverse();
+
     const triangles = [];
     let guard = active.length * active.length; // O(n²) worst case
     let i = 0;
@@ -80,14 +104,14 @@ function earClip(ring) {
         const ni = (i + 1) % len;
         const prev = active[pi], curr = active[ci], next = active[ni];
         if (isEar(pts, active, prev, curr, next)) {
-            triangles.push([ring[prev], ring[curr], ring[next]]);
+            triangles.push([items[prev], items[curr], items[next]]);
             active.splice(ci, 1);
             i = ci % active.length;
         } else {
             i = (i + 1) % active.length;
         }
     }
-    if (active.length === 3) triangles.push([ring[active[0]], ring[active[1]], ring[active[2]]]);
+    if (active.length === 3) triangles.push([items[active[0]], items[active[1]], items[active[2]]]);
     return triangles;
 }
 

@@ -1,6 +1,56 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { cross2d, parseIndices, bridgeHole } = require('../utils/geometry');
+const { cross2d, parseIndices, bridgeHole, earClip } = require('../utils/geometry');
+
+test('earClip utility function', async (t) => {
+    await t.test('returns empty array for less than 3 points', () => {
+        assert.deepStrictEqual(earClip([]), []);
+        assert.deepStrictEqual(earClip([[0, 0]]), []);
+        assert.deepStrictEqual(earClip([[0, 0], [1, 0]]), []);
+    });
+
+    await t.test('triangulates a simple triangle', () => {
+        const ring = [[0, 0], [10, 0], [0, 10]];
+        const result = earClip(ring);
+        assert.strictEqual(result.length, 1);
+        assert.deepStrictEqual(result[0], [[0, 0], [10, 0], [0, 10]]);
+    });
+
+    await t.test('triangulates a simple square (nested array)', () => {
+        const ring = [[0, 0], [10, 0], [10, 10], [0, 10]];
+        const result = earClip(ring);
+        // A square should be 2 triangles
+        assert.strictEqual(result.length, 2);
+        // The algorithm returns triangles that use the original elements
+        assert.deepStrictEqual(result[0], [[0, 10], [0, 0], [10, 0]]);
+        assert.deepStrictEqual(result[1], [[10, 0], [10, 10], [0, 10]]);
+    });
+
+    await t.test('triangulates a simple square (flat array)', () => {
+        const ring = [0, 0, 10, 0, 10, 10, 0, 10];
+        const result = earClip(ring);
+        assert.strictEqual(result.length, 2);
+        assert.deepStrictEqual(result[0], [[0, 10], [0, 0], [10, 0]]);
+        assert.deepStrictEqual(result[1], [[10, 0], [10, 10], [0, 10]]);
+    });
+
+    await t.test('handles clockwise winding order by reversing', () => {
+        const ring = [[0, 0], [0, 10], [10, 10], [10, 0]]; // CW
+        const result = earClip(ring);
+        assert.strictEqual(result.length, 2);
+        // Verify triangles are valid by checking their coordinates
+        // The algorithm produces valid triangles for the reversed CCW ring
+        assert.deepStrictEqual(result[0], [[0, 0], [10, 0], [10, 10]]);
+        assert.deepStrictEqual(result[1], [[10, 10], [0, 10], [0, 0]]);
+    });
+
+    await t.test('handles object-based vertices {x, y}', () => {
+        const ring = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }];
+        const result = earClip(ring);
+        assert.strictEqual(result.length, 2);
+        assert.deepStrictEqual(result[0], [{ x: 0, y: 10 }, { x: 0, y: 0 }, { x: 10, y: 0 }]);
+    });
+});
 
 test('parseIndices utility function', async (t) => {
     await t.test('parses a simple space-delimited string with stride 1', () => {
