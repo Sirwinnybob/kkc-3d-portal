@@ -873,8 +873,13 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
     try {
         const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
-        if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+        try {
+            await fs.promises.access(uncategorizedDir);
+        } catch {
+            await fs.promises.mkdir(uncategorizedDir, { recursive: true });
+        }
 
+        const existingTextures = new Set(await fs.promises.readdir(uncategorizedDir));
         let extracted = 0;
         const errors = [];
 
@@ -930,8 +935,9 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
                         const destPath = path.join(uncategorizedDir, file);
 
                         // Avoid duplicates
-                        if (!fs.existsSync(destPath)) {
+                        if (!existingTextures.has(file)) {
                             await fs.promises.copyFile(srcPath, destPath);
+                            existingTextures.add(file);
                             extracted++;
                             console.log(`[Texture Scan] Extracted: ${file}`);
                         }
