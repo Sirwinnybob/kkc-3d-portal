@@ -1,3 +1,5 @@
+import { escapeHtml } from './utils.js';
+
 export class MaterialManager {
     constructor(config) {
         this.detectedMaterials = config.detectedMaterials || [];
@@ -42,16 +44,6 @@ export class MaterialManager {
 
         this.initDOM();
         this.bindEvents();
-    }
-
-    escapeHtml(unsafe) {
-        if (!unsafe || typeof unsafe !== 'string') return unsafe;
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
     }
 
     initDOM() {
@@ -422,7 +414,7 @@ export class MaterialManager {
             <div class="material-item-left">
                 ${previewHtml}
                 <div class="material-info">
-                    <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
+                    <span class="material-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
                     <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
                 </div>
             </div>
@@ -467,7 +459,7 @@ export class MaterialManager {
             <div class="material-item-left">
                 ${previewHtml}
                 <div class="material-info">
-                    <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
+                    <span class="material-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
                     <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
                 </div>
             </div>
@@ -722,8 +714,8 @@ export class MaterialManager {
             const btn = document.createElement('button');
             btn.className = 'texture-thumb';
             btn.dataset.search = (tex.name || '').toLowerCase();
-            btn.setAttribute('aria-label', `Select texture ${this.escapeHtml(tex.name)}`);
-            btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
+            btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
+            btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
             btn.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                 indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height));
@@ -858,7 +850,7 @@ export class MaterialManager {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
             btn.dataset.search = (preset.name || '').toLowerCase();
-            btn.innerHTML = `<div class="color-swatch" style="background-color:${this.escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${this.escapeHtml(preset.name)}</span>`;
+            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
             btn.addEventListener('click', () => {
                 if (this.qpMatGroupIndex >= 0) {
                     this.onApplyColor(this.qpMatGroupIndex, preset.hex, this.qpTappedMesh, this.qpReplaceAll);
@@ -880,7 +872,7 @@ export class MaterialManager {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
             btn.dataset.search = (hex || '').toLowerCase();
-            btn.innerHTML = `<div class="color-swatch" style="background-color:${this.escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${this.escapeHtml(hex)}</span>`;
+            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
             btn.addEventListener('click', () => {
                 if (this.qpMatGroupIndex >= 0) {
                     this.onApplyColor(this.qpMatGroupIndex, hex, this.qpTappedMesh, this.qpReplaceAll);
@@ -937,7 +929,7 @@ export class MaterialManager {
             btn.className = 'qp-tex-item';
             btn.dataset.search = (tex.name || '').toLowerCase();
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
-            btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
+            btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
             btn.addEventListener('click', () => {
                 this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll, tex.width, tex.height);
 
