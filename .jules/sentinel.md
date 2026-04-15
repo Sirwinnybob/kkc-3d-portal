@@ -12,3 +12,8 @@
 **Vulnerability:** Express routing endpoints using wildcard parameters (`{*path}`) alongside `path-to-regexp` v8 return arrays instead of strings. Passing these arrays directly to string-only functions like `path.join` or `path.basename` inside an un-awaited `async` route handler throws a synchronous `TypeError`, leading to an Unhandled Promise Rejection and crashing the entire Node.js application (DoS).
 **Learning:** In modern Node.js environments (v15+), unhandled promise rejections are fatal. Express 4 does not automatically catch synchronous errors in `async` route handlers. Therefore, parameter types must be explicitly validated or normalized before being passed to strict native APIs.
 **Prevention:** Always validate parameter types in async routes. Specifically, check `if (!path)` and handle arrays `if (Array.isArray(path)) path = path.join('/')` when working with wildcard paths in Express.
+
+## 2024-11-05 - [Brute-force Vulnerability on Short PINs]
+**Vulnerability:** The `/api/showroom/config/:pin` endpoint lacked specific rate limiting, allowing an attacker to brute-force the 5-digit (100k combinations) PINs to gain unauthorized access to saved showroom configurations.
+**Learning:** Short, numeric identifiers like PINs are highly susceptible to brute-force attacks if not protected by aggressive rate limiting. Generic API limiters (e.g., 100 req/15 min) are often too permissive for such small search spaces.
+**Prevention:** Implement strict, endpoint-specific rate limiting (e.g., 10 req/15 min) for any resource identified by a short, guessable secret. This forces the attack time to exceed the practical window of exploitation.

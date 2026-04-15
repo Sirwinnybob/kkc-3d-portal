@@ -139,6 +139,15 @@ const configLimiter = rateLimit({
     message: { success: false, error: 'Too many configuration attempts, please try again later.' }
 });
 
+// Strict rate limiter for showroom config retrieval to prevent PIN brute-forcing
+const configGetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 10, // Limit each IP to 10 requests per `window`
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many retrieval attempts, please try again later.' }
+});
+
 app.get('/api/job/:code', async (req, res) => {
     const code = req.params.code;
 
@@ -1778,7 +1787,7 @@ app.post('/api/showroom/config', configLimiter, express.json({ limit: '1mb' }), 
 });
 
 // GET /api/showroom/config/:pin - Load a saved showroom configuration
-app.get('/api/showroom/config/:pin', async (req, res) => {
+app.get('/api/showroom/config/:pin', configGetLimiter, async (req, res) => {
     const pin = req.params.pin;
 
     // Validate PIN format
