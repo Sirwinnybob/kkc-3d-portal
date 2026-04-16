@@ -377,23 +377,26 @@ async function computePhash(imageBuffer) {
         const dct = performDCT(data, 32);
 
         // Extract the top-left 8x8 coefficients (excluding DC at [0,0])
-        const subMatrix = [];
+        // Using shared buffers for the synchronous portion to avoid allocations
+        const subMatrix = SHARED_PHASH_SUBMATRIX;
+        let idx = 0;
         for (let y = 0; y < HASH_SIZE; y++) {
+            const rowOffset = y * DCT_N;
             for (let x = 0; x < HASH_SIZE; x++) {
                 if (x === 0 && y === 0) continue;
-                subMatrix.push(dct[y * DCT_N + x]);
+                subMatrix[idx++] = dct[rowOffset + x];
             }
         }
 
-        // Calculate median of coefficients
-        const sorted = [...subMatrix].sort((a, b) => a - b);
-        const median = sorted.length % 2 === 0
-            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-            : sorted[Math.floor(sorted.length / 2)];
+        // Calculate median of coefficients (63 elements)
+        const sorted = SHARED_PHASH_SORTED;
+        sorted.set(subMatrix);
+        sorted.sort();
+        const median = sorted[31]; // Median of 63 elements is the 32nd (index 31)
 
         // Generate 64-bit BigInt hash
         let hash = 0n;
-        for (let i = 0; i < subMatrix.length; i++) {
+        for (let i = 0; i < 63; i++) {
             if (subMatrix[i] > median) {
                 hash |= (1n << BigInt(i));
             }
@@ -431,11 +434,15 @@ for (let u = 0; u < DCT_N; u++) {
 // race conditions on these shared buffers between concurrent calls.
 const SHARED_DCT_INTERMEDIATE = new Float64Array(DCT_N * DCT_N);
 const SHARED_DCT_OUTPUT = new Float64Array(DCT_N * DCT_N);
+// Pre-allocated buffers for perceptual hashing to reduce GC pressure
+const SHARED_PHASH_SUBMATRIX = new Float64Array(HASH_SIZE * HASH_SIZE - 1);
+const SHARED_PHASH_SORTED = new Float64Array(HASH_SIZE * HASH_SIZE - 1);
 
 /**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
  * Further optimized to only compute the top-left 8x8 coefficients needed for hashing.
+ * Loop-unrolled to reduce overhead and improve instruction-level parallelism.
  */
 function performDCT(pixels, N) {
     if (N !== DCT_N) {
@@ -464,29 +471,54 @@ function performDCT(pixels, N) {
     const intermediate = SHARED_DCT_INTERMEDIATE;
     const dct = SHARED_DCT_OUTPUT;
 
-    // Optimized: Only compute frequencies 0 to HASH_SIZE-1 (8), and improve cache locality
-    for (let v = 0; v < HASH_SIZE; v++) {
-        const cosOffset = v * DCT_N;
-        for (let x = 0; x < DCT_N; x++) {
-            const offset = x * DCT_N;
-            let sum = 0;
-            for (let y = 0; y < DCT_N; y++) {
-                sum += pixels[offset + y] * DCT_COS_TABLE[cosOffset + y];
-            }
-            intermediate[v * DCT_N + x] = sum;
+    // First pass: Only compute frequencies 0-7, unrolled to avoid inner loop overhead
+    for (let x = 0; x < DCT_N; x++) {
+        const offset = x * DCT_N;
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, s5 = 0, s6 = 0, s7 = 0;
+        for (let y = 0; y < DCT_N; y++) {
+            const p = pixels[offset + y];
+            s0 += p * DCT_COS_TABLE[0 * 32 + y];
+            s1 += p * DCT_COS_TABLE[1 * 32 + y];
+            s2 += p * DCT_COS_TABLE[2 * 32 + y];
+            s3 += p * DCT_COS_TABLE[3 * 32 + y];
+            s4 += p * DCT_COS_TABLE[4 * 32 + y];
+            s5 += p * DCT_COS_TABLE[5 * 32 + y];
+            s6 += p * DCT_COS_TABLE[6 * 32 + y];
+            s7 += p * DCT_COS_TABLE[7 * 32 + y];
         }
+        intermediate[0 * 32 + x] = s0;
+        intermediate[1 * 32 + x] = s1;
+        intermediate[2 * 32 + x] = s2;
+        intermediate[3 * 32 + x] = s3;
+        intermediate[4 * 32 + x] = s4;
+        intermediate[5 * 32 + x] = s5;
+        intermediate[6 * 32 + x] = s6;
+        intermediate[7 * 32 + x] = s7;
     }
 
-    for (let u = 0; u < HASH_SIZE; u++) {
-        const cosOffset = u * DCT_N;
-        for (let v = 0; v < HASH_SIZE; v++) {
-            const intOffset = v * DCT_N;
-            let sum = 0;
-            for (let x = 0; x < DCT_N; x++) {
-                sum += intermediate[intOffset + x] * DCT_COS_TABLE[cosOffset + x];
-            }
-            dct[u * DCT_N + v] = DCT_C2_TABLE[u * DCT_N + v] * sum;
+    // Second pass: Compute final 8x8 coefficients
+    for (let v = 0; v < HASH_SIZE; v++) {
+        const intOffset = v * DCT_N;
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, s5 = 0, s6 = 0, s7 = 0;
+        for (let x = 0; x < DCT_N; x++) {
+            const ivx = intermediate[intOffset + x];
+            s0 += ivx * DCT_COS_TABLE[0 * 32 + x];
+            s1 += ivx * DCT_COS_TABLE[1 * 32 + x];
+            s2 += ivx * DCT_COS_TABLE[2 * 32 + x];
+            s3 += ivx * DCT_COS_TABLE[3 * 32 + x];
+            s4 += ivx * DCT_COS_TABLE[4 * 32 + x];
+            s5 += ivx * DCT_COS_TABLE[5 * 32 + x];
+            s6 += ivx * DCT_COS_TABLE[6 * 32 + x];
+            s7 += ivx * DCT_COS_TABLE[7 * 32 + x];
         }
+        dct[0 * 32 + v] = DCT_C2_TABLE[0 * 32 + v] * s0;
+        dct[1 * 32 + v] = DCT_C2_TABLE[1 * 32 + v] * s1;
+        dct[2 * 32 + v] = DCT_C2_TABLE[2 * 32 + v] * s2;
+        dct[3 * 32 + v] = DCT_C2_TABLE[3 * 32 + v] * s3;
+        dct[4 * 32 + v] = DCT_C2_TABLE[4 * 32 + v] * s4;
+        dct[5 * 32 + v] = DCT_C2_TABLE[5 * 32 + v] * s5;
+        dct[6 * 32 + v] = DCT_C2_TABLE[6 * 32 + v] * s6;
+        dct[7 * 32 + v] = DCT_C2_TABLE[7 * 32 + v] * s7;
     }
 
     return dct;
@@ -682,9 +714,12 @@ async function buildTextureHashIndex() {
         // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
         // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
         const flatLibrary = [];
-        for (const [category, textures] of Object.entries(index)) {
-            for (const tex of textures) {
-                flatLibrary.push({ ...tex, category });
+        for (const category of Object.keys(index)) {
+            const textures = index[category];
+            for (let i = 0; i < textures.length; i++) {
+                const tex = textures[i];
+                tex.category = category;
+                flatLibrary.push(tex);
             }
         }
         const flatLow = new Uint32Array(flatLibrary.length);
