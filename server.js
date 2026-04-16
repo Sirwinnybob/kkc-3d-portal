@@ -726,17 +726,21 @@ app.get('/api/textures', async (req, res) => {
 
 // GET /api/textures/:category - List textures in a category
 app.get('/api/textures/:category', async (req, res) => {
-    const category = req.params.category;
+    let category = req.params.category;
     if (typeof category !== 'string' || category.length > 100) {
         return res.status(400).json({ success: false, error: 'Invalid category' });
     }
+
+    // Security: Sanitize the category using path.basename *before* the authorization check
+    // to prevent path traversal vectors like `..%2FHidden` from bypassing the strict equality check
+    category = path.basename(category);
 
     const lowerCat = category.toLowerCase();
     if (lowerCat === 'hidden' || lowerCat === 'uncategorized') {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
-    const categoryPath = path.join(TEXTURES_DIR, path.basename(category));
+    const categoryPath = path.join(TEXTURES_DIR, category);
     const rel = path.relative(TEXTURES_DIR, categoryPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });

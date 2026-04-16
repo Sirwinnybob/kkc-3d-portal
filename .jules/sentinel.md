@@ -17,3 +17,8 @@
 **Vulnerability:** The `/api/showroom/config/:pin` endpoint lacked specific rate limiting, allowing an attacker to brute-force the 5-digit (100k combinations) PINs to gain unauthorized access to saved showroom configurations.
 **Learning:** Short, numeric identifiers like PINs are highly susceptible to brute-force attacks if not protected by aggressive rate limiting. Generic API limiters (e.g., 100 req/15 min) are often too permissive for such small search spaces.
 **Prevention:** Implement strict, endpoint-specific rate limiting (e.g., 10 req/15 min) for any resource identified by a short, guessable secret. This forces the attack time to exceed the practical window of exploitation.
+
+## 2024-05-15 - [Authorization Bypass via Delayed Path Sanitization]
+**Vulnerability:** The `/api/textures/:category` endpoint allowed users to access restricted directories (like `Hidden` and `Uncategorized`) by supplying path traversal patterns like `..%2FHidden` in the category parameter. Because the authorization check only compared the raw parameter string to "hidden" and "uncategorized", the traversal pattern successfully bypassed the check. Later, when the path was constructed, `path.basename` implicitly stripped the `../`, resulting in the endpoint serving content from the protected directory.
+**Learning:** Checking authorization against raw, unnormalized path parameters before sanitizing them is dangerous. Functions like `path.basename()` or `path.resolve()` implicitly mutate the string, meaning an authorization check on the pre-mutated string can be easily bypassed.
+**Prevention:** Always normalize, sanitize, and extract the exact path component (e.g., using `path.basename()`) *before* applying any security or authorization logic against it.
