@@ -623,6 +623,12 @@ export class MaterialManager {
         this.catalogTitle.innerText = 'Solid Colors';
         this.textureGrid.innerHTML = '';
 
+        const mat = this.detectedMaterials[this.selectedMaterialIndex];
+        let currentColorHex = mat.isColor ? mat.colorHex?.toUpperCase() : null;
+        if (!currentColorHex && !mat.hasTexture && mat.material.color) {
+            currentColorHex = '#' + mat.material.color.getHexString().toUpperCase();
+        }
+
         this.insertBrowseButton();
 
         const presetsDiv = document.createElement('div');
@@ -631,11 +637,12 @@ export class MaterialManager {
             const swatch = document.createElement('button');
             swatch.className = 'color-swatch';
             swatch.style.backgroundColor = preset.hex;
+            if (currentColorHex === preset.hex.toUpperCase()) swatch.classList.add('active');
             swatch.title = preset.name;
             swatch.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                 indices.forEach(idx => this.onApplyColor(idx, preset.hex, null, true));
-                presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
                 swatch.classList.add('active');
             };
             presetsDiv.appendChild(swatch);
@@ -648,7 +655,7 @@ export class MaterialManager {
         pickerLabel.textContent = 'Custom:';
         const picker = document.createElement('input');
         picker.type = 'color';
-        picker.value = '#C8C8C8';
+        picker.value = currentColorHex || '#C8C8C8';
         const hexDisplay = document.createElement('span');
         hexDisplay.className = 'color-hex-display';
         hexDisplay.textContent = picker.value;
@@ -657,7 +664,7 @@ export class MaterialManager {
             hexDisplay.textContent = picker.value;
             const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
             indices.forEach(idx => this.onApplyColor(idx, picker.value, null, true));
-            presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+            this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
         };
         pickerRow.appendChild(pickerLabel);
         pickerRow.appendChild(picker);
@@ -679,10 +686,13 @@ export class MaterialManager {
                 const swatch = document.createElement('button');
                 swatch.className = 'recent-color-swatch';
                 swatch.style.backgroundColor = hex;
+                if (currentColorHex === hex.toUpperCase()) swatch.classList.add('active');
                 swatch.title = hex;
                 swatch.onclick = () => {
                     const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                     indices.forEach(idx => this.onApplyColor(idx, hex, null, true));
+                    this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
+                    swatch.classList.add('active');
                 };
                 recentRow.appendChild(swatch);
             });
@@ -710,15 +720,29 @@ export class MaterialManager {
     renderTextureGrid() {
         if (!this.textureGrid) return;
         this.textureGrid.innerHTML = '';
+        const mat = this.selectedMaterialIndex >= 0 ? this.detectedMaterials[this.selectedMaterialIndex] : null;
+        const currentUrl = mat ? (mat.urlHigh || mat.currentLODUrl) : null;
+
         this.currentCategoryTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'texture-thumb';
+            if (currentUrl === tex.url) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-current', 'true');
+            }
             btn.dataset.search = (tex.name || '').toLowerCase();
             btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
             btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
             btn.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                 indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height));
+
+                this.textureGrid.querySelectorAll('.texture-thumb').forEach(th => {
+                    th.classList.remove('active');
+                    th.removeAttribute('aria-current');
+                });
+                btn.classList.add('active');
+                btn.setAttribute('aria-current', 'true');
             };
             this.textureGrid.appendChild(btn);
         });
