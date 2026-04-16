@@ -662,6 +662,12 @@ body {
     transform: scale(1.03);
 }
 
+.texture-thumb.active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px #3b82f6, 0 0 10px rgba(59,130,246,0.4);
+    z-index: 2;
+}
+
 .texture-thumb:active {
     transform: scale(0.97);
 }
