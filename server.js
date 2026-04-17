@@ -17,6 +17,7 @@ const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
+app.disable('x-powered-by'); // Security: Hide Express framework signature
 const APP_VERSION = "2.1.9";
 
 // --- CONFIG ---

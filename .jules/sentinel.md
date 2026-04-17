@@ -17,3 +17,8 @@
 **Vulnerability:** The `/api/showroom/config/:pin` endpoint lacked specific rate limiting, allowing an attacker to brute-force the 5-digit (100k combinations) PINs to gain unauthorized access to saved showroom configurations.
 **Learning:** Short, numeric identifiers like PINs are highly susceptible to brute-force attacks if not protected by aggressive rate limiting. Generic API limiters (e.g., 100 req/15 min) are often too permissive for such small search spaces.
 **Prevention:** Implement strict, endpoint-specific rate limiting (e.g., 10 req/15 min) for any resource identified by a short, guessable secret. This forces the attack time to exceed the practical window of exploitation.
+
+## 2026-04-17 - [Information Exposure via Express X-Powered-By Header]
+**Vulnerability:** The application was using the Express framework without disabling the `x-powered-by` header, which defaults to `Express`.
+**Learning:** By default, Express sends the `X-Powered-By: Express` HTTP response header. This leaks information about the backend technology stack. Attackers can use this information to specifically target known vulnerabilities in the Express framework or Node.js environment, reducing the effort required for reconnaissance.
+**Prevention:** Always disable the `X-Powered-By` header in Express applications using `app.disable('x-powered-by')` or remove it via security middleware like Helmet to minimize the application's footprint and adhere to the principle of least information disclosure.
