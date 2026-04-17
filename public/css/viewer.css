@@ -1589,7 +1589,8 @@ body {
 #showroom-btn:focus-visible,
 #save-config-btn:focus-visible,
 #help-btn:focus-visible,
-#menu-btn:focus-visible {
+#menu-btn:focus-visible,
+#joystick-handle:focus-visible {
     outline: 3px solid #3b82f6;
     outline-offset: 4px;
 }

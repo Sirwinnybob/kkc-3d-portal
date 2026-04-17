@@ -493,6 +493,160 @@ async function init() {
             };
         }
 
+        // --- TAP DETECTION: single tap → texture picker, double tap → pivot ---
+        let lastTap = 0;
+        let tapPos = new THREE.Vector2();
+        let singleTapTimer = null;
+        let pointerDownPos = new THREE.Vector2();
+        let pointerHasMoved = false;
+        const DRAG_THRESHOLD = 8; // px — more than this = orbit drag, not a tap
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'touch' && !e.isPrimary) return;
+            pointerDownPos.set(e.clientX, e.clientY);
+            pointerHasMoved = false;
+        });
+
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'touch' && !e.isPrimary) return;
+            if (pointerDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > DRAG_THRESHOLD) {
+                pointerHasMoved = true;
+            }
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            if (e.pointerType === 'touch' && !e.isPrimary) return;
+            if (pointerHasMoved) return; // was a drag/orbit — ignore
+
+            const now = Date.now();
+            const dist = tapPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY));
+            const isDoubleTap = (now - lastTap < 300) && (dist < 10);
+
+            if (isDoubleTap) {
+                // Cancel any pending single-tap and run pivot logic
+                if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2(
+                    (e.clientX / window.innerWidth) * 2 - 1,
+                    -(e.clientY / window.innerHeight) * 2 + 1
+                );
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                if (intersects.length > 0) {
+                    controls.target.copy(intersects[0].point);
+                    controls.update();
+                }
+            } else {
+                // Defer single-tap 310ms so a second tap can cancel it
+                const cx = e.clientX, cy = e.clientY;
+                singleTapTimer = setTimeout(() => {
+                    singleTapTimer = null;
+                    handleSingleTap(cx, cy);
+                }, 310);
+            }
+
+            lastTap = now;
+            tapPos.set(e.clientX, e.clientY);
+        });
+
+        // --- SINGLE TAP: open texture picker for the tapped surface ---
+        function handleSingleTap(clientX, clientY) {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2(
+                (clientX / window.innerWidth) * 2 - 1,
+                -(clientY / window.innerHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            if (!intersects.length) return;
+
+            const tappedMesh = intersects[0].object;
+
+            // Allow paint mode taps to pass through even if quick-picker is open
+            if (materialManager && materialManager.qpPaintMode) {
+                if (materialManager.handlePaintTap(tappedMesh)) {
+                    return;
+                }
+            }
+
+            // Don't open picker if any overlay is already visible (except we allow paint mode above)
+            if (document.getElementById('quick-picker')?.classList.contains('show')) return;
+            if (document.getElementById('tap-replace-sheet')?.classList.contains('show')) return;
+            if (document.getElementById('texture-panel')?.classList.contains('show')) return;
+
+            const matGroupIndex = detectedMaterials.findIndex(g => g.meshes.includes(tappedMesh));
+            if (matGroupIndex < 0) return;
+            if (!detectedMaterials[matGroupIndex].hasTexture) return;
+
+            if (materialManager) {
+                materialManager.openQuickPicker(matGroupIndex, tappedMesh);
+            }
+        }
+
+        // --- ZOOM JOYSTICK ---
+        const joystickHandle    = document.getElementById('joystick-handle');
+        const joystickContainer = document.getElementById('joystick-container');
+        let isDraggingJoystick  = false;
+
+        const updateJoystick = (clientY) => {
+            if (!isDraggingJoystick || !joystickContainer) return;
+            const rect   = joystickContainer.getBoundingClientRect();
+            const relY   = Math.max(0, Math.min(rect.height, clientY - rect.top));
+            const center = rect.height / 2;
+            const rawInput = (center - relY) / center;
+            zoomVelocity = Math.sign(rawInput) * (rawInput * rawInput) * 0.05;
+            if (joystickHandle) {
+                joystickHandle.style.top = `${relY - 18}px`;
+                const percent = Math.round(((rect.height - relY) / rect.height) * 100);
+                joystickHandle.setAttribute('aria-valuenow', percent.toString());
+            }
+        };
+
+        if (joystickHandle) {
+            joystickHandle.onpointerdown = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                isDraggingJoystick = true;
+                updateJoystick(e.clientY);
+                joystickHandle.setPointerCapture(e.pointerId);
+            };
+            joystickHandle.onpointermove = (e) => { if (isDraggingJoystick) updateJoystick(e.clientY); };
+            joystickHandle.onpointerup = (e) => {
+                isDraggingJoystick = false;
+                zoomVelocity = 0;
+                if (joystickHandle) {
+                    joystickHandle.style.top = (joystickContainer.offsetHeight / 2 - 18) + 'px';
+                    joystickHandle.setAttribute('aria-valuenow', '50');
+                }
+                joystickHandle.releasePointerCapture(e.pointerId);
+            };
+
+            joystickHandle.addEventListener('keydown', (e) => {
+                let v = 0;
+                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') v = 0.5;
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') v = -0.5;
+                else if (e.key === 'PageUp') v = 1.0;
+                else if (e.key === 'PageDown') v = -1.0;
+
+                if (v !== 0) {
+                    e.preventDefault();
+                    zoomVelocity = Math.sign(v) * (v * v) * 0.05;
+                    const h = joystickContainer.offsetHeight || 160;
+                    const t = (h / 2) - (v * (h / 2));
+                    joystickHandle.style.top = `${t - 18}px`;
+                    const percent = Math.round(((h - t) / h) * 100);
+                    joystickHandle.setAttribute('aria-valuenow', percent.toString());
+                }
+            });
+
+            joystickHandle.addEventListener('keyup', () => {
+                if (!isDraggingJoystick) {
+                    zoomVelocity = 0;
+                    joystickHandle.style.top = (joystickContainer.offsetHeight / 2 - 18) + 'px';
+                    joystickHandle.setAttribute('aria-valuenow', '50');
+                }
+            });
+        }
         // --- SHOWROOM MODE BRANCH ---
         if (isShowroomMode) {
             window.setupTexturePanel = () => initMaterialManager(null, null); // Expose for showroom mode
@@ -645,134 +799,6 @@ async function init() {
         const urlData = await urlRes.json();
         if (!urlData.success) throw new Error("Room URL not found");
 
-        // --- TAP DETECTION: single tap → texture picker, double tap → pivot ---
-        let lastTap = 0;
-        let tapPos = new THREE.Vector2();
-        let singleTapTimer = null;
-        let pointerDownPos = new THREE.Vector2();
-        let pointerHasMoved = false;
-        const DRAG_THRESHOLD = 8; // px — more than this = orbit drag, not a tap
-
-        renderer.domElement.addEventListener('pointerdown', (e) => {
-            if (e.pointerType === 'touch' && !e.isPrimary) return;
-            pointerDownPos.set(e.clientX, e.clientY);
-            pointerHasMoved = false;
-        });
-
-        renderer.domElement.addEventListener('pointermove', (e) => {
-            if (e.pointerType === 'touch' && !e.isPrimary) return;
-            if (pointerDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > DRAG_THRESHOLD) {
-                pointerHasMoved = true;
-            }
-        });
-
-        renderer.domElement.addEventListener('pointerup', (e) => {
-            if (e.pointerType === 'touch' && !e.isPrimary) return;
-            if (pointerHasMoved) return; // was a drag/orbit — ignore
-
-            const now = Date.now();
-            const dist = tapPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY));
-            const isDoubleTap = (now - lastTap < 300) && (dist < 10);
-
-            if (isDoubleTap) {
-                // Cancel any pending single-tap and run pivot logic
-                if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
-                const raycaster = new THREE.Raycaster();
-                const mouse = new THREE.Vector2(
-                    (e.clientX / window.innerWidth) * 2 - 1,
-                    -(e.clientY / window.innerHeight) * 2 + 1
-                );
-                raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(scene.children, true);
-                if (intersects.length > 0) {
-                    controls.target.copy(intersects[0].point);
-                    controls.update();
-                }
-            } else {
-                // Defer single-tap 310ms so a second tap can cancel it
-                const cx = e.clientX, cy = e.clientY;
-                singleTapTimer = setTimeout(() => {
-                    singleTapTimer = null;
-                    handleSingleTap(cx, cy);
-                }, 310);
-            }
-
-            lastTap = now;
-            tapPos.set(e.clientX, e.clientY);
-        });
-
-        // --- SINGLE TAP: open texture picker for the tapped surface ---
-        function handleSingleTap(clientX, clientY) {
-            const raycaster = new THREE.Raycaster();
-            const mouse = new THREE.Vector2(
-                (clientX / window.innerWidth) * 2 - 1,
-                -(clientY / window.innerHeight) * 2 + 1
-            );
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(scene.children, true);
-            if (!intersects.length) return;
-
-            const tappedMesh = intersects[0].object;
-
-            // Allow paint mode taps to pass through even if quick-picker is open
-            if (materialManager && materialManager.qpPaintMode) {
-                if (materialManager.handlePaintTap(tappedMesh)) {
-                    return;
-                }
-            }
-
-            // Don't open picker if any overlay is already visible (except we allow paint mode above)
-            if (document.getElementById('quick-picker')?.classList.contains('show')) return;
-            if (document.getElementById('tap-replace-sheet')?.classList.contains('show')) return;
-            if (document.getElementById('texture-panel')?.classList.contains('show')) return;
-
-            const matGroupIndex = detectedMaterials.findIndex(g => g.meshes.includes(tappedMesh));
-            if (matGroupIndex < 0) return;
-            if (!detectedMaterials[matGroupIndex].hasTexture) return;
-
-            if (materialManager) {
-                materialManager.openQuickPicker(matGroupIndex, tappedMesh);
-            }
-        }
-
-        // --- ZOOM JOYSTICK ---
-        const joystickHandle    = document.getElementById('joystick-handle');
-        const joystickContainer = document.getElementById('joystick-container');
-        let isDraggingJoystick  = false;
-
-        const updateJoystick = (clientY) => {
-            if (!isDraggingJoystick || !joystickContainer) return;
-            const rect   = joystickContainer.getBoundingClientRect();
-            const relY   = Math.max(0, Math.min(rect.height, clientY - rect.top));
-            const center = rect.height / 2;
-            const rawInput = (center - relY) / center; 
-            zoomVelocity = Math.sign(rawInput) * (rawInput * rawInput) * 0.05;
-            if (joystickHandle) {
-                joystickHandle.style.top = `${relY - 18}px`;
-                const percent = Math.round(((rect.height - relY) / rect.height) * 100);
-                joystickHandle.setAttribute('aria-valuenow', percent.toString());
-            }
-        };
-
-        if (joystickHandle) {
-            joystickHandle.onpointerdown = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                isDraggingJoystick = true;
-                updateJoystick(e.clientY);
-                joystickHandle.setPointerCapture(e.pointerId);
-            };
-            joystickHandle.onpointermove = (e) => { if (isDraggingJoystick) updateJoystick(e.clientY); };
-            joystickHandle.onpointerup = (e) => {
-                isDraggingJoystick = false;
-                zoomVelocity = 0;
-                if (joystickHandle) {
-                    joystickHandle.style.top = (joystickContainer.offsetHeight / 2 - 18) + 'px';
-                    joystickHandle.setAttribute('aria-valuenow', '50');
-                }
-                joystickHandle.releasePointerCapture(e.pointerId);
-            };
-        }
 
         // --- PHOTO RENDER ---
         const cameraBtn = document.getElementById('camera-btn');
