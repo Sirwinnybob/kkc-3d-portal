@@ -534,8 +534,8 @@ async function buildTextureHashIndex() {
     if (textureHashInProgress) return textureHashInProgress;
 
     textureHashInProgress = (async () => {
-        const index = {};
         try {
+            const index = {};
             const dimPath = path.join(TEXTURES_DIR, "texture_dimensions.json");
             let dimensions = {};
             let dimsModified = false;
@@ -584,31 +584,49 @@ async function buildTextureHashIndex() {
                     if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
 
                     try {
-                        let width = null;
-                        let height = null;
+                        const filePath = path.join(categoryPath, file);
+                        const stats = await fs.promises.stat(filePath);
+                        const mtime = stats.mtimeMs;
 
-                        if (!isHidden) {
-                            if (!dimensions[entry.name][file]) {
-                                dimensions[entry.name][file] = { width: null, height: null };
-                                dimsModified = true;
-                            } else {
-                                width = dimensions[entry.name][file].width;
-                                height = dimensions[entry.name][file].height;
-                            }
+                        let width = null, height = null, hash = null;
+                        const cached = !isHidden ? dimensions[entry.name][file] : null;
+
+                        if (cached && cached.mtime === mtime && cached.hash) {
+                            hash = BigInt(cached.hash);
+                            width = cached.width;
+                            height = cached.height;
                         }
 
-                        const filePath = path.join(categoryPath, file);
-                        const buffer = await fs.promises.readFile(filePath);
-                        const hash = await computePhash(buffer);
+                        const nameOnly = path.basename(file, ext);
+                        const medFile = `${nameOnly}_medium${ext}`;
+                        const lowFile = `${nameOnly}_low${ext}`;
+                        const needsLods = !isHidden && (!lodFilesSet.has(medFile) || !lodFilesSet.has(lowFile));
+
+                        let buffer = null;
+                        if (hash === null || needsLods) {
+                            buffer = await fs.promises.readFile(filePath);
+                            if (hash === null) {
+                                hash = await computePhash(buffer);
+                                const metadata = await sharp(buffer).metadata();
+                                width = metadata.width;
+                                height = metadata.height;
+                                if (!isHidden) {
+                                    dimensions[entry.name][file] = {
+                                        width,
+                                        height,
+                                        hash: hash.toString(),
+                                        mtime
+                                    };
+                                    dimsModified = true;
+                                }
+                            }
+                        }
 
                         let urlMedium = null;
                         let urlLow = null;
 
                         if (!isHidden) {
                             const lodCatDir = path.join(LOD_DIR, entry.name);
-                            const nameOnly = path.basename(file, ext);
-                            const medFile = `${nameOnly}_medium${ext}`;
-                            const lowFile = `${nameOnly}_low${ext}`;
                             const medPath = path.join(lodCatDir, medFile);
                             const lowPath = path.join(lodCatDir, lowFile);
 
@@ -668,8 +686,25 @@ async function buildTextureHashIndex() {
 
                         try {
                             const filePath = path.join(hashFolderPath, file);
-                            const buffer = await fs.promises.readFile(filePath);
-                            const hash = await computePhash(buffer);
+                            const stats = await fs.promises.stat(filePath);
+                            const mtime = stats.mtimeMs;
+
+                            let hash = null;
+                            const variantCacheKey = `variant:${file}`;
+                            const cached = dimensions[entry.name][variantCacheKey];
+
+                            if (cached && cached.mtime === mtime && cached.hash) {
+                                hash = BigInt(cached.hash);
+                            } else {
+                                const buffer = await fs.promises.readFile(filePath);
+                                hash = await computePhash(buffer);
+                                dimensions[entry.name][variantCacheKey] = {
+                                    hash: hash.toString(),
+                                    mtime
+                                };
+                                dimsModified = true;
+                            }
+
                             let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
 
                             // Find the canonical entry in the map for O(1) lookup
@@ -707,40 +742,41 @@ async function buildTextureHashIndex() {
                     console.error(`[Texture] Failed to save dimensions: ${e.message}`);
                 }
             }
+
+            // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
+            // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
+            const flatLibrary = [];
+            for (const category of Object.keys(index)) {
+                const textures = index[category];
+                for (let i = 0; i < textures.length; i++) {
+                    const tex = textures[i];
+                    tex.category = category;
+                    flatLibrary.push(tex);
+                }
+            }
+            const flatLow = new Uint32Array(flatLibrary.length);
+            const flatHigh = new Uint32Array(flatLibrary.length);
+            for (let i = 0; i < flatLibrary.length; i++) {
+                flatLow[i] = flatLibrary[i].hLow;
+                flatHigh[i] = flatLibrary[i].hHigh;
+            }
+
+            // Attach flattened index as non-enumerable properties to the main index
+            Object.defineProperties(index, {
+                '_flatLibrary': { value: flatLibrary, enumerable: false },
+                '_flatLow': { value: flatLow, enumerable: false },
+                '_flatHigh': { value: flatHigh, enumerable: false }
+            });
+
+            textureHashCache = index;
+            app.locals.clearTextureCache = () => { textureHashCache = null; };
+            textureHashCacheTime = Date.now();
+            return index;
         } catch (e) {
             console.error(`[Texture] Index build error: ${e.message}`);
+        } finally {
+            textureHashInProgress = null;
         }
-
-        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
-        // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
-        const flatLibrary = [];
-        for (const category of Object.keys(index)) {
-            const textures = index[category];
-            for (let i = 0; i < textures.length; i++) {
-                const tex = textures[i];
-                tex.category = category;
-                flatLibrary.push(tex);
-            }
-        }
-        const flatLow = new Uint32Array(flatLibrary.length);
-        const flatHigh = new Uint32Array(flatLibrary.length);
-        for (let i = 0; i < flatLibrary.length; i++) {
-            flatLow[i] = flatLibrary[i].hLow;
-            flatHigh[i] = flatLibrary[i].hHigh;
-        }
-
-        // Attach flattened index as non-enumerable properties to the main index
-        Object.defineProperties(index, {
-            '_flatLibrary': { value: flatLibrary, enumerable: false },
-            '_flatLow': { value: flatLow, enumerable: false },
-            '_flatHigh': { value: flatHigh, enumerable: false }
-        });
-
-        textureHashCache = index;
-        app.locals.clearTextureCache = () => { textureHashCache = null; };
-        textureHashCacheTime = Date.now();
-        textureHashInProgress = null;
-        return index;
     })();
 
     return textureHashInProgress;
