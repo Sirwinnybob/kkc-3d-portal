@@ -57,14 +57,39 @@ button {
     font-size: 1.1em;
     font-weight: bold;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, transform 0.1s, opacity 0.2s;
 }
 
 button:hover { background: #0056b3; }
 
+button:active {
+    transform: scale(0.98);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #666 !important;
+}
+
 .login-logo { max-width: 200px; margin-bottom: 20px; }
 .hidden-container { display: none; }
 .room-list-container { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+
+.room-btn {
+    margin: 5px 0;
+    padding: 10px;
+    background: #fff;
+    color: #333;
+    border: 1px solid #ddd;
+    font-size: 1em;
+}
+
+.room-btn:hover {
+    background: #f0f0f0;
+    border-color: #007bff;
+}
+
 .btn-back { background: #444; }
 
 .error {

@@ -1,5 +1,3 @@
-import { escapeHtml } from './utils.js';
-
 let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
@@ -88,8 +86,6 @@ function showRoomSelection(rooms) {
         btn.textContent = room;
         btn.className = 'room-btn';
         btn.id = `room-btn-${index}`;
-        btn.style.margin = '5px 0';
-        btn.style.padding = '10px';
         btn.addEventListener('click', () => {
             window.location.href = `/viewer.html?job=${encodeURIComponent(currentJob)}&room=${encodeURIComponent(room)}`;
         });
@@ -156,6 +152,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (input) {
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') checkJob();
+        });
+
+        // Hide error message when user starts typing
+        input.addEventListener('input', () => {
+            const errorMsg = document.getElementById('errorMsg');
+            if (errorMsg) errorMsg.style.display = 'none';
         });
     }
 
