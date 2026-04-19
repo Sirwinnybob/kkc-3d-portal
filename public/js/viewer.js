@@ -23,9 +23,40 @@ let loadedModel = null;
 
 // Surface Highlight state
 // LOD cache and tracking
-const textureCache = new Map(); // url -> THREE.Texture
+const sharedTextureLoader = new THREE.TextureLoader();
+const textureCache = new Map(); // url -> Promise<THREE.Texture>
 const _lodVec = new THREE.Vector3();
 let lastLodCheckTime = 0;
+
+/**
+ * Returns a Promise that resolves to a THREE.Texture, using a global cache
+ * to ensure that identical URLs share the same texture object and load process.
+ */
+function getTexture(url) {
+    if (!url) return Promise.reject("No URL provided");
+    if (textureCache.has(url)) return textureCache.get(url);
+
+    const promise = new Promise((resolve, reject) => {
+        sharedTextureLoader.load(url, (tex) => {
+            // Configure texture for high quality and proper wrapping
+            if (renderer) {
+                tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            }
+            tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            resolve(tex);
+        }, undefined, (err) => {
+            console.error(`[getTexture] Failed to load: ${url}`, err);
+            textureCache.delete(url); // Don't cache failures
+            reject(err);
+        });
+    });
+
+    textureCache.set(url, promise);
+    return promise;
+}
 
 let highlightedMesh = null;
 let highlightOriginalEmissive = null;
@@ -89,14 +120,9 @@ function initMaterialManager(jobCode, room) {
             onClearHighlight: clearMeshHighlight,
             onApplyTexture: (matGroupIndex, url, urlMedium, urlLow, name, tappedMesh, replaceAll, realWidth, realHeight) => {
                 const matGroup = detectedMaterials[matGroupIndex];
-                const texLoader = new THREE.TextureLoader();
-                texLoader.load(url, (newTex) => {
-                    newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                    newTex.minFilter = THREE.LinearMipmapLinearFilter;
-                    newTex.magFilter = THREE.LinearFilter;
-                    newTex.wrapS = THREE.RepeatWrapping;
-                    newTex.wrapT = THREE.RepeatWrapping;
+                const geometryCache = new Map(); // originalGeometryUUID -> { scaleU, scaleV, clonedGeometry }
 
+                getTexture(url).then((newTex) => {
                     const targetMeshes = replaceAll ? matGroup.meshes : (tappedMesh ? [tappedMesh] : []);
 
                     targetMeshes.forEach(mesh => {
@@ -108,45 +134,39 @@ function initMaterialManager(jobCode, room) {
 
                             // Real-world scaling logic based STRICTLY on relative texture dimensions
                             if (realWidth !== undefined && realWidth !== null && realHeight !== undefined && realHeight !== null) {
-                                // If the material group has a current width/height (from initial load or previous swap)
                                 const currentWidth = matGroup.width;
                                 const currentHeight = matGroup.height;
 
                                 if (currentWidth > 0 && currentHeight > 0 && realWidth > 0 && realHeight > 0) {
-                                    // Calculate the mathematically perfect ratio to preserve the original mapped UV layout!
                                     const scaleU = currentWidth / realWidth;
                                     const scaleV = currentHeight / realHeight;
 
-                                    if (scaleU !== 1.0 || scaleV !== 1.0) {
-                                        console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Scaling UVs relative to original size: (${currentWidth}x${currentHeight}") -> New Texture (${realWidth}x${realHeight}"). Target Multipliers: ${scaleU.toFixed(3)}x${scaleV.toFixed(3)}.`);
-
-                                        if (mesh.geometry.attributes.uv) {
-                                            // Clone geometry to avoid modifying shared geometries across multiple meshes
+                                    if ((scaleU !== 1.0 || scaleV !== 1.0) && mesh.geometry.attributes.uv) {
+                                        // Performance optimization: Check local geometryCache first
+                                        const cacheKey = `${mesh.geometry.uuid}_${scaleU}_${scaleV}`;
+                                        if (geometryCache.has(cacheKey)) {
+                                            mesh.geometry = geometryCache.get(cacheKey);
+                                        } else {
+                                            console.log(`[Texture Scale] Name: '${name}', Mesh: '${mesh.name || 'Unknown'}'. Scaling UVs: ${scaleU.toFixed(3)}x${scaleV.toFixed(3)}.`);
+                                            // Clone and transform geometry (avoid modifying shared source geometries)
                                             mesh.geometry = mesh.geometry.clone();
                                             const newUvs = mesh.geometry.attributes.uv;
                                             for (let i = 0; i < newUvs.count; i++) {
-                                                const u = newUvs.getX(i);
-                                                const v = newUvs.getY(i);
-
-                                                // Multiply the coordinate by the scale ratio
-                                                newUvs.setXY(
-                                                    i,
-                                                    u * scaleU,
-                                                    v * scaleV
-                                                );
+                                                newUvs.setXY(i, newUvs.getX(i) * scaleU, newUvs.getY(i) * scaleV);
                                             }
                                             newUvs.needsUpdate = true;
+                                            geometryCache.set(cacheKey, mesh.geometry);
                                         }
                                     }
                                 }
                             }
+                        });
+                    });
 
-                            // Keep the global texture repeat neutral so the shared texture object isn't warped
-                            newTex.wrapS = THREE.RepeatWrapping;
-                            newTex.wrapT = THREE.RepeatWrapping;
-                            newTex.repeat.set(1, 1);
-                    });
-                    });
+                    // Neutralize shared texture wrap settings once for the entire batch
+                    newTex.wrapS = THREE.RepeatWrapping;
+                    newTex.wrapT = THREE.RepeatWrapping;
+                    newTex.repeat.set(1, 1);
 
                     if (replaceAll) {
                         matGroup.urlHigh = url;
@@ -407,32 +427,15 @@ async function init() {
                             if (targetUrl && matGroup.currentLODUrl !== targetUrl) {
                                 matGroup.currentLODUrl = targetUrl;
 
-                                // Load from cache or fetch
-                                if (textureCache.has(targetUrl)) {
-                                    const cachedTex = textureCache.get(targetUrl);
-                                    matGroup.meshes.forEach(m => {
-                                        m.material.map = cachedTex;
-                                        m.material.needsUpdate = true;
-                                    });
-                                } else {
-                                    const loader = new THREE.TextureLoader();
-                                    loader.load(targetUrl, (tex) => {
-                                        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                        tex.minFilter  = THREE.LinearMipmapLinearFilter;
-                                        tex.magFilter  = THREE.LinearFilter;
-                                        tex.wrapS      = THREE.RepeatWrapping;
-                                        tex.wrapT      = THREE.RepeatWrapping;
-                                        textureCache.set(targetUrl, tex);
-
-                                        // Make sure distance hasn't caused another swap while loading
-                                        if (matGroup.currentLODUrl === targetUrl) {
-                                            matGroup.meshes.forEach(m => {
-                                                m.material.map = tex;
-                                                m.material.needsUpdate = true;
-                                            });
-                                        }
-                                    });
-                                }
+                                getTexture(targetUrl).then((tex) => {
+                                    // Make sure distance hasn't caused another swap while loading
+                                    if (matGroup.currentLODUrl === targetUrl) {
+                                        matGroup.meshes.forEach(m => {
+                                            m.material.map = tex;
+                                            m.material.needsUpdate = true;
+                                        });
+                                    }
+                                });
                             }
                         }
                     });
@@ -705,7 +708,6 @@ async function init() {
                         if (!materialManager) return;
 
                         const applyConfigTextures = async () => {
-                            const texLoader = new THREE.TextureLoader();
                             for (const mat of detectedMaterials) {
                                 if (!mat.hasTexture) continue;
                                 const section = mat.isIsland ? config.island : config.kitchen;
@@ -733,12 +735,7 @@ async function init() {
                                         if (man) {
                                             const texData = man.textures.find(t => t.name === savedMat.name);
                                             if (texData && texData.urlLow) {
-                                                const newTex = await new Promise((res, rej) => texLoader.load(texData.urlLow, res, undefined, rej));
-                                                newTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                                newTex.minFilter = THREE.LinearMipmapLinearFilter;
-                                                newTex.magFilter = THREE.LinearFilter;
-                                                newTex.wrapS = THREE.RepeatWrapping;
-                                                newTex.wrapT = THREE.RepeatWrapping;
+                                                const newTex = await getTexture(texData.urlLow);
 
                                                 mat.meshes.forEach(m => {
                                                     const mats = Array.isArray(m.material) ? m.material : [m.material];
@@ -809,30 +806,19 @@ async function init() {
                 // Force high-res textures before rendering
                 window.forceHighResRender = true;
                 const loadPromises = [];
-                const texLoader = new THREE.TextureLoader();
 
                 detectedMaterials.forEach(matGroup => {
                     if (matGroup.hasTexture && !matGroup.isColor && matGroup.urlHigh && matGroup.currentLODUrl !== matGroup.urlHigh) {
-                        loadPromises.push(new Promise(resolve => {
-                            if (textureCache.has(matGroup.urlHigh)) {
-                                const tex = textureCache.get(matGroup.urlHigh);
-                                matGroup.meshes.forEach(m => { m.material.map = tex; m.material.needsUpdate = true; });
-                                matGroup.currentLODUrl = matGroup.urlHigh;
-                                resolve();
-                            } else {
-                                texLoader.load(matGroup.urlHigh, (tex) => {
-                                    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                                    tex.minFilter  = THREE.LinearMipmapLinearFilter;
-                                    tex.magFilter  = THREE.LinearFilter;
-                                    tex.wrapS      = THREE.RepeatWrapping;
-                                    tex.wrapT      = THREE.RepeatWrapping;
-                                    textureCache.set(matGroup.urlHigh, tex);
-                                    matGroup.meshes.forEach(m => { m.material.map = tex; m.material.needsUpdate = true; });
-                                    matGroup.currentLODUrl = matGroup.urlHigh;
-                                    resolve();
-                                }, undefined, resolve); // resolve on error to not block render
-                            }
-                        }));
+                        const p = getTexture(matGroup.urlHigh).then(tex => {
+                            matGroup.meshes.forEach(m => {
+                                m.material.map = tex;
+                                m.material.needsUpdate = true;
+                            });
+                            matGroup.currentLODUrl = matGroup.urlHigh;
+                        }).catch(err => {
+                            console.warn("LOD upgrade failed for photo:", matGroup.urlHigh);
+                        });
+                        loadPromises.push(p);
                     }
                 });
 
