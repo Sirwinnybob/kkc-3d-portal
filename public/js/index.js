@@ -45,6 +45,8 @@ async function checkJob() {
             }
         } else {
             errorMsg.style.display = 'block';
+            const jobInput = document.getElementById('jobCode');
+            if (jobInput) jobInput.setAttribute('aria-invalid', 'true');
         }
     } catch (err) {
         console.error(err);
@@ -154,10 +156,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') checkJob();
         });
 
-        // Hide error message when user starts typing
         input.addEventListener('input', () => {
             const errorMsg = document.getElementById('errorMsg');
             if (errorMsg) errorMsg.style.display = 'none';
+            input.removeAttribute('aria-invalid');
+
+            // Adaptive button text: if 5 digits, it's a showroom PIN
+            const btn = document.getElementById('btnCheckJob');
+            if (btn) {
+                const isPin = /^\d{5}$/.test(input.value.trim());
+                btn.innerText = isPin ? 'Enter Showroom' : 'View My Job';
+            }
         });
     }
 

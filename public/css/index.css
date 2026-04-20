@@ -286,3 +286,8 @@ button:focus-visible,
     outline: 3px solid #3b82f6;
     outline-offset: 2px;
 }
+
+input[aria-invalid="true"] {
+    border-color: #ff4d4d;
+    box-shadow: 0 0 0 1px #ff4d4d;
+}
