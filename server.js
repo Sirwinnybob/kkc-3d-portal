@@ -10,6 +10,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 const adminAuth = require('./middleware/adminAuth');
+const texturesAuth = require('./middleware/texturesAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
 const { popcount32, hammingDistance } = require('./utils/hash');
 const gltfPipeline = require('gltf-pipeline');
@@ -113,7 +114,7 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms'))
 
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
-app.use('/textures', express.static(TEXTURES_DIR, {
+app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {
     etag: true,
     lastModified: true,
     maxAge: 0,
