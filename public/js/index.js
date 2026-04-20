@@ -107,9 +107,9 @@ function backToLogin() {
     document.getElementById('room-container').style.display = 'none';
     document.getElementById('login-container').style.display = 'block';
 
-    // Return focus to check button after backing out
-    const checkBtn = document.getElementById('btnCheckJob');
-    if (checkBtn) checkBtn.focus();
+    // Return focus to input after backing out
+    const jobCode = document.getElementById('jobCode');
+    if (jobCode) jobCode.focus();
 }
 
 // Register Service Worker for PWA

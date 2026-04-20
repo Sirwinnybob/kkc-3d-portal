@@ -389,6 +389,7 @@ export class MaterialManager {
         const mat = group.primaryMat;
         // Store indices to apply to all when clicked
         btn.dataset.indices = JSON.stringify(group.indices);
+        btn.dataset.index = group.indices[0].toString();
 
         if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
             try {
@@ -653,7 +654,9 @@ export class MaterialManager {
         pickerRow.className = 'color-picker-row';
         const pickerLabel = document.createElement('label');
         pickerLabel.textContent = 'Custom:';
+        pickerLabel.htmlFor = 'custom-color-picker';
         const picker = document.createElement('input');
+        picker.id = 'custom-color-picker';
         picker.type = 'color';
         picker.value = currentColorHex || '#C8C8C8';
         const hexDisplay = document.createElement('span');
