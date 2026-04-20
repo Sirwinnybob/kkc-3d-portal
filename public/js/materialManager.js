@@ -292,6 +292,7 @@ export class MaterialManager {
 
         if (!manifestLoaded) {
             this.onStatusUpdate(`Matching ${texturedMaterials.length} textures...`);
+            let renderScheduled = false;
             await Promise.all(texturedMaterials.map(async (mat) => {
                 try {
                     await this.matchTexture(mat);
@@ -299,9 +300,14 @@ export class MaterialManager {
                     console.error("Match error:", e);
                 }
                 // Re-render asynchronously to avoid blocking the parallel execution
-                requestAnimationFrame(() => {
-                    if (this.texturePanel.classList.contains('show')) this.renderMaterialList();
-                });
+                // Debounced via requestAnimationFrame flag to ensure only one update per frame
+                if (!renderScheduled) {
+                    renderScheduled = true;
+                    requestAnimationFrame(() => {
+                        renderScheduled = false;
+                        if (this.texturePanel.classList.contains('show')) this.renderMaterialList();
+                    });
+                }
             }));
         }
 
@@ -723,6 +729,8 @@ export class MaterialManager {
         const mat = this.selectedMaterialIndex >= 0 ? this.detectedMaterials[this.selectedMaterialIndex] : null;
         const currentUrl = mat ? (mat.urlHigh || mat.currentLODUrl) : null;
 
+        const fragment = document.createDocumentFragment();
+
         this.currentCategoryTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'texture-thumb';
@@ -731,8 +739,19 @@ export class MaterialManager {
                 btn.setAttribute('aria-current', 'true');
             }
             btn.dataset.search = (tex.name || '').toLowerCase();
-            btn.setAttribute('aria-label', `Select texture ${escapeHtml(tex.name)}`);
-            btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
+            btn.setAttribute('aria-label', `Select texture ${tex.name}`);
+
+            const img = document.createElement('img');
+            img.src = tex.url;
+            img.alt = tex.name;
+            img.loading = 'lazy';
+
+            const span = document.createElement('span');
+            span.textContent = tex.name;
+
+            btn.appendChild(img);
+            btn.appendChild(span);
+
             btn.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                 indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height));
@@ -744,8 +763,9 @@ export class MaterialManager {
                 btn.classList.add('active');
                 btn.setAttribute('aria-current', 'true');
             };
-            this.textureGrid.appendChild(btn);
+            fragment.appendChild(btn);
         });
+        this.textureGrid.appendChild(fragment);
     }
 
     // --- QUICK PICKER ---
@@ -948,12 +968,25 @@ export class MaterialManager {
         const currentName = mat ? (mat.matchedName || null) : null;
         let activeEl = null;
 
+        const fragment = document.createDocumentFragment();
+
         this.qpCurrentTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
             btn.dataset.search = (tex.name || '').toLowerCase();
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
-            btn.innerHTML = `<img src="${escapeHtml(tex.url)}" alt="${escapeHtml(tex.name)}" loading="lazy"><span>${escapeHtml(tex.name)}</span>`;
+
+            const img = document.createElement('img');
+            img.src = tex.url;
+            img.alt = tex.name;
+            img.loading = 'lazy';
+
+            const span = document.createElement('span');
+            span.textContent = tex.name;
+
+            btn.appendChild(img);
+            btn.appendChild(span);
+
             btn.addEventListener('click', () => {
                 this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll, tex.width, tex.height);
 
@@ -965,8 +998,9 @@ export class MaterialManager {
                 this.qpLastTextureName = tex.name;
                 this.qpLastColorHex = null;
             });
-            this.qpTextureStrip.appendChild(btn);
+            fragment.appendChild(btn);
         });
+        this.qpTextureStrip.appendChild(fragment);
 
         if (activeEl) {
             requestAnimationFrame(() => {
