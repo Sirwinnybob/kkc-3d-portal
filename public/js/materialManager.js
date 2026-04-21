@@ -322,12 +322,14 @@ export class MaterialManager {
         this.materialList.innerHTML = '';
 
         const visibleMaterials = this.detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
+        const fragment = document.createDocumentFragment();
 
         if (visibleMaterials.length === 0) {
             const div = document.createElement('div');
             div.style.cssText = 'padding:20px; text-align:center; color:#888;';
             div.textContent = this.isMatchingAll ? 'Matching textures...' : 'No customizable textures found.';
-            this.materialList.appendChild(div);
+            fragment.appendChild(div);
+            this.materialList.appendChild(fragment);
             return;
         }
 
@@ -343,15 +345,15 @@ export class MaterialManager {
                 const header = document.createElement('div');
                 header.className = 'material-section-header';
                 header.textContent = 'Kitchen';
-                this.materialList.appendChild(header);
-                kitchenVis.forEach(mat => this.materialList.appendChild(this.createMaterialItem(mat)));
+                fragment.appendChild(header);
+                kitchenVis.forEach(mat => fragment.appendChild(this.createMaterialItem(mat)));
             }
             if (islandVis.length > 0) {
                 const header = document.createElement('div');
                 header.className = 'material-section-header';
                 header.textContent = 'Island';
-                this.materialList.appendChild(header);
-                islandVis.forEach(mat => this.materialList.appendChild(this.createMaterialItem(mat)));
+                fragment.appendChild(header);
+                islandVis.forEach(mat => fragment.appendChild(this.createMaterialItem(mat)));
             }
         } else {
             // Group materials by matchedName or original texture name
@@ -381,9 +383,11 @@ export class MaterialManager {
             });
 
             Array.from(groupedMaterials.values()).forEach(group => {
-                this.materialList.appendChild(this.createGroupedMaterialItem(group));
+                fragment.appendChild(this.createGroupedMaterialItem(group));
             });
         }
+
+        this.materialList.appendChild(fragment);
 
         document.getElementById('materials-view').style.display = 'block';
         document.getElementById('catalog-view').style.display = 'none';
@@ -414,19 +418,36 @@ export class MaterialManager {
             mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
         }
 
-        const previewHtml = mat.previewCache;
         const displayName = group.displayName;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
-        btn.innerHTML = `
-            <div class="material-item-left">
-                ${previewHtml}
-                <div class="material-info">
-                    <span class="material-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
-                    <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
-                </div>
-            </div>
-            <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
-        `;
+
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'material-item-left';
+        leftDiv.innerHTML = mat.previewCache;
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'material-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'material-name';
+        nameSpan.title = displayName;
+        nameSpan.textContent = displayName;
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'material-status';
+        statusSpan.textContent = isModified ? 'Modified' : 'Customizable';
+
+        infoDiv.appendChild(nameSpan);
+        infoDiv.appendChild(statusSpan);
+        leftDiv.appendChild(infoDiv);
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'material-badge';
+        badgeSpan.textContent = mat.isColor ? 'Color' : 'Has Texture';
+
+        btn.appendChild(leftDiv);
+        btn.appendChild(badgeSpan);
+
         btn.onclick = () => {
             // When user clicks a grouped material row, we just treat the first index as the active one
             // for the catalog view, but we'll apply texture changes to ALL grouped indices
@@ -459,19 +480,36 @@ export class MaterialManager {
             mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
         }
 
-        const previewHtml = mat.previewCache;
         const displayName = mat.matchedName || mat.name;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
-        btn.innerHTML = `
-            <div class="material-item-left">
-                ${previewHtml}
-                <div class="material-info">
-                    <span class="material-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
-                    <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
-                </div>
-            </div>
-            <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
-        `;
+
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'material-item-left';
+        leftDiv.innerHTML = mat.previewCache;
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'material-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'material-name';
+        nameSpan.title = displayName;
+        nameSpan.textContent = displayName;
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'material-status';
+        statusSpan.textContent = isModified ? 'Modified' : 'Customizable';
+
+        infoDiv.appendChild(nameSpan);
+        infoDiv.appendChild(statusSpan);
+        leftDiv.appendChild(infoDiv);
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'material-badge';
+        badgeSpan.textContent = mat.isColor ? 'Color' : 'Has Texture';
+
+        btn.appendChild(leftDiv);
+        btn.appendChild(badgeSpan);
+
         btn.onclick = () => this.selectMaterial(originalIndex);
         return btn;
     }
