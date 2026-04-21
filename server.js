@@ -1768,7 +1768,7 @@ function safeShowroomPath(...segments) {
 }
 
 // GET /api/showroom/part/{*path} - Serve GLB URL for a showroom part at any depth
-app.get('/api/showroom/part/{*path}', (req, res) => {
+app.get('/api/showroom/part/{*path}', async (req, res) => {
     let deepPath = req.params.path;
     if (!deepPath) return res.status(400).json({ success: false, error: 'Invalid path' });
     if (Array.isArray(deepPath)) deepPath = deepPath.join('/');
@@ -1777,7 +1777,12 @@ app.get('/api/showroom/part/{*path}', (req, res) => {
 
     const filePath = safeShowroomPath(deepPath);
     if (!filePath) return res.status(403).json({ success: false, error: 'Forbidden' });
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'Part not found' });
+
+    try {
+        await fs.promises.access(filePath);
+    } catch (err) {
+        return res.status(404).json({ success: false, error: 'Part not found' });
+    }
 
     res.json({ success: true, url: `/showroom/${deepPath}` });
 });
