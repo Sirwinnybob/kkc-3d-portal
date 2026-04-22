@@ -2545,6 +2545,7 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.cleanDae = cleanDae;
+module.exports.fixWindowsPaths = fixWindowsPaths;
 module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
 module.exports.SHOWROOM_DIR = SHOWROOM_DIR;
 module.exports.safeShowroomPath = safeShowroomPath;
