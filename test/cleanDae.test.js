@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { cleanDae } = require('../server');
+const { cleanDae, fixWindowsPaths } = require('../server');
 
 const TEST_DIR = path.join(__dirname, 'cleanDae_test_dir');
 
@@ -139,5 +139,43 @@ test('cleanDae behavior', async (t) => {
         const result = fs.readFileSync(filePath, 'utf8');
         // Default GLASS_TRANSPARENCY is 0.8
         assert.ok(result.includes('<float>0.8</float>'), 'should replace transparency value with default 0.8');
+    });
+});
+
+test('fixWindowsPaths', async (t) => {
+    await t.test('replaces single backslashes in <init_from> tags', () => {
+        const input = '<init_from>path\\to\\file.jpg</init_from>';
+        const expected = '<init_from>path/to/file.jpg</init_from>';
+        assert.strictEqual(fixWindowsPaths(input), expected);
+    });
+
+    await t.test('replaces double backslashes in <init_from> tags', () => {
+        const input = '<init_from>path\\\\to\\\\file.jpg</init_from>';
+        const expected = '<init_from>path/to/file.jpg</init_from>';
+        assert.strictEqual(fixWindowsPaths(input), expected);
+    });
+
+    await t.test('handles multiple <init_from> tags', () => {
+        const input = '<init_from>a\\b.jpg</init_from><init_from>c\\d.jpg</init_from>';
+        const expected = '<init_from>a/b.jpg</init_from><init_from>c/d.jpg</init_from>';
+        assert.strictEqual(fixWindowsPaths(input), expected);
+    });
+
+    await t.test('does not affect content outside <init_from> tags', () => {
+        const input = '<other>path\\with\\backslash</other><init_from>path\\to\\file.jpg</init_from>';
+        const expected = '<other>path\\with\\backslash</other><init_from>path/to/file.jpg</init_from>';
+        assert.strictEqual(fixWindowsPaths(input), expected);
+    });
+
+    await t.test('handles mixed slashes', () => {
+        const input = '<init_from>path/to\\file.jpg</init_from>';
+        const expected = '<init_from>path/to/file.jpg</init_from>';
+        assert.strictEqual(fixWindowsPaths(input), expected);
+    });
+
+    await t.test('handles paths with spaces and multiple lines', () => {
+        const input = '<init_from>\n  folder\\file name.jpg\n</init_from>';
+        const expected = '<init_from>\n  folder/file name.jpg\n</init_from>';
+        assert.strictEqual(fixWindowsPaths(input), expected);
     });
 });
