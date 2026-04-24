@@ -11,12 +11,17 @@ module.exports = (req, res, next) => {
     // Split the path and check if it contains Hidden or Uncategorized
     const segments = checkPath.split('/').filter(Boolean);
 
-    // Check if any segment is "Hidden" or "Uncategorized"
-    if (segments.some(segment => {
-        const lower = segment.toLowerCase();
-        return lower === 'hidden' || lower === 'uncategorized';
-    })) {
-        return res.status(403).send('Forbidden');
+    // Allow Hidden/LOD for thumbnails, but block direct access to Hidden and Uncategorized
+    for (let i = 0; i < segments.length; i++) {
+        const lower = segments[i].toLowerCase();
+        if (lower === 'uncategorized') return res.status(403).send('Forbidden');
+        if (lower === 'hidden') {
+            const next = segments[i + 1] ? segments[i + 1].toLowerCase() : '';
+            if (next !== 'lod') {
+                return res.status(403).send('Forbidden');
+            }
+            i++; // Skip 'lod' as it is authorized
+        }
     }
 
     next();
