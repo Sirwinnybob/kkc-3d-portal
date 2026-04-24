@@ -64,11 +64,12 @@ export class UIManager {
 
         let shareCopyTimeout;
         if (copyShareLinkBtn) {
-            copyShareLinkBtn.onclick = () => {
+            copyShareLinkBtn.addEventListener('click', () => {
                 if (!shareLinkDisplay) return;
                 const link = shareLinkDisplay.textContent;
                 navigator.clipboard.writeText(link).then(() => {
                     copyShareLinkBtn.classList.add('copied');
+                    copyShareLinkBtn.setAttribute('aria-label', 'Link Copied!');
                     copyShareLinkBtn.innerHTML = `
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
@@ -78,6 +79,7 @@ export class UIManager {
                     if (shareCopyTimeout) clearTimeout(shareCopyTimeout);
                     shareCopyTimeout = setTimeout(() => {
                         copyShareLinkBtn.classList.remove('copied');
+                        copyShareLinkBtn.setAttribute('aria-label', 'Copy Link');
                         copyShareLinkBtn.innerHTML = `
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -90,7 +92,7 @@ export class UIManager {
                 }).catch(err => {
                     console.error('Failed to copy share link:', err);
                 });
-            };
+            });
         }
     }
 
