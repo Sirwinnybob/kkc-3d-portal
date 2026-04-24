@@ -526,15 +526,14 @@ export class MaterialManager {
         }
 
         if (mat.bestCategory) {
-            // Optimization: skip intermediate render since we will merge and render again
-            await this.loadCategoryTextures(mat.bestCategory, true);
+            await this.loadCategoryTextures(mat.bestCategory);
             if (mat.similarTextures && mat.similarTextures.length > 0) {
                 const existingUrls = new Set(this.currentCategoryTextures.map(ct => ct.url));
                 const uniqueSimilar = mat.similarTextures.filter(t => !existingUrls.has(t.url));
                 this.currentCategoryTextures = [...uniqueSimilar, ...this.currentCategoryTextures];
+                this.renderTextureGrid();
+                this.insertBrowseButton();
             }
-            this.renderTextureGrid();
-            this.insertBrowseButton();
         } else if (mat.hasTexture && mat.originalMap) {
             await this.matchAndShowCatalog(mat);
         } else {
@@ -617,8 +616,7 @@ export class MaterialManager {
                     this.catalogTitle.innerText = `Replace: ${mat.matchedName}`;
                 }
 
-                // Optimization: skip intermediate render since we will merge and render again
-                await this.loadCategoryTextures(data.bestCategory, true);
+                await this.loadCategoryTextures(data.bestCategory);
                 if (data.similarTextures && data.similarTextures.length > 0) {
                     const existingUrls = new Set(this.currentCategoryTextures.map(ct => ct.url));
                     const uniqueSimilar = data.similarTextures.filter(t => !existingUrls.has(t.url));
@@ -750,7 +748,7 @@ export class MaterialManager {
         }
     }
 
-    async loadCategoryTextures(category, skipRender = false) {
+    async loadCategoryTextures(category) {
         this.clearSearch(false);
         try {
             const resp = await fetch(`/api/textures/${encodeURIComponent(category)}`);
@@ -758,10 +756,8 @@ export class MaterialManager {
             if (data.success) {
                 this.currentCategoryTextures = data.textures;
                 this.catalogTitle.innerText = category;
-                if (!skipRender) {
-                    this.renderTextureGrid();
-                    this.insertBrowseButton();
-                }
+                this.renderTextureGrid();
+                this.insertBrowseButton();
             }
         } catch (e) {
             console.error("Failed to load textures:", e);
@@ -787,8 +783,7 @@ export class MaterialManager {
             btn.setAttribute('aria-label', `Select texture ${tex.name}`);
 
             const img = document.createElement('img');
-            // Use low-res thumbnail if available for faster loading and less memory usage
-            img.src = tex.urlLow || tex.url;
+            img.src = tex.url;
             img.alt = tex.name;
             img.loading = 'lazy';
 
@@ -1023,8 +1018,7 @@ export class MaterialManager {
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
 
             const img = document.createElement('img');
-            // Use low-res thumbnail if available for faster loading and less memory usage
-            img.src = tex.urlLow || tex.url;
+            img.src = tex.url;
             img.alt = tex.name;
             img.loading = 'lazy';
 
