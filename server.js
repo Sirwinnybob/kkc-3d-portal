@@ -10,6 +10,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const jobsAuth = require('./middleware/jobsAuth');
 const adminAuth = require('./middleware/adminAuth');
+const texturesAuth = require('./middleware/texturesAuth');
 const { parseIndices, earClip, cross2d, pointInTriangle, isEar, bridgeHole } = require('./utils/geometry');
 const { popcount32, hammingDistance } = require('./utils/hash');
 const gltfPipeline = require('gltf-pipeline');
@@ -17,6 +18,7 @@ const { generateLods } = require('./utils/gltf_optimizer');
 const sharp = require('sharp');
 
 const app = express();
+app.disable('x-powered-by'); // Security: disable X-Powered-By header
 const APP_VERSION = "2.1.9";
 
 // --- CONFIG ---
@@ -112,7 +114,7 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms'))
 
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
-app.use('/textures', express.static(TEXTURES_DIR, {
+app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {
     etag: true,
     lastModified: true,
     maxAge: 0,
@@ -137,6 +139,15 @@ const configLimiter = rateLimit({
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { success: false, error: 'Too many configuration attempts, please try again later.' }
+});
+
+// Strict rate limiter for showroom config retrieval to prevent PIN brute-forcing
+const configGetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 10, // Limit each IP to 10 requests per `window`
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many retrieval attempts, please try again later.' }
 });
 
 app.get('/api/job/:code', async (req, res) => {
@@ -364,30 +375,30 @@ async function computePhash(imageBuffer) {
             .raw()
             .toBuffer({ resolveWithObject: true });
 
-        const pixels = new Float64Array(32 * 32);
-        for (let i = 0; i < 32 * 32; i++) pixels[i] = data[i];
-
         // 2D Discrete Cosine Transform (DCT)
-        const dct = performDCT(pixels, 32);
+        const dct = performDCT(data, 32);
 
         // Extract the top-left 8x8 coefficients (excluding DC at [0,0])
-        const subMatrix = [];
-        for (let y = 0; y < 8; y++) {
-            for (let x = 0; x < 8; x++) {
+        // Using shared buffers for the synchronous portion to avoid allocations
+        const subMatrix = SHARED_PHASH_SUBMATRIX;
+        let idx = 0;
+        for (let y = 0; y < HASH_SIZE; y++) {
+            const rowOffset = y * DCT_N;
+            for (let x = 0; x < HASH_SIZE; x++) {
                 if (x === 0 && y === 0) continue;
-                subMatrix.push(dct[y * 32 + x]);
+                subMatrix[idx++] = dct[rowOffset + x];
             }
         }
 
-        // Calculate median of coefficients
-        const sorted = [...subMatrix].sort((a, b) => a - b);
-        const median = sorted.length % 2 === 0
-            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-            : sorted[Math.floor(sorted.length / 2)];
+        // Calculate median of coefficients (63 elements)
+        const sorted = SHARED_PHASH_SORTED;
+        sorted.set(subMatrix);
+        sorted.sort();
+        const median = sorted[31]; // Median of 63 elements is the 32nd (index 31)
 
         // Generate 64-bit BigInt hash
         let hash = 0n;
-        for (let i = 0; i < subMatrix.length; i++) {
+        for (let i = 0; i < 63; i++) {
             if (subMatrix[i] > median) {
                 hash |= (1n << BigInt(i));
             }
@@ -401,6 +412,7 @@ async function computePhash(imageBuffer) {
 
 // Precomputed cosine and scaling factor tables for DCT-II (N=32)
 const DCT_N = 32;
+const HASH_SIZE = 8;
 const DCT_COS_TABLE = new Float64Array(DCT_N * DCT_N);
 const DCT_C_TABLE = new Float64Array(DCT_N);
 
@@ -419,9 +431,20 @@ for (let u = 0; u < DCT_N; u++) {
     }
 }
 
+// Pre-allocated shared buffers for 32x32 DCT to reduce GC pressure.
+// NOTE: This function is non-reentrant. It MUST remain synchronous to avoid
+// race conditions on these shared buffers between concurrent calls.
+const SHARED_DCT_INTERMEDIATE = new Float64Array(DCT_N * DCT_N);
+const SHARED_DCT_OUTPUT = new Float64Array(DCT_N * DCT_N);
+// Pre-allocated buffers for perceptual hashing to reduce GC pressure
+const SHARED_PHASH_SUBMATRIX = new Float64Array(HASH_SIZE * HASH_SIZE - 1);
+const SHARED_PHASH_SORTED = new Float64Array(HASH_SIZE * HASH_SIZE - 1);
+
 /**
  * 2D Discrete Cosine Transform (DCT-II)
  * Optimized to O(N³) using separability and precomputed tables.
+ * Further optimized to only compute the top-left 8x8 coefficients needed for hashing.
+ * Loop-unrolled to reduce overhead and improve instruction-level parallelism.
  */
 function performDCT(pixels, N) {
     if (N !== DCT_N) {
@@ -447,33 +470,57 @@ function performDCT(pixels, N) {
         return dct;
     }
 
-    const intermediate = new Float64Array(DCT_N * DCT_N);
-    const dct = new Float64Array(DCT_N * DCT_N);
+    const intermediate = SHARED_DCT_INTERMEDIATE;
+    const dct = SHARED_DCT_OUTPUT;
 
-    // DCT along rows (transpose the output to intermediate for contiguous second pass)
+    // First pass: Only compute frequencies 0-7, unrolled to avoid inner loop overhead
     for (let x = 0; x < DCT_N; x++) {
         const offset = x * DCT_N;
-        for (let v = 0; v < DCT_N; v++) {
-            let sum = 0;
-            const cosOffset = v * DCT_N;
-            for (let y = 0; y < DCT_N; y++) {
-                sum += pixels[offset + y] * DCT_COS_TABLE[cosOffset + y];
-            }
-            intermediate[v * DCT_N + x] = sum;
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, s5 = 0, s6 = 0, s7 = 0;
+        for (let y = 0; y < DCT_N; y++) {
+            const p = pixels[offset + y];
+            s0 += p * DCT_COS_TABLE[0 * 32 + y];
+            s1 += p * DCT_COS_TABLE[1 * 32 + y];
+            s2 += p * DCT_COS_TABLE[2 * 32 + y];
+            s3 += p * DCT_COS_TABLE[3 * 32 + y];
+            s4 += p * DCT_COS_TABLE[4 * 32 + y];
+            s5 += p * DCT_COS_TABLE[5 * 32 + y];
+            s6 += p * DCT_COS_TABLE[6 * 32 + y];
+            s7 += p * DCT_COS_TABLE[7 * 32 + y];
         }
+        intermediate[0 * 32 + x] = s0;
+        intermediate[1 * 32 + x] = s1;
+        intermediate[2 * 32 + x] = s2;
+        intermediate[3 * 32 + x] = s3;
+        intermediate[4 * 32 + x] = s4;
+        intermediate[5 * 32 + x] = s5;
+        intermediate[6 * 32 + x] = s6;
+        intermediate[7 * 32 + x] = s7;
     }
 
-    // DCT along columns (accessing intermediate contiguously now)
-    for (let v = 0; v < DCT_N; v++) {
+    // Second pass: Compute final 8x8 coefficients
+    for (let v = 0; v < HASH_SIZE; v++) {
         const intOffset = v * DCT_N;
-        for (let u = 0; u < DCT_N; u++) {
-            let sum = 0;
-            const cosOffset = u * DCT_N;
-            for (let x = 0; x < DCT_N; x++) {
-                sum += intermediate[intOffset + x] * DCT_COS_TABLE[cosOffset + x];
-            }
-            dct[u * DCT_N + v] = DCT_C2_TABLE[u * DCT_N + v] * sum;
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, s5 = 0, s6 = 0, s7 = 0;
+        for (let x = 0; x < DCT_N; x++) {
+            const ivx = intermediate[intOffset + x];
+            s0 += ivx * DCT_COS_TABLE[0 * 32 + x];
+            s1 += ivx * DCT_COS_TABLE[1 * 32 + x];
+            s2 += ivx * DCT_COS_TABLE[2 * 32 + x];
+            s3 += ivx * DCT_COS_TABLE[3 * 32 + x];
+            s4 += ivx * DCT_COS_TABLE[4 * 32 + x];
+            s5 += ivx * DCT_COS_TABLE[5 * 32 + x];
+            s6 += ivx * DCT_COS_TABLE[6 * 32 + x];
+            s7 += ivx * DCT_COS_TABLE[7 * 32 + x];
         }
+        dct[0 * 32 + v] = DCT_C2_TABLE[0 * 32 + v] * s0;
+        dct[1 * 32 + v] = DCT_C2_TABLE[1 * 32 + v] * s1;
+        dct[2 * 32 + v] = DCT_C2_TABLE[2 * 32 + v] * s2;
+        dct[3 * 32 + v] = DCT_C2_TABLE[3 * 32 + v] * s3;
+        dct[4 * 32 + v] = DCT_C2_TABLE[4 * 32 + v] * s4;
+        dct[5 * 32 + v] = DCT_C2_TABLE[5 * 32 + v] * s5;
+        dct[6 * 32 + v] = DCT_C2_TABLE[6 * 32 + v] * s6;
+        dct[7 * 32 + v] = DCT_C2_TABLE[7 * 32 + v] * s7;
     }
 
     return dct;
@@ -489,8 +536,8 @@ async function buildTextureHashIndex() {
     if (textureHashInProgress) return textureHashInProgress;
 
     textureHashInProgress = (async () => {
-        const index = {};
         try {
+            const index = {};
             const dimPath = path.join(TEXTURES_DIR, "texture_dimensions.json");
             let dimensions = {};
             let dimsModified = false;
@@ -539,31 +586,49 @@ async function buildTextureHashIndex() {
                     if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return;
 
                     try {
-                        let width = null;
-                        let height = null;
+                        const filePath = path.join(categoryPath, file);
+                        const stats = await fs.promises.stat(filePath);
+                        const mtime = stats.mtimeMs;
 
-                        if (!isHidden) {
-                            if (!dimensions[entry.name][file]) {
-                                dimensions[entry.name][file] = { width: null, height: null };
-                                dimsModified = true;
-                            } else {
-                                width = dimensions[entry.name][file].width;
-                                height = dimensions[entry.name][file].height;
-                            }
+                        let width = null, height = null, hash = null;
+                        const cached = !isHidden ? dimensions[entry.name][file] : null;
+
+                        if (cached && cached.mtime === mtime && cached.hash) {
+                            hash = BigInt(cached.hash);
+                            width = cached.width;
+                            height = cached.height;
                         }
 
-                        const filePath = path.join(categoryPath, file);
-                        const buffer = await fs.promises.readFile(filePath);
-                        const hash = await computePhash(buffer);
+                        const nameOnly = path.basename(file, ext);
+                        const medFile = `${nameOnly}_medium${ext}`;
+                        const lowFile = `${nameOnly}_low${ext}`;
+                        const needsLods = !isHidden && (!lodFilesSet.has(medFile) || !lodFilesSet.has(lowFile));
+
+                        let buffer = null;
+                        if (hash === null || needsLods) {
+                            buffer = await fs.promises.readFile(filePath);
+                            if (hash === null) {
+                                hash = await computePhash(buffer);
+                                const metadata = await sharp(buffer).metadata();
+                                width = metadata.width;
+                                height = metadata.height;
+                                if (!isHidden) {
+                                    dimensions[entry.name][file] = {
+                                        width,
+                                        height,
+                                        hash: hash.toString(),
+                                        mtime
+                                    };
+                                    dimsModified = true;
+                                }
+                            }
+                        }
 
                         let urlMedium = null;
                         let urlLow = null;
 
                         if (!isHidden) {
                             const lodCatDir = path.join(LOD_DIR, entry.name);
-                            const nameOnly = path.basename(file, ext);
-                            const medFile = `${nameOnly}_medium${ext}`;
-                            const lowFile = `${nameOnly}_low${ext}`;
                             const medPath = path.join(lodCatDir, medFile);
                             const lowPath = path.join(lodCatDir, lowFile);
 
@@ -623,8 +688,25 @@ async function buildTextureHashIndex() {
 
                         try {
                             const filePath = path.join(hashFolderPath, file);
-                            const buffer = await fs.promises.readFile(filePath);
-                            const hash = await computePhash(buffer);
+                            const stats = await fs.promises.stat(filePath);
+                            const mtime = stats.mtimeMs;
+
+                            let hash = null;
+                            const variantCacheKey = `variant:${file}`;
+                            const cached = dimensions[entry.name][variantCacheKey];
+
+                            if (cached && cached.mtime === mtime && cached.hash) {
+                                hash = BigInt(cached.hash);
+                            } else {
+                                const buffer = await fs.promises.readFile(filePath);
+                                hash = await computePhash(buffer);
+                                dimensions[entry.name][variantCacheKey] = {
+                                    hash: hash.toString(),
+                                    mtime
+                                };
+                                dimsModified = true;
+                            }
+
                             let canonicalName = path.basename(file, ext).replace(/_\d+$/, '');
 
                             // Find the canonical entry in the map for O(1) lookup
@@ -662,37 +744,41 @@ async function buildTextureHashIndex() {
                     console.error(`[Texture] Failed to save dimensions: ${e.message}`);
                 }
             }
+
+            // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
+            // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
+            const flatLibrary = [];
+            for (const category of Object.keys(index)) {
+                const textures = index[category];
+                for (let i = 0; i < textures.length; i++) {
+                    const tex = textures[i];
+                    tex.category = category;
+                    flatLibrary.push(tex);
+                }
+            }
+            const flatLow = new Uint32Array(flatLibrary.length);
+            const flatHigh = new Uint32Array(flatLibrary.length);
+            for (let i = 0; i < flatLibrary.length; i++) {
+                flatLow[i] = flatLibrary[i].hLow;
+                flatHigh[i] = flatLibrary[i].hHigh;
+            }
+
+            // Attach flattened index as non-enumerable properties to the main index
+            Object.defineProperties(index, {
+                '_flatLibrary': { value: flatLibrary, enumerable: false },
+                '_flatLow': { value: flatLow, enumerable: false },
+                '_flatHigh': { value: flatHigh, enumerable: false }
+            });
+
+            textureHashCache = index;
+            app.locals.clearTextureCache = () => { textureHashCache = null; };
+            textureHashCacheTime = Date.now();
+            return index;
         } catch (e) {
             console.error(`[Texture] Index build error: ${e.message}`);
+        } finally {
+            textureHashInProgress = null;
         }
-
-        // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
-        // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
-        const flatLibrary = [];
-        for (const [category, textures] of Object.entries(index)) {
-            for (const tex of textures) {
-                flatLibrary.push({ ...tex, category });
-            }
-        }
-        const flatLow = new Uint32Array(flatLibrary.length);
-        const flatHigh = new Uint32Array(flatLibrary.length);
-        for (let i = 0; i < flatLibrary.length; i++) {
-            flatLow[i] = flatLibrary[i].hLow;
-            flatHigh[i] = flatLibrary[i].hHigh;
-        }
-
-        // Attach flattened index as non-enumerable properties to the main index
-        Object.defineProperties(index, {
-            '_flatLibrary': { value: flatLibrary, enumerable: false },
-            '_flatLow': { value: flatLow, enumerable: false },
-            '_flatHigh': { value: flatHigh, enumerable: false }
-        });
-
-        textureHashCache = index;
-        app.locals.clearTextureCache = () => { textureHashCache = null; };
-        textureHashCacheTime = Date.now();
-        textureHashInProgress = null;
-        return index;
     })();
 
     return textureHashInProgress;
@@ -701,18 +787,7 @@ async function buildTextureHashIndex() {
 // GET /api/textures - List all categories
 app.get('/api/textures', async (req, res) => {
     try {
-        const dimPath = path.join(TEXTURES_DIR, "texture_dimensions.json");
-            let dimensions = {};
-            let dimsModified = false;
-            try {
-                if (fs.existsSync(dimPath)) {
-                    dimensions = JSON.parse(await fs.promises.readFile(dimPath, "utf8"));
-                }
-            } catch (e) {
-                console.error(`[Texture] Error reading dimensions: ${e.message}`);
-            }
-
-            const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
+        const entries = await fs.promises.readdir(TEXTURES_DIR, { withFileTypes: true });
         const categories = entries
             .filter(e => e.isDirectory() && e.name !== 'Uncategorized' && e.name !== 'Hidden')
             .map(e => e.name);
@@ -778,6 +853,12 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
     if (room && (typeof room !== 'string' || room.length > 50)) room = room.toString().slice(0, 50);
     if (materialName && (typeof materialName !== 'string' || materialName.length > 50)) materialName = materialName.toString().slice(0, 50);
 
+    // Security: Reject path traversal or null-byte injection in metadata fields
+    const hasDangerousChars = (s) => s && (s.includes('..') || s.includes('/') || s.includes('\\') || s.includes('\0'));
+    if (hasDangerousChars(jobCode) || hasDangerousChars(room)) {
+        return res.json({ success: true, matched: false, bestMatch: null, bestCategory: null, isHidden: false, distance: Infinity, similarTextures: [] });
+    }
+
     if (!imageData) {
         return res.status(400).json({ success: false, error: 'No image data provided' });
     }
@@ -802,8 +883,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         const allMatches = [];
 
         for (let i = 0; i < _flatLibrary.length; i++) {
-            const distance = popcount32((inLow ^ _flatLow[i]) >>> 0) +
-                             popcount32((inHigh ^ _flatHigh[i]) >>> 0);
+            const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
 
             // Track absolute best match including hidden ones
             if (distance < bestDistance) {
@@ -875,8 +955,13 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
 app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
     try {
         const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
-        if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+        try {
+            await fs.promises.access(uncategorizedDir);
+        } catch {
+            await fs.promises.mkdir(uncategorizedDir, { recursive: true });
+        }
 
+        const existingTextures = new Set(await fs.promises.readdir(uncategorizedDir));
         let extracted = 0;
         const errors = [];
 
@@ -932,8 +1017,9 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
                         const destPath = path.join(uncategorizedDir, file);
 
                         // Avoid duplicates
-                        if (!fs.existsSync(destPath)) {
+                        if (!existingTextures.has(file)) {
                             await fs.promises.copyFile(srcPath, destPath);
+                            existingTextures.add(file);
                             extracted++;
                             console.log(`[Texture Scan] Extracted: ${file}`);
                         }
@@ -1006,8 +1092,7 @@ async function extractTexturesFromGlb(glbPath) {
 
         const { _flatLow, _flatHigh } = index;
         for (let i = 0; i < _flatLow.length; i++) {
-            const distance = popcount32((inLow ^ _flatLow[i]) >>> 0) +
-                             popcount32((inHigh ^ _flatHigh[i]) >>> 0);
+            const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
             if (distance <= 15) {
                 isMatched = true;
                 break;
@@ -1080,8 +1165,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
 
                 const { _flatLow, _flatHigh } = index;
                 for (let i = 0; i < _flatLow.length; i++) {
-                    const distance = popcount32((inLow ^ _flatLow[i]) >>> 0) +
-                                     popcount32((inHigh ^ _flatHigh[i]) >>> 0);
+                    const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
                     if (distance <= 15) {
                         isMatched = true;
                         break;
@@ -1171,8 +1255,7 @@ async function generateTextureManifest(glbPath) {
 
                         // Optimized Hamming distance loop using TypedArrays and SWAR popcount
                         for (let i = 0; i < flatLibrary.length; i++) {
-                            const distance = popcount32((inLow ^ flatLow[i]) >>> 0) +
-                                             popcount32((inHigh ^ flatHigh[i]) >>> 0);
+                            const distance = hammingDistance(inLow, inHigh, flatLow[i], flatHigh[i]);
 
                             if (distance < bestDistance) {
                                 bestDistance = distance;
@@ -1685,7 +1768,7 @@ function safeShowroomPath(...segments) {
 }
 
 // GET /api/showroom/part/{*path} - Serve GLB URL for a showroom part at any depth
-app.get('/api/showroom/part/{*path}', (req, res) => {
+app.get('/api/showroom/part/{*path}', async (req, res) => {
     let deepPath = req.params.path;
     if (!deepPath) return res.status(400).json({ success: false, error: 'Invalid path' });
     if (Array.isArray(deepPath)) deepPath = deepPath.join('/');
@@ -1694,7 +1777,12 @@ app.get('/api/showroom/part/{*path}', (req, res) => {
 
     const filePath = safeShowroomPath(deepPath);
     if (!filePath) return res.status(403).json({ success: false, error: 'Forbidden' });
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'Part not found' });
+
+    try {
+        await fs.promises.access(filePath);
+    } catch (err) {
+        return res.status(404).json({ success: false, error: 'Part not found' });
+    }
 
     res.json({ success: true, url: `/showroom/${deepPath}` });
 });
@@ -1777,7 +1865,7 @@ app.post('/api/showroom/config', configLimiter, express.json({ limit: '1mb' }), 
 });
 
 // GET /api/showroom/config/:pin - Load a saved showroom configuration
-app.get('/api/showroom/config/:pin', async (req, res) => {
+app.get('/api/showroom/config/:pin', configGetLimiter, async (req, res) => {
     const pin = req.params.pin;
 
     // Validate PIN format
@@ -2457,6 +2545,7 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.cleanDae = cleanDae;
+module.exports.fixWindowsPaths = fixWindowsPaths;
 module.exports.extractTexturesFromDaeImages = extractTexturesFromDaeImages;
 module.exports.SHOWROOM_DIR = SHOWROOM_DIR;
 module.exports.safeShowroomPath = safeShowroomPath;

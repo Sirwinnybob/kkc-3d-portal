@@ -1,3 +1,5 @@
+import { escapeHtml } from './utils.js';
+
 export class MaterialManager {
     constructor(config) {
         this.detectedMaterials = config.detectedMaterials || [];
@@ -42,16 +44,6 @@ export class MaterialManager {
 
         this.initDOM();
         this.bindEvents();
-    }
-
-    escapeHtml(unsafe) {
-        if (!unsafe || typeof unsafe !== 'string') return unsafe;
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
     }
 
     initDOM() {
@@ -300,15 +292,23 @@ export class MaterialManager {
 
         if (!manifestLoaded) {
             this.onStatusUpdate(`Matching ${texturedMaterials.length} textures...`);
-            for (let i = 0; i < texturedMaterials.length; i++) {
-                const mat = texturedMaterials[i];
+            let renderScheduled = false;
+            await Promise.all(texturedMaterials.map(async (mat) => {
                 try {
                     await this.matchTexture(mat);
                 } catch (e) {
                     console.error("Match error:", e);
                 }
-                if (this.texturePanel.classList.contains('show')) this.renderMaterialList();
-            }
+                // Re-render asynchronously to avoid blocking the parallel execution
+                // Debounced via requestAnimationFrame flag to ensure only one update per frame
+                if (!renderScheduled) {
+                    renderScheduled = true;
+                    requestAnimationFrame(() => {
+                        renderScheduled = false;
+                        if (this.texturePanel.classList.contains('show')) this.renderMaterialList();
+                    });
+                }
+            }));
         }
 
         this.isMatchingAll = false;
@@ -322,12 +322,14 @@ export class MaterialManager {
         this.materialList.innerHTML = '';
 
         const visibleMaterials = this.detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
+        const fragment = document.createDocumentFragment();
 
         if (visibleMaterials.length === 0) {
             const div = document.createElement('div');
             div.style.cssText = 'padding:20px; text-align:center; color:#888;';
             div.textContent = this.isMatchingAll ? 'Matching textures...' : 'No customizable textures found.';
-            this.materialList.appendChild(div);
+            fragment.appendChild(div);
+            this.materialList.appendChild(fragment);
             return;
         }
 
@@ -343,15 +345,15 @@ export class MaterialManager {
                 const header = document.createElement('div');
                 header.className = 'material-section-header';
                 header.textContent = 'Kitchen';
-                this.materialList.appendChild(header);
-                kitchenVis.forEach(mat => this.materialList.appendChild(this.createMaterialItem(mat)));
+                fragment.appendChild(header);
+                kitchenVis.forEach(mat => fragment.appendChild(this.createMaterialItem(mat)));
             }
             if (islandVis.length > 0) {
                 const header = document.createElement('div');
                 header.className = 'material-section-header';
                 header.textContent = 'Island';
-                this.materialList.appendChild(header);
-                islandVis.forEach(mat => this.materialList.appendChild(this.createMaterialItem(mat)));
+                fragment.appendChild(header);
+                islandVis.forEach(mat => fragment.appendChild(this.createMaterialItem(mat)));
             }
         } else {
             // Group materials by matchedName or original texture name
@@ -381,9 +383,11 @@ export class MaterialManager {
             });
 
             Array.from(groupedMaterials.values()).forEach(group => {
-                this.materialList.appendChild(this.createGroupedMaterialItem(group));
+                fragment.appendChild(this.createGroupedMaterialItem(group));
             });
         }
+
+        this.materialList.appendChild(fragment);
 
         document.getElementById('materials-view').style.display = 'block';
         document.getElementById('catalog-view').style.display = 'none';
@@ -395,6 +399,7 @@ export class MaterialManager {
         const mat = group.primaryMat;
         // Store indices to apply to all when clicked
         btn.dataset.indices = JSON.stringify(group.indices);
+        btn.dataset.index = group.indices[0].toString();
 
         if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
             try {
@@ -413,19 +418,36 @@ export class MaterialManager {
             mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
         }
 
-        const previewHtml = mat.previewCache;
         const displayName = group.displayName;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
-        btn.innerHTML = `
-            <div class="material-item-left">
-                ${previewHtml}
-                <div class="material-info">
-                    <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
-                    <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
-                </div>
-            </div>
-            <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
-        `;
+
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'material-item-left';
+        leftDiv.innerHTML = mat.previewCache;
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'material-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'material-name';
+        nameSpan.title = displayName;
+        nameSpan.textContent = displayName;
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'material-status';
+        statusSpan.textContent = isModified ? 'Modified' : 'Customizable';
+
+        infoDiv.appendChild(nameSpan);
+        infoDiv.appendChild(statusSpan);
+        leftDiv.appendChild(infoDiv);
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'material-badge';
+        badgeSpan.textContent = mat.isColor ? 'Color' : 'Has Texture';
+
+        btn.appendChild(leftDiv);
+        btn.appendChild(badgeSpan);
+
         btn.onclick = () => {
             // When user clicks a grouped material row, we just treat the first index as the active one
             // for the catalog view, but we'll apply texture changes to ALL grouped indices
@@ -458,19 +480,36 @@ export class MaterialManager {
             mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
         }
 
-        const previewHtml = mat.previewCache;
         const displayName = mat.matchedName || mat.name;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
-        btn.innerHTML = `
-            <div class="material-item-left">
-                ${previewHtml}
-                <div class="material-info">
-                    <span class="material-name" title="${this.escapeHtml(displayName)}">${this.escapeHtml(displayName)}</span>
-                    <span class="material-status">${isModified ? 'Modified' : 'Customizable'}</span>
-                </div>
-            </div>
-            <span class="material-badge">${mat.isColor ? 'Color' : 'Has Texture'}</span>
-        `;
+
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'material-item-left';
+        leftDiv.innerHTML = mat.previewCache;
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'material-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'material-name';
+        nameSpan.title = displayName;
+        nameSpan.textContent = displayName;
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'material-status';
+        statusSpan.textContent = isModified ? 'Modified' : 'Customizable';
+
+        infoDiv.appendChild(nameSpan);
+        infoDiv.appendChild(statusSpan);
+        leftDiv.appendChild(infoDiv);
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'material-badge';
+        badgeSpan.textContent = mat.isColor ? 'Color' : 'Has Texture';
+
+        btn.appendChild(leftDiv);
+        btn.appendChild(badgeSpan);
+
         btn.onclick = () => this.selectMaterial(originalIndex);
         return btn;
     }
@@ -507,19 +546,25 @@ export class MaterialManager {
         const img = mat.originalMap.image;
         if (!img) return null;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.min(img.width || 256, 256);
-        canvas.height = Math.min(img.height || 256, 256);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        // Cache the match promise on the image object to prevent redundant encoding/fetching for shared textures
+        if (!img._matchPromise) {
+            img._matchPromise = (async () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.min(img.width || 256, 256);
+                canvas.height = Math.min(img.height || 256, 256);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
 
-        const resp = await fetch('/api/textures/match', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageData, jobCode: this.jobCode, room: this.room, materialName: mat.name })
-        });
-        const data = await resp.json();
+                const resp = await fetch('/api/textures/match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageData, jobCode: this.jobCode, room: this.room, materialName: mat.name })
+                });
+                return await resp.json();
+            })();
+        }
+        const data = await img._matchPromise;
 
         if (data.success && data.matched) {
             mat.matchedName = data.bestMatch ? data.bestMatch.name : null;
@@ -623,6 +668,12 @@ export class MaterialManager {
         this.catalogTitle.innerText = 'Solid Colors';
         this.textureGrid.innerHTML = '';
 
+        const mat = this.detectedMaterials[this.selectedMaterialIndex];
+        let currentColorHex = mat.isColor ? mat.colorHex?.toUpperCase() : null;
+        if (!currentColorHex && !mat.hasTexture && mat.material.color) {
+            currentColorHex = '#' + mat.material.color.getHexString().toUpperCase();
+        }
+
         this.insertBrowseButton();
 
         const presetsDiv = document.createElement('div');
@@ -631,11 +682,12 @@ export class MaterialManager {
             const swatch = document.createElement('button');
             swatch.className = 'color-swatch';
             swatch.style.backgroundColor = preset.hex;
+            if (currentColorHex === preset.hex.toUpperCase()) swatch.classList.add('active');
             swatch.title = preset.name;
             swatch.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                 indices.forEach(idx => this.onApplyColor(idx, preset.hex, null, true));
-                presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
                 swatch.classList.add('active');
             };
             presetsDiv.appendChild(swatch);
@@ -646,9 +698,11 @@ export class MaterialManager {
         pickerRow.className = 'color-picker-row';
         const pickerLabel = document.createElement('label');
         pickerLabel.textContent = 'Custom:';
+        pickerLabel.htmlFor = 'custom-color-picker';
         const picker = document.createElement('input');
+        picker.id = 'custom-color-picker';
         picker.type = 'color';
-        picker.value = '#C8C8C8';
+        picker.value = currentColorHex || '#C8C8C8';
         const hexDisplay = document.createElement('span');
         hexDisplay.className = 'color-hex-display';
         hexDisplay.textContent = picker.value;
@@ -657,7 +711,7 @@ export class MaterialManager {
             hexDisplay.textContent = picker.value;
             const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
             indices.forEach(idx => this.onApplyColor(idx, picker.value, null, true));
-            presetsDiv.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+            this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
         };
         pickerRow.appendChild(pickerLabel);
         pickerRow.appendChild(picker);
@@ -679,10 +733,13 @@ export class MaterialManager {
                 const swatch = document.createElement('button');
                 swatch.className = 'recent-color-swatch';
                 swatch.style.backgroundColor = hex;
+                if (currentColorHex === hex.toUpperCase()) swatch.classList.add('active');
                 swatch.title = hex;
                 swatch.onclick = () => {
                     const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                     indices.forEach(idx => this.onApplyColor(idx, hex, null, true));
+                    this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
+                    swatch.classList.add('active');
                 };
                 recentRow.appendChild(swatch);
             });
@@ -710,18 +767,46 @@ export class MaterialManager {
     renderTextureGrid() {
         if (!this.textureGrid) return;
         this.textureGrid.innerHTML = '';
+        const mat = this.selectedMaterialIndex >= 0 ? this.detectedMaterials[this.selectedMaterialIndex] : null;
+        const currentUrl = mat ? (mat.urlHigh || mat.currentLODUrl) : null;
+
+        const fragment = document.createDocumentFragment();
+
         this.currentCategoryTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'texture-thumb';
+            if (currentUrl === tex.url) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-current', 'true');
+            }
             btn.dataset.search = (tex.name || '').toLowerCase();
-            btn.setAttribute('aria-label', `Select texture ${this.escapeHtml(tex.name)}`);
-            btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
+            btn.setAttribute('aria-label', `Select texture ${tex.name}`);
+
+            const img = document.createElement('img');
+            img.src = tex.url;
+            img.alt = tex.name;
+            img.loading = 'lazy';
+
+            const span = document.createElement('span');
+            span.textContent = tex.name;
+
+            btn.appendChild(img);
+            btn.appendChild(span);
+
             btn.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
                 indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height));
+
+                this.textureGrid.querySelectorAll('.texture-thumb').forEach(th => {
+                    th.classList.remove('active');
+                    th.removeAttribute('aria-current');
+                });
+                btn.classList.add('active');
+                btn.setAttribute('aria-current', 'true');
             };
-            this.textureGrid.appendChild(btn);
+            fragment.appendChild(btn);
         });
+        this.textureGrid.appendChild(fragment);
     }
 
     // --- QUICK PICKER ---
@@ -850,7 +935,7 @@ export class MaterialManager {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
             btn.dataset.search = (preset.name || '').toLowerCase();
-            btn.innerHTML = `<div class="color-swatch" style="background-color:${this.escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${this.escapeHtml(preset.name)}</span>`;
+            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
             btn.addEventListener('click', () => {
                 if (this.qpMatGroupIndex >= 0) {
                     this.onApplyColor(this.qpMatGroupIndex, preset.hex, this.qpTappedMesh, this.qpReplaceAll);
@@ -872,7 +957,7 @@ export class MaterialManager {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
             btn.dataset.search = (hex || '').toLowerCase();
-            btn.innerHTML = `<div class="color-swatch" style="background-color:${this.escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${this.escapeHtml(hex)}</span>`;
+            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
             btn.addEventListener('click', () => {
                 if (this.qpMatGroupIndex >= 0) {
                     this.onApplyColor(this.qpMatGroupIndex, hex, this.qpTappedMesh, this.qpReplaceAll);
@@ -924,12 +1009,25 @@ export class MaterialManager {
         const currentName = mat ? (mat.matchedName || null) : null;
         let activeEl = null;
 
+        const fragment = document.createDocumentFragment();
+
         this.qpCurrentTextures.forEach(tex => {
             const btn = document.createElement('button');
             btn.className = 'qp-tex-item';
             btn.dataset.search = (tex.name || '').toLowerCase();
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
-            btn.innerHTML = `<img src="${this.escapeHtml(tex.url)}" alt="${this.escapeHtml(tex.name)}" loading="lazy"><span>${this.escapeHtml(tex.name)}</span>`;
+
+            const img = document.createElement('img');
+            img.src = tex.url;
+            img.alt = tex.name;
+            img.loading = 'lazy';
+
+            const span = document.createElement('span');
+            span.textContent = tex.name;
+
+            btn.appendChild(img);
+            btn.appendChild(span);
+
             btn.addEventListener('click', () => {
                 this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll, tex.width, tex.height);
 
@@ -941,8 +1039,9 @@ export class MaterialManager {
                 this.qpLastTextureName = tex.name;
                 this.qpLastColorHex = null;
             });
-            this.qpTextureStrip.appendChild(btn);
+            fragment.appendChild(btn);
         });
+        this.qpTextureStrip.appendChild(fragment);
 
         if (activeEl) {
             requestAnimationFrame(() => {

@@ -44,4 +44,11 @@ fi
 # Run tests using the native Node test runner as mandated by memory
 node --test test/*.js test/*.test.js
 
+# Clean up test data directories to keep the git working tree clean.
+# jobs/ and textures/ are fully untracked, so remove them outright.
+rm -rf jobs textures
+# Showroom/ has tracked files; restore git state rather than delete the whole directory.
+git clean -fd Showroom/ 2>/dev/null || true
+git restore Showroom/ 2>/dev/null || git checkout -- Showroom/ 2>/dev/null || true
+
 echo "Environment setup complete!"

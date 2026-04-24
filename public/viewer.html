@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/css/viewer.css?v=1880">
 </head>
 <body>
-    <a href="#main-canvas" class="skip-link">Skip to 3D Viewer</a>
+    <a href="#canvas-container" class="skip-link">Skip to 3D Viewer</a>
     <div id="top-ui">
         <div id="menu-container">
             <div id="job-info" class="ui-panel">
@@ -93,14 +93,14 @@
             <h3 id="help-title" class="controls-title">Controls</h3>
             <div class="controls-body">
                 <div class="help-section-label">Navigation</div>
-                <b>Rotate:</b> Left Click / Arrow Keys<br>
-                <b>Pan:</b> Right Click / Shift + Arrows<br>
-                <b>Zoom:</b> Scroll / +/- Keys<br>
+                <b>Rotate:</b> <kbd>Left Click</kbd> / <kbd>Arrow Keys</kbd><br>
+                <b>Pan:</b> <kbd>Right Click</kbd> / <kbd>Shift</kbd> + <kbd>Arrow Keys</kbd><br>
+                <b>Zoom:</b> <kbd>Scroll</kbd> / <kbd>+</kbd> / <kbd>-</kbd> Keys<br>
                 <b>Pivot:</b> Double-tap surface<br>
                 <br>
                 <div class="help-section-label">Textures</div>
                 <b>Change Texture:</b> Tap any surface<br>
-                <b>Paint Mode:</b> Pick "Paint Mode" — keep tapping surfaces, press × when done<br>
+                <b>Paint Mode:</b> Pick "Paint Mode" — keep tapping surfaces, press <kbd>×</kbd> when done<br>
                 <br>
                 <div class="help-section-label">Buttons</div>
                 <b>☰ Menu:</b> Switch rooms, sensitivity, log out<br>
@@ -115,7 +115,7 @@
     <!-- Zoom Joystick -->
     <div id="joystick-container">
         <div id="joystick-track"></div>
-        <div id="joystick-handle" role="slider" aria-label="Zoom joystick handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+        <div id="joystick-handle" role="slider" aria-label="Zoom joystick handle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" tabindex="0"></div>
         <div class="joystick-label">Zoom</div>
     </div>
 
@@ -420,7 +420,7 @@
         </div>
     </div>
 
-    <div id="canvas-container"></div>
+    <div id="canvas-container" tabindex="-1"></div>
 
     <script type="importmap">
     {

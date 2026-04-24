@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const indexJsPath = path.join(__dirname, '../public/js/index.js');
-const indexJsContent = fs.readFileSync(indexJsPath, 'utf8');
+const indexJsContent = fs.readFileSync(indexJsPath, 'utf8').replace("import { escapeHtml } from './utils.js';", '');
 
 test('frontend index.js proceedAfterDisclaimer', async (t) => {
     let dom;
@@ -20,12 +20,18 @@ test('frontend index.js proceedAfterDisclaimer', async (t) => {
                     <div id="login-container"></div>
                     <div id="room-container"></div>
                     <div id="room-list"></div>
+                    <input type="text" id="jobCode" />
+                    <button id="btnCheckJob">View My Job</button>
+                    <div id="errorMsg" style="display:none"></div>
                 </body>
             </html>
         `, {
             runScripts: 'dangerously',
             url: 'http://localhost/'
         });
+
+        // Mock escapeHtml if needed (though it might not be used in proceedAfterDisclaimer)
+        dom.window.escapeHtml = (s) => s;
 
         // Mock localStorage
         let store = {};
@@ -133,5 +139,44 @@ test('frontend index.js proceedAfterDisclaimer', async (t) => {
         assert.strictEqual(dom.window._mockLocation.href, 'http://localhost/');
         assert.strictEqual(loginContainer.style.display, 'block');
         assert.strictEqual(roomContainer.style.display, 'none');
+    });
+
+    await t.test('Scenario 8: Input event hides error message and resets aria-invalid', () => {
+        const input = dom.window.document.getElementById('jobCode');
+        const errorMsg = dom.window.document.getElementById('errorMsg');
+
+        // Setup error state
+        errorMsg.style.display = 'block';
+        input.setAttribute('aria-invalid', 'true');
+
+        // Trigger input event
+        input.value = 'a';
+        input.dispatchEvent(new dom.window.Event('input'));
+
+        assert.strictEqual(errorMsg.style.display, 'none');
+        assert.strictEqual(input.getAttribute('aria-invalid'), null);
+    });
+
+    await t.test('Scenario 9: Input event updates button text for 5-digit PIN', () => {
+        const input = dom.window.document.getElementById('jobCode');
+        const btn = dom.window.document.getElementById('btnCheckJob');
+
+        // Initially 'View My Job'
+        btn.innerText = 'View My Job';
+
+        // 4 digits -> still 'View My Job'
+        input.value = '1234';
+        input.dispatchEvent(new dom.window.Event('input'));
+        assert.strictEqual(btn.innerText, 'View My Job');
+
+        // 5 digits -> 'Enter Showroom'
+        input.value = '12345';
+        input.dispatchEvent(new dom.window.Event('input'));
+        assert.strictEqual(btn.innerText, 'Enter Showroom');
+
+        // 6 digits -> back to 'View My Job'
+        input.value = '123456';
+        input.dispatchEvent(new dom.window.Event('input'));
+        assert.strictEqual(btn.innerText, 'View My Job');
     });
 });

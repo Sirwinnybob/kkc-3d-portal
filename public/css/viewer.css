@@ -662,6 +662,12 @@ body {
     transform: scale(1.03);
 }
 
+.texture-thumb.active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px #3b82f6, 0 0 10px rgba(59,130,246,0.4);
+    z-index: 2;
+}
+
 .texture-thumb:active {
     transform: scale(0.97);
 }
@@ -1583,7 +1589,8 @@ body {
 #showroom-btn:focus-visible,
 #save-config-btn:focus-visible,
 #help-btn:focus-visible,
-#menu-btn:focus-visible {
+#menu-btn:focus-visible,
+#joystick-handle:focus-visible {
     outline: 3px solid #3b82f6;
     outline-offset: 4px;
 }
@@ -1632,4 +1639,22 @@ body {
     0% { opacity: 0; }
     10% { opacity: 0.9; }
     100% { opacity: 0; }
+}
+
+/* Keyboard shortcut styling */
+kbd {
+    background-color: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.1);
+    color: #333;
+    display: inline-block;
+    font-family: inherit;
+    font-size: 0.85em;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0 2px;
+    padding: 3px 6px;
+    white-space: nowrap;
+    vertical-align: middle;
 }

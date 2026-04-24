@@ -17,13 +17,12 @@
         <img src="/images/kkc_logo.jpg" alt="KKC Logo" class="login-logo">
         <p>Enter your job number or showroom PIN to view your 3D cabinets!</p>
         <input type="text" id="jobCode" aria-label="Job Number or Showroom PIN" placeholder="Job# or Showroom PIN" autofocus>
-        <button id="btnCheckJob" aria-label="View My Job">View My Job</button>
+        <button id="btnCheckJob">View My Job</button>
         <div id="errorMsg" class="error" role="alert">Job code not found. Please check and try again.</div>
 
         <div class="showroom-divider"><span>or</span></div>
-        <button id="btnShowroom" class="showroom-btn" aria-label="Virtual Showroom">
+        <button id="btnShowroom" class="showroom-btn">
             Virtual Showroom
-            <span class="coming-soon-badge">Coming Soon</span>
         </button>
     </div>
 
@@ -59,11 +58,11 @@
                 <label class="dont-show-again">
                     <input type="checkbox" id="chkDontShow"> Don't show again on this device
                 </label>
-                <button id="btnAcceptDisclaimer" class="accept-btn" aria-label="I Acknowledge <button id="btnAcceptDisclaimer" class="accept-btn">I Acknowledge & Continue</button> Continue">I Acknowledge & Continue</button>
+                <button id="btnAcceptDisclaimer" class="accept-btn">I Acknowledge & Continue</button>
             </div>
         </div>
     </div>
 
-<script src="/js/index.js?v=303"></script>
+<script type="module" src="/js/index.js?v=303"></script>
 </body>
 </html>

@@ -2,16 +2,6 @@ let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
 
-function escapeHtml(unsafe) {
-    if (!unsafe || typeof unsafe !== 'string') return unsafe;
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 async function checkJob() {
     const code = document.getElementById('jobCode').value.trim();
     if (!code) return;
@@ -55,6 +45,8 @@ async function checkJob() {
             }
         } else {
             errorMsg.style.display = 'block';
+            const jobInput = document.getElementById('jobCode');
+            if (jobInput) jobInput.setAttribute('aria-invalid', 'true');
         }
     } catch (err) {
         console.error(err);
@@ -73,6 +65,10 @@ function proceedAfterDisclaimer() {
     }
 
     document.getElementById('disclaimer-modal').classList.remove('show');
+
+    // Return focus to check button after dismissing
+    const checkBtn = document.getElementById('btnCheckJob');
+    if (checkBtn) checkBtn.focus();
     
     if (pendingRedirectUrl) {
         window.location.href = pendingRedirectUrl;
@@ -92,8 +88,6 @@ function showRoomSelection(rooms) {
         btn.textContent = room;
         btn.className = 'room-btn';
         btn.id = `room-btn-${index}`;
-        btn.style.margin = '5px 0';
-        btn.style.padding = '10px';
         btn.addEventListener('click', () => {
             window.location.href = `/viewer.html?job=${encodeURIComponent(currentJob)}&room=${encodeURIComponent(room)}`;
         });
@@ -108,6 +102,10 @@ function showRoomSelection(rooms) {
 function backToLogin() {
     document.getElementById('room-container').style.display = 'none';
     document.getElementById('login-container').style.display = 'block';
+
+    // Return focus to input after backing out
+    const jobCode = document.getElementById('jobCode');
+    if (jobCode) jobCode.focus();
 }
 
 // Register Service Worker for PWA
@@ -119,6 +117,31 @@ if ('serviceWorker' in navigator) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Global Escape Key Listener
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const disclaimerModal = document.getElementById('disclaimer-modal');
+            if (disclaimerModal && disclaimerModal.classList.contains('show')) {
+                proceedAfterDisclaimer();
+            } else {
+                const roomContainer = document.getElementById('room-container');
+                if (roomContainer && roomContainer.style.display === 'block') {
+                    backToLogin();
+                }
+            }
+        }
+    });
+
+    // Backdrop click for disclaimer modal
+    const disclaimerModal = document.getElementById('disclaimer-modal');
+    if (disclaimerModal) {
+        disclaimerModal.addEventListener('click', (e) => {
+            if (e.target === disclaimerModal) {
+                proceedAfterDisclaimer();
+            }
+        });
+    }
+
     const checkBtn = document.getElementById('btnCheckJob');
     const backBtn = document.getElementById('btnBackToLogin');
     const acceptBtn = document.getElementById('btnAcceptDisclaimer');
@@ -131,6 +154,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (input) {
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') checkJob();
+        });
+
+        input.addEventListener('input', () => {
+            const errorMsg = document.getElementById('errorMsg');
+            if (errorMsg) errorMsg.style.display = 'none';
+            input.removeAttribute('aria-invalid');
+
+            // Adaptive button text: if 5 digits, it's a showroom PIN
+            const btn = document.getElementById('btnCheckJob');
+            if (btn) {
+                const isPin = /^\d{5}$/.test(input.value.trim());
+                btn.innerText = isPin ? 'Enter Showroom' : 'View My Job';
+            }
         });
     }
 
