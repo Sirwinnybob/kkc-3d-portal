@@ -650,6 +650,42 @@ async function init() {
                 }
             });
         }
+
+        // --- GLOBAL KEYBOARD SHORTCUTS (Zoom) ---
+        window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+
+            let v = 0;
+            if (e.key === '+' || e.key === '=') v = 0.5;
+            else if (e.key === '-' || e.key === '_') v = -0.5;
+            else if (e.key === 'PageUp') v = 1.0;
+            else if (e.key === 'PageDown') v = -1.0;
+
+            if (v !== 0) {
+                e.preventDefault();
+                zoomVelocity = Math.sign(v) * (v * v) * 0.05;
+                if (joystickHandle && joystickContainer) {
+                    const h = joystickContainer.offsetHeight || 160;
+                    const t = (h / 2) - (v * (h / 2));
+                    joystickHandle.style.top = `${t - 18}px`;
+                    const percent = Math.round(((h - t) / h) * 100);
+                    joystickHandle.setAttribute('aria-valuenow', percent.toString());
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (['+', '=', '-', '_', 'PageUp', 'PageDown'].includes(e.key)) {
+                if (!isDraggingJoystick) {
+                    zoomVelocity = 0;
+                    if (joystickHandle && joystickContainer) {
+                        joystickHandle.style.top = (joystickContainer.offsetHeight / 2 - 18) + 'px';
+                        joystickHandle.setAttribute('aria-valuenow', '50');
+                    }
+                }
+            }
+        });
         // --- SHOWROOM MODE BRANCH ---
         if (isShowroomMode) {
             window.setupTexturePanel = () => initMaterialManager(null, null); // Expose for showroom mode
