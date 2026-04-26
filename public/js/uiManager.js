@@ -12,13 +12,22 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isTyping) {
                     active.blur();
                     return;
                 }
                 this.closeActiveModals();
+            }
+            if (!isTyping) {
+                const key = e.key.toLowerCase();
+                const map = { t: 'texture-btn', c: 'camera-btn', m: 'menu-btn', h: 'help-btn', '?': 'help-btn' };
+                if (map[key]) {
+                    e.preventDefault();
+                    document.getElementById(map[key])?.click();
+                }
             }
         });
     }
