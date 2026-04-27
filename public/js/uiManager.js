@@ -12,13 +12,29 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isInput) {
                     active.blur();
                     return;
                 }
                 this.closeActiveModals();
+                return;
+            }
+
+            if (isInput) return;
+
+            const key = e.key.toLowerCase();
+            if (key === 'm') {
+                document.getElementById('menu-btn')?.click();
+            } else if (key === 't') {
+                document.getElementById('texture-btn')?.click();
+            } else if (key === 'c') {
+                document.getElementById('camera-btn')?.click();
+            } else if (key === 'h' || key === '?') {
+                document.getElementById('help-btn')?.click();
             }
         });
     }

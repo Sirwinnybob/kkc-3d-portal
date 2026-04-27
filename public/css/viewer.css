@@ -142,7 +142,9 @@ body {
     transition: transform 0.1s;
 }
 
-#help-btn:active {
+#help-btn:active,
+#light-mode-btn:active,
+#share-btn:active {
     transform: scale(0.92);
 }
 
