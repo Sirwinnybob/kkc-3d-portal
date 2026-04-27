@@ -137,11 +137,20 @@ function loadObjModel(url, maxAnisotropy, onProgress, resolve, reject) {
                             }
                             if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
                         } else {
-                            const colorHex = mat.uuid; // precise UUID instead of flat color grouping
-                            if (!materialMap.has(colorHex)) {
-                                materialMap.set(colorHex, { material: mat, meshes: [], name: mat.name || 'OBJ Material', hasTexture: false, originalMap: null });
+                            const materialKey = mat.uuid; // keep per-material grouping so same flat color can still be swapped independently
+                            const colorHex = mat.color ? `#${mat.color.getHexString().toUpperCase()}` : '#CCCCCC';
+                            if (!materialMap.has(materialKey)) {
+                                materialMap.set(materialKey, {
+                                    material: mat,
+                                    meshes: [],
+                                    name: mat.name || 'OBJ Material',
+                                    hasTexture: false,
+                                    originalMap: null,
+                                    isColor: true,
+                                    colorHex
+                                });
                             }
-                            if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                            if (!materialMap.get(materialKey).meshes.includes(child)) materialMap.get(materialKey).meshes.push(child);
                         }
                     });
                 }
@@ -172,11 +181,20 @@ function loadObjModel(url, maxAnisotropy, onProgress, resolve, reject) {
                     child.receiveShadow = true;
                     child.material = new THREE.MeshLambertMaterial({ color: 0xcccccc, side: THREE.DoubleSide });
 
-                    const colorHex = child.material.uuid;
-                    if (!materialMap.has(colorHex)) {
-                        materialMap.set(colorHex, { material: child.material, meshes: [], name: child.material.name || 'OBJ Material', hasTexture: false, originalMap: null });
+                    const materialKey = child.material.uuid;
+                    const colorHex = child.material.color ? `#${child.material.color.getHexString().toUpperCase()}` : '#CCCCCC';
+                    if (!materialMap.has(materialKey)) {
+                        materialMap.set(materialKey, {
+                            material: child.material,
+                            meshes: [],
+                            name: child.material.name || 'OBJ Material',
+                            hasTexture: false,
+                            originalMap: null,
+                            isColor: true,
+                            colorHex
+                        });
                     }
-                    if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                    if (!materialMap.get(materialKey).meshes.includes(child)) materialMap.get(materialKey).meshes.push(child);
                 }
             });
 
@@ -235,18 +253,20 @@ function loadGltfModel(url, maxAnisotropy, onProgress, resolve, reject) {
                         }
                         if (!materialMap.get(texSrc).meshes.includes(child)) materialMap.get(texSrc).meshes.push(child);
                     } else {
-                        const colorHex = prevMat.uuid;
-                        if (!materialMap.has(colorHex)) {
-                            materialMap.set(colorHex, {
+                        const materialKey = prevMat.uuid;
+                        const colorHex = mat.color ? `#${mat.color.getHexString().toUpperCase()}` : '#CCCCCC';
+                        if (!materialMap.has(materialKey)) {
+                            materialMap.set(materialKey, {
                                 name: mat.name || child.name || `Material_${materialMap.size}`,
                                 material: mat,
                                 meshes: [],
                                 hasTexture: false,
                                 originalMap: null,
-                                colorHex: colorHex
+                                isColor: true,
+                                colorHex
                             });
                         }
-                        if (!materialMap.get(colorHex).meshes.includes(child)) materialMap.get(colorHex).meshes.push(child);
+                        if (!materialMap.get(materialKey).meshes.includes(child)) materialMap.get(materialKey).meshes.push(child);
                     }
                 });
                 child.castShadow = true;

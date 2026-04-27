@@ -175,8 +175,11 @@ function initMaterialManager(jobCode, room) {
                         matGroup.width = realWidth;
                         matGroup.height = realHeight;
                         matGroup.currentLODUrl = url;
+                        matGroup.hasTexture = true;
+                        matGroup.isColor = false;
                         matGroup.previewCache = null;
                     } else if (tappedMesh) {
+                        matGroup.hasTexture = true;
                         matGroup.hasPartialChange = true;
                     }
 
@@ -211,6 +214,7 @@ function initMaterialManager(jobCode, room) {
                     const b = Math.round(color.b * 255);
                     matGroup.matchedName = `RGB(${r},${g},${b})`;
                     matGroup.isColor = true;
+                    matGroup.hasTexture = true;
                     matGroup.colorHex = hexColor;
                     matGroup.previewCache = null;
                     if (materialManager) materialManager.addRecentColor(hexColor);
@@ -223,6 +227,7 @@ function initMaterialManager(jobCode, room) {
                     });
                     matGroup.hasPartialChange = true;
                     matGroup.isColor = true;
+                    matGroup.hasTexture = true;
                     matGroup.colorHex = hexColor;
                     const r = Math.round(color.r * 255);
                     const g = Math.round(color.g * 255);
@@ -579,7 +584,8 @@ async function init() {
 
             const matGroupIndex = detectedMaterials.findIndex(g => g.meshes.includes(tappedMesh));
             if (matGroupIndex < 0) return;
-            if (!detectedMaterials[matGroupIndex].hasTexture) return;
+            const matGroup = detectedMaterials[matGroupIndex];
+            if (!matGroup.hasTexture && !matGroup.isColor && !matGroup.material?.color) return;
 
             if (materialManager) {
                 materialManager.openQuickPicker(matGroupIndex, tappedMesh);

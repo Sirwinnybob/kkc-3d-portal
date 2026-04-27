@@ -321,7 +321,10 @@ export class MaterialManager {
         if (!this.materialList) return;
         this.materialList.innerHTML = '';
 
-        const visibleMaterials = this.detectedMaterials.filter(mat => mat.hasTexture && !mat.isHidden);
+        const visibleMaterials = this.detectedMaterials.filter(mat => {
+            if (mat.isHidden) return false;
+            return !!mat.hasTexture || !!mat.isColor || !!mat.material?.color;
+        });
         const fragment = document.createDocumentFragment();
 
         if (visibleMaterials.length === 0) {
@@ -1057,7 +1060,9 @@ export class MaterialManager {
         if (!this.qpLastTextureUrl && !this.qpLastColorHex) return false;
 
         const idx = this.detectedMaterials.findIndex(g => g.meshes.includes(mesh));
-        if (idx < 0 || !this.detectedMaterials[idx].hasTexture) return false;
+        if (idx < 0) return false;
+        const mat = this.detectedMaterials[idx];
+        if (!mat.hasTexture && !mat.isColor && !mat.material?.color) return false;
 
         this.onClearHighlight();
         this.qpTappedMesh = mesh;
