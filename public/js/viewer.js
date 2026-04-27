@@ -24,6 +24,7 @@ let modelLodUrls = null;
 let activeModelQuality = null;
 let activeModelUrl = null;
 let switchModelQuality = null;
+let modelQualityLoadToken = 0;
 
 // Surface Highlight state
 // Texture cache
@@ -156,9 +157,24 @@ function initMaterialManager(jobCode, room, options = {}) {
             onStatusUpdate: updateStatus,
             onHighlightMesh: highlightMesh,
             onClearHighlight: clearMeshHighlight,
-            onApplyTexture: (matGroupIndex, url, urlMedium, urlLow, name, tappedMesh, replaceAll, realWidth, realHeight) => {
+            onApplyTexture: (matGroupIndex, url, urlMedium, urlLow, name, tappedMesh, replaceAll, realWidth, realHeight, isUserChange = false) => {
                 const matGroup = detectedMaterials[matGroupIndex];
                 const geometryCache = new Map(); // originalGeometryUUID -> { scaleU, scaleV, clonedGeometry }
+                if (isUserChange) {
+                    matGroup.userModified = true;
+                    if (name) matGroup.matchedName = name;
+                    if (replaceAll) {
+                        matGroup.urlHigh = url;
+                        matGroup.urlMedium = urlMedium;
+                        matGroup.urlLow = urlLow;
+                        matGroup.currentLODUrl = url;
+                        matGroup.hasTexture = true;
+                        matGroup.isColor = false;
+                    } else {
+                        matGroup.hasTexture = true;
+                        matGroup.hasPartialChange = true;
+                    }
+                }
 
                 getTexture(url).then((newTex) => {
                     const targetMeshes = replaceAll ? matGroup.meshes : (tappedMesh ? [tappedMesh] : []);
@@ -244,6 +260,7 @@ function initMaterialManager(jobCode, room, options = {}) {
             onApplyColor: (matGroupIndex, hexColor, tappedMesh, replaceAll) => {
                 const matGroup = detectedMaterials[matGroupIndex];
                 const color = new THREE.Color(hexColor);
+                matGroup.userModified = true;
 
                 if (replaceAll) {
                     matGroup.meshes.forEach(mesh => {
@@ -294,15 +311,20 @@ function initMaterialManager(jobCode, room, options = {}) {
         }
     });
 
-    if (!options.skipMatch && materialManager.matchAllTextures) {
-        materialManager.matchAllTextures();
-    }
+    const matchPromise = (!options.skipMatch && materialManager.matchAllTextures)
+        ? materialManager.matchAllTextures()
+        : Promise.resolve();
+    return matchPromise;
 }
 
 function snapshotMaterialState() {
     const snapshot = new Map();
     detectedMaterials.forEach(mat => {
         if (!mat.name) return;
+        const isModified = !!mat.userModified
+            || !!mat.isColor
+            || !!mat.hasPartialChange
+            || (mat.originalMatchedName !== undefined && mat.matchedName !== mat.originalMatchedName);
         snapshot.set(mat.name, {
             name: mat.name,
             hasTexture: !!mat.hasTexture,
@@ -319,7 +341,9 @@ function snapshotMaterialState() {
             urlLow: mat.urlLow || null,
             currentLODUrl: mat.currentLODUrl || null,
             width: mat.width || null,
-            height: mat.height || null
+            height: mat.height || null,
+            userModified: !!mat.userModified,
+            isModified
         });
     });
     return snapshot;
@@ -331,6 +355,7 @@ async function applyMaterialStateSnapshot(snapshot) {
     detectedMaterials.forEach(mat => {
         const saved = snapshot.get(mat.name);
         if (!saved) return;
+        if (!saved.isModified) return;
 
         mat.matchedName = saved.matchedName;
         mat.originalMatchedName = saved.originalMatchedName;
@@ -344,6 +369,7 @@ async function applyMaterialStateSnapshot(snapshot) {
         mat.currentLODUrl = saved.currentLODUrl;
         mat.width = saved.width;
         mat.height = saved.height;
+        mat.userModified = saved.userModified;
         mat.previewCache = null;
 
         if (saved.isColor && saved.colorHex) {
@@ -365,9 +391,28 @@ async function applyMaterialStateSnapshot(snapshot) {
         mat.isColor = false;
         mat.hasTexture = saved.hasTexture;
         const textureUrl = saved.currentLODUrl || saved.urlHigh;
-        if (!textureUrl) return;
+        if (!textureUrl) {
+            if (saved.hasTexture) {
+                mat.meshes.forEach(mesh => {
+                    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    mats.forEach(material => {
+                        if (material.map) {
+                            material.map.wrapS = THREE.RepeatWrapping;
+                            material.map.wrapT = THREE.RepeatWrapping;
+                            if (renderer) material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                        }
+                        if (material.color) material.color.setHex(0xffffff);
+                        material.needsUpdate = true;
+                    });
+                });
+            }
+            return;
+        }
 
         texturePromises.push(getTexture(textureUrl).then(tex => {
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(1, 1);
             mat.meshes.forEach(mesh => {
                 const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
                 mats.forEach(material => {
@@ -926,9 +971,11 @@ async function init() {
             if (!targetUrl) throw new Error("Model URL not found");
             if (activeModelUrl === targetUrl && loadedModel) {
                 activeModelQuality = quality;
+                window.activeModelQuality = activeModelQuality;
                 return;
             }
 
+            const loadToken = ++modelQualityLoadToken;
             const snapshot = options.preserveMaterials ? snapshotMaterialState() : null;
             updateStatus(`Loading ${quality.charAt(0).toUpperCase() + quality.slice(1)} Model...`);
 
@@ -943,6 +990,11 @@ async function init() {
                 }
             );
 
+            if (loadToken !== modelQualityLoadToken) {
+                disposeModel(model);
+                return;
+            }
+
             if (loadedModel) {
                 scene.remove(loadedModel);
                 disposeModel(loadedModel);
@@ -953,16 +1005,17 @@ async function init() {
             scene.add(loadedModel);
             activeModelUrl = targetUrl;
             activeModelQuality = quality;
+            window.activeModelQuality = activeModelQuality;
 
             if (options.frameModel) {
                 frameLoadedModel(loadedModel);
             }
 
+            await initMaterialManager(jobCode, initialRoom, { skipMatch: false });
+
             if (snapshot) {
                 await applyMaterialStateSnapshot(snapshot);
             }
-
-            initMaterialManager(jobCode, initialRoom, { skipMatch: !!snapshot });
 
             if (typeof composer !== 'undefined' && composer) composer.render();
             else renderer.render(scene, camera);

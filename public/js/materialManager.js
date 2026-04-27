@@ -798,7 +798,7 @@ export class MaterialManager {
 
             btn.onclick = () => {
                 const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
-                indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height));
+                indices.forEach(idx => this.onApplyTexture(idx, tex.url, tex.urlMedium, tex.urlLow, tex.name, null, true, tex.width, tex.height, true));
 
                 this.textureGrid.querySelectorAll('.texture-thumb').forEach(th => {
                     th.classList.remove('active');
@@ -1032,7 +1032,7 @@ export class MaterialManager {
             btn.appendChild(span);
 
             btn.addEventListener('click', () => {
-                this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll, tex.width, tex.height);
+                this.onApplyTexture(this.qpMatGroupIndex, tex.url, tex.urlMedium, tex.urlLow, tex.name, this.qpTappedMesh, this.qpReplaceAll, tex.width, tex.height, true);
 
                 this.qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => {
                     b.classList.toggle('active', b.querySelector('span')?.textContent === tex.name);
@@ -1076,7 +1076,7 @@ export class MaterialManager {
             const texData = this.qpCurrentTextures.find(t => t.url === this.qpLastTextureUrl);
             const tWidth = texData ? texData.width : null;
             const tHeight = texData ? texData.height : null;
-            this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false, tWidth, tHeight);
+            this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false, tWidth, tHeight, true);
         }
         return true;
     }
