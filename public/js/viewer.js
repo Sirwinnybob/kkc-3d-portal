@@ -25,7 +25,6 @@ let loadedModel = null;
 // LOD cache and tracking
 const sharedTextureLoader = new THREE.TextureLoader();
 const textureCache = new Map(); // url -> Promise<THREE.Texture>
-const _lodVec = new THREE.Vector3();
 let lastLodCheckTime = 0;
 
 /**
@@ -84,6 +83,11 @@ let isShowroomMode = false;
 let materialManager = null;
 let showroomManager = null;
 const MILKY_GRAY = 0xC8C8C8;
+
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        (window.innerWidth <= 800 && window.innerHeight <= 1000);
+}
 
 // Bridge populated by setupTexturePanel so handleSingleTap (init scope) can open the picker
 
@@ -405,11 +409,7 @@ async function init() {
                 const now = Date.now();
                 if (camera && scene && (now - lastLodCheckTime > 500) && detectedMaterials.length > 0) {
                     lastLodCheckTime = now;
-                    const camPos = camera.position;
-
-                    // Use global thresholds set by sliders, or defaults
-                    const tHigh = window.lodHighThreshold || 500;
-                    const tMed = window.lodMediumThreshold || 2000;
+                    const lodMode = window.lodQualityMode || 'high';
 
                     detectedMaterials.forEach(matGroup => {
                         if (!matGroup.hasTexture || matGroup.isColor || window.forceHighResRender) return;
@@ -417,31 +417,24 @@ async function init() {
                         // Only swap if we have LOD URLs stored on the group
                         if (!matGroup.urlLow && !matGroup.urlMedium) return;
 
-                        // Use the first mesh in the group to determine distance
-                        if (matGroup.meshes.length > 0) {
-                            const mesh = matGroup.meshes[0];
-                            if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-                            _lodVec.copy(mesh.geometry.boundingSphere.center);
-                            mesh.localToWorld(_lodVec);
-                            const dist = camPos.distanceTo(_lodVec);
+                        let targetUrl = matGroup.urlHigh;
+                        if (lodMode === 'medium') {
+                            targetUrl = matGroup.urlMedium || matGroup.urlHigh;
+                        } else if (lodMode === 'low') {
+                            targetUrl = matGroup.urlLow || matGroup.urlMedium || matGroup.urlHigh;
+                        }
 
-                            let targetUrl = matGroup.urlHigh; // Default to high
-                            if (dist > tMed) targetUrl = matGroup.urlLow || matGroup.urlMedium || matGroup.urlHigh;
-                            else if (dist > tHigh) targetUrl = matGroup.urlMedium || matGroup.urlHigh;
+                        if (targetUrl && matGroup.currentLODUrl !== targetUrl) {
+                            matGroup.currentLODUrl = targetUrl;
 
-                            if (targetUrl && matGroup.currentLODUrl !== targetUrl) {
-                                matGroup.currentLODUrl = targetUrl;
-
-                                getTexture(targetUrl).then((tex) => {
-                                    // Make sure distance hasn't caused another swap while loading
-                                    if (matGroup.currentLODUrl === targetUrl) {
-                                        matGroup.meshes.forEach(m => {
-                                            m.material.map = tex;
-                                            m.material.needsUpdate = true;
-                                        });
-                                    }
-                                });
-                            }
+                            getTexture(targetUrl).then((tex) => {
+                                if (matGroup.currentLODUrl === targetUrl) {
+                                    matGroup.meshes.forEach(m => {
+                                        m.material.map = tex;
+                                        m.material.needsUpdate = true;
+                                    });
+                                }
+                            });
                         }
                     });
                 }
@@ -466,28 +459,30 @@ async function init() {
         fxaaPass = engine.fxaaPass;
         window.scene = scene;
 
-        // --- LOD THRESHOLDS ---
-        window.lodHighThreshold = 500;
-        window.lodMediumThreshold = 2000;
-        const lodHighSlider = document.getElementById('lod-high-slider');
-        const lodHighVal    = document.getElementById('lod-high-val');
-        const lodMediumSlider = document.getElementById('lod-medium-slider');
-        const lodMediumVal  = document.getElementById('lod-medium-val');
-
-        if (lodHighSlider && lodHighVal) {
-            lodHighSlider.oninput = () => {
-                const v = parseInt(lodHighSlider.value);
-                lodHighVal.innerText = v;
-                window.lodHighThreshold = v;
-            };
-        }
-        if (lodMediumSlider && lodMediumVal) {
-            lodMediumSlider.oninput = () => {
-                const v = parseInt(lodMediumSlider.value);
-                lodMediumVal.innerText = v;
-                window.lodMediumThreshold = v;
-            };
-        }
+        // --- LOD QUALITY ---
+        window.lodQualityMode = isMobileDevice() ? 'medium' : 'high';
+        const lodBtnHigh = document.getElementById('lod-quality-high');
+        const lodBtnMedium = document.getElementById('lod-quality-medium');
+        const lodBtnLow = document.getElementById('lod-quality-low');
+        const lodButtonsByMode = {
+            high: lodBtnHigh,
+            medium: lodBtnMedium,
+            low: lodBtnLow
+        };
+        const setLodQualityMode = (mode) => {
+            window.lodQualityMode = mode;
+            Object.entries(lodButtonsByMode).forEach(([key, btn]) => {
+                if (!btn) return;
+                btn.classList.toggle('active', key === mode);
+                btn.setAttribute('aria-pressed', key === mode ? 'true' : 'false');
+            });
+            // Force immediate quality application on next render cycle.
+            lastLodCheckTime = 0;
+        };
+        if (lodBtnHigh) lodBtnHigh.onclick = () => setLodQualityMode('high');
+        if (lodBtnMedium) lodBtnMedium.onclick = () => setLodQualityMode('medium');
+        if (lodBtnLow) lodBtnLow.onclick = () => setLodQualityMode('low');
+        setLodQualityMode(window.lodQualityMode);
 
         // --- SENSITIVITY SLIDER ---
         const sensSlider = document.getElementById('sens-slider');
@@ -838,7 +833,7 @@ async function init() {
                 const origAspect = camera.aspect;
 
                 // Resolution logic: Native for mobile (safer), 4K for PC
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 800 && window.innerHeight <= 1000);
+                const isMobile = isMobileDevice();
                 const targetWidth = isMobile ? Math.min(window.innerWidth * window.devicePixelRatio, 3000) : 3840;
                 const targetHeight = Math.round(targetWidth / origAspect);
                 

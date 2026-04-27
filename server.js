@@ -1325,6 +1325,10 @@ async function generateAllManifests(dir, force = false) {
             if (entry.isDirectory()) {
                 await generateAllManifests(fullPath, force);
             } else if (entry.name.toLowerCase().endsWith('.glb')) {
+                const lowerName = entry.name.toLowerCase();
+                // Only generate one manifest per room/model. LOD variants share the same material mapping.
+                if (lowerName.endsWith('_medium.glb') || lowerName.endsWith('_low.glb')) return;
+
                 const manifestPath = fullPath.replace(/\.glb$/i, '.textures.json');
                 if (!force) {
                     try {

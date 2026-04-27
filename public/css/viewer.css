@@ -106,6 +106,26 @@ body {
 
 .slider-label { font-size: 0.8em; font-weight: bold; display: block; margin-bottom: 5px; color: #333; }
 #sens-slider { width: 100%; cursor: pointer; }
+.lod-quality-buttons { display: flex; gap: 6px; }
+.lod-quality-btn {
+    flex: 1;
+    padding: 7px 8px;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    background: #f4f4f4;
+    color: #333;
+    font-size: 0.8em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.08s;
+}
+.lod-quality-btn:hover { background: #ececec; border-color: #b9b9b9; }
+.lod-quality-btn:active { transform: scale(0.98); }
+.lod-quality-btn.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: #fff;
+}
 
 .logout-btn {
     text-align: center;
