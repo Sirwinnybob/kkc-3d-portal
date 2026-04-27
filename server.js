@@ -197,7 +197,7 @@ app.get('/api/job/:code', async (req, res) => {
     res.json({ success: true, rooms: [...new Set(rooms)] });
 });
 
-app.get('/api/job/:code/:room', (req, res) => {
+app.get('/api/job/:code/:room', async (req, res) => {
     const { code, room } = req.params;
 
     // Security: Input validation
@@ -219,7 +219,11 @@ app.get('/api/job/:code/:room', (req, res) => {
     if (!relCode || relCode.startsWith('..') || path.isAbsolute(relCode) || !relRoom || relRoom.startsWith('..') || path.isAbsolute(relRoom)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
-    if (!fs.existsSync(jobPath)) return res.status(404).json({ success: false });
+    try {
+        await fs.promises.access(jobPath);
+    } catch {
+        return res.status(404).json({ success: false });
+    }
     const findGlb = async (dir) => {
         try {
             const entries = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -250,10 +254,35 @@ app.get('/api/job/:code/:room', (req, res) => {
         return null;
     };
 
-    findGlb(jobPath).then(absPath => {
-        if (absPath) return res.json({ success: true, url: `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}` });
-        res.status(404).json({ success: false });
-    });
+    const toJobsUrl = (absPath) => `/jobs/${path.relative(JOBS_DIR, absPath).replace(/\\/g, '/')}`;
+    const optionalFileUrl = async (absPath) => {
+        try {
+            await fs.promises.access(absPath, fs.constants.F_OK);
+            return toJobsUrl(absPath);
+        } catch {
+            return null;
+        }
+    };
+
+    const absPath = await findGlb(jobPath);
+    if (!absPath) return res.status(404).json({ success: false });
+
+    const ext = path.extname(absPath);
+    const base = absPath.slice(0, -ext.length);
+    const response = {
+        success: true,
+        url: toJobsUrl(absPath),
+        urlHigh: toJobsUrl(absPath),
+        urlMedium: null,
+        urlLow: null
+    };
+
+    if (ext.toLowerCase() === '.glb') {
+        response.urlMedium = await optionalFileUrl(`${base}_medium${ext}`);
+        response.urlLow = await optionalFileUrl(`${base}_low${ext}`);
+    }
+
+    res.json(response);
 });
 
 // GET /api/job/:code/:room/textures - Serve pre-computed texture manifest

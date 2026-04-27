@@ -6,3 +6,4 @@ AssimpAndroid/
 .DS_Store
 test/benchmark_jobs/
 bun.lockb
+*.log
