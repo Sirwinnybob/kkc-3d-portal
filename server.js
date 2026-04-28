@@ -20,6 +20,7 @@ const sharp = require('sharp');
 const app = express();
 app.disable('x-powered-by'); // Security: disable X-Powered-By header
 const APP_VERSION = "2.1.9";
+const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-\.\ ]+$/;
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -1520,6 +1521,12 @@ async function processQueue() {
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
 
+    if (!SAFE_FILENAME_REGEX.test(inputFilename) || !SAFE_FILENAME_REGEX.test(outputGlb)) {
+        console.error(`[SECURITY] Invalid filename detected in processQueue: input=${inputFilename}, output=${outputGlb}`);
+        isConverting = false;
+        return setImmediate(processQueue);
+    }
+
     // Extract textures from DAE images folder before GLB conversion
     await extractTexturesFromDaeImages(filePath);
     await cleanDae(filePath);
@@ -2446,6 +2453,11 @@ if (require.main === module) {
             const baseName = path.basename(fp, path.extname(fp));
             const outputGlb = `${baseName.replace(/ /g, '_')}.glb`;
             const finalGlb = path.join(dir, `${baseName}.glb`);
+
+            if (!SAFE_FILENAME_REGEX.test(inputFilename) || !SAFE_FILENAME_REGEX.test(outputGlb)) {
+                console.error(`[SECURITY] Invalid filename detected in Staging Watcher: input=${inputFilename}, output=${outputGlb}`);
+                return;
+            }
 
             // Skip if GLB already exists and is newer
             try {
