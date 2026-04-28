@@ -169,7 +169,6 @@ function initMaterialManager(jobCode, room, options = {}) {
                         matGroup.urlLow = urlLow;
                         matGroup.currentLODUrl = url;
                         matGroup.hasTexture = true;
-                        matGroup.isColor = false;
                     } else {
                         matGroup.hasTexture = true;
                         matGroup.hasPartialChange = true;
@@ -238,7 +237,6 @@ function initMaterialManager(jobCode, room, options = {}) {
                         }
                         matGroup.currentLODUrl = url;
                         matGroup.hasTexture = true;
-                        matGroup.isColor = false;
                         matGroup.previewCache = null;
                     } else if (tappedMesh) {
                         matGroup.hasTexture = true;
@@ -256,57 +254,6 @@ function initMaterialManager(jobCode, room, options = {}) {
                         }
                     }
                 });
-            },
-            onApplyColor: (matGroupIndex, hexColor, tappedMesh, replaceAll) => {
-                const matGroup = detectedMaterials[matGroupIndex];
-                const color = new THREE.Color(hexColor);
-                matGroup.userModified = true;
-
-                if (replaceAll) {
-                    matGroup.meshes.forEach(mesh => {
-                        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                        mats.forEach(m => {
-                            m.map = null;
-                            if (m.color) m.color.copy(color);
-                            m.needsUpdate = true;
-                        });
-                    });
-
-                    const r = Math.round(color.r * 255);
-                    const g = Math.round(color.g * 255);
-                    const b = Math.round(color.b * 255);
-                    matGroup.matchedName = `RGB(${r},${g},${b})`;
-                    matGroup.isColor = true;
-                    matGroup.hasTexture = true;
-                    matGroup.colorHex = hexColor;
-                    matGroup.previewCache = null;
-                    if (materialManager) materialManager.addRecentColor(hexColor);
-                } else if (tappedMesh) {
-                    const tappedMats = Array.isArray(tappedMesh.material) ? tappedMesh.material : [tappedMesh.material];
-                    tappedMats.forEach(m => {
-                        m.map = null;
-                        if (m.color) m.color.copy(color);
-                        m.needsUpdate = true;
-                    });
-                    matGroup.hasPartialChange = true;
-                    matGroup.isColor = true;
-                    matGroup.hasTexture = true;
-                    matGroup.colorHex = hexColor;
-                    const r = Math.round(color.r * 255);
-                    const g = Math.round(color.g * 255);
-                    const b = Math.round(color.b * 255);
-                    matGroup.matchedName = `RGB(${r},${g},${b})`;
-                    if (materialManager) materialManager.addRecentColor(hexColor);
-                }
-
-                // Late render for non-looping viewer
-                if (typeof renderer !== 'undefined' && renderer && scene && camera) {
-                    if (typeof composer !== 'undefined' && composer) {
-                        composer.render();
-                    } else {
-                        renderer.render(scene, camera);
-                    }
-                }
             }
         }
     });
@@ -322,14 +269,11 @@ function snapshotMaterialState() {
     detectedMaterials.forEach(mat => {
         if (!mat.name) return;
         const isModified = !!mat.userModified
-            || !!mat.isColor
             || !!mat.hasPartialChange
             || (mat.originalMatchedName !== undefined && mat.matchedName !== mat.originalMatchedName);
         snapshot.set(mat.name, {
             name: mat.name,
             hasTexture: !!mat.hasTexture,
-            isColor: !!mat.isColor,
-            colorHex: mat.colorHex || null,
             matchedName: mat.matchedName || null,
             originalMatchedName: mat.originalMatchedName,
             bestCategory: mat.bestCategory || null,
@@ -372,23 +316,6 @@ async function applyMaterialStateSnapshot(snapshot) {
         mat.userModified = saved.userModified;
         mat.previewCache = null;
 
-        if (saved.isColor && saved.colorHex) {
-            const color = new THREE.Color(saved.colorHex);
-            mat.isColor = true;
-            mat.hasTexture = true;
-            mat.colorHex = saved.colorHex;
-            mat.meshes.forEach(mesh => {
-                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                mats.forEach(material => {
-                    material.map = null;
-                    if (material.color) material.color.copy(color);
-                    material.needsUpdate = true;
-                });
-            });
-            return;
-        }
-
-        mat.isColor = false;
         mat.hasTexture = saved.hasTexture;
         const textureUrl = saved.currentLODUrl || saved.urlHigh;
         if (!textureUrl) {
@@ -742,7 +669,7 @@ async function init() {
             const matGroupIndex = detectedMaterials.findIndex(g => g.meshes.includes(tappedMesh));
             if (matGroupIndex < 0) return;
             const matGroup = detectedMaterials[matGroupIndex];
-            if (!matGroup.hasTexture && !matGroup.isColor && !matGroup.material?.color) return;
+            if (!matGroup.hasTexture) return;
 
             if (materialManager) {
                 materialManager.openQuickPicker(matGroupIndex, tappedMesh);
@@ -1044,7 +971,7 @@ async function init() {
                 const loadPromises = [];
 
                 detectedMaterials.forEach(matGroup => {
-                    if (matGroup.hasTexture && !matGroup.isColor && matGroup.urlHigh && matGroup.currentLODUrl !== matGroup.urlHigh) {
+                    if (matGroup.hasTexture && matGroup.urlHigh && matGroup.currentLODUrl !== matGroup.urlHigh) {
                         const p = getTexture(matGroup.urlHigh).then(tex => {
                             matGroup.meshes.forEach(m => {
                                 m.material.map = tex;

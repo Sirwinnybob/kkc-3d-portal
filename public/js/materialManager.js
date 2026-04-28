@@ -1,5 +1,3 @@
-import { escapeHtml } from './utils.js';
-
 export class MaterialManager {
     constructor(config) {
         this.detectedMaterials = config.detectedMaterials || [];
@@ -12,7 +10,6 @@ export class MaterialManager {
         this.onHighlightMesh = config.callbacks.onHighlightMesh || (() => {});
         this.onClearHighlight = config.callbacks.onClearHighlight || (() => {});
         this.onApplyTexture = config.callbacks.onApplyTexture || (() => {});
-        this.onApplyColor = config.callbacks.onApplyColor || (() => {});
 
         // State
         this.selectedMaterialIndex = -1;
@@ -28,20 +25,6 @@ export class MaterialManager {
         this.qpPaintMode = false;
         this.qpLastTextureUrl = null;
         this.qpLastTextureName = null;
-        this.qpLastColorHex = null;
-        this.qpLastColorHex = null;
-
-        this.COLOR_PRESETS = [
-            { name: 'White', hex: '#FFFFFF' },
-            { name: 'Cream', hex: '#F5F0E1' },
-            { name: 'Navy', hex: '#1B2A4A' },
-            { name: 'Sage Green', hex: '#9CAF88' },
-            { name: 'Charcoal', hex: '#36454F' },
-            { name: 'Black', hex: '#1C1C1C' },
-            { name: 'Dove Gray', hex: '#B0B0B0' },
-            { name: 'Warm Taupe', hex: '#B39B86' }
-        ];
-
         this.initDOM();
         this.bindEvents();
     }
@@ -217,6 +200,14 @@ export class MaterialManager {
         this.textureGrid.insertBefore(browseBtn, this.textureGrid.firstChild);
     }
 
+    isColorsCategory(category) {
+        return typeof category === 'string' && category.toLowerCase() === 'colors';
+    }
+
+    getCategoryDisplayName(category) {
+        return this.isColorsCategory(category) ? 'Solid Colors' : category;
+    }
+
     clearSearch(shouldFocus = false) {
         if (this.textureSearch) {
             this.textureSearch.value = '';
@@ -323,7 +314,7 @@ export class MaterialManager {
 
         const visibleMaterials = this.detectedMaterials.filter(mat => {
             if (mat.isHidden) return false;
-            return !!mat.hasTexture || !!mat.isColor || !!mat.material?.color;
+            return !!mat.hasTexture;
         });
         const fragment = document.createDocumentFragment();
 
@@ -446,7 +437,7 @@ export class MaterialManager {
 
         const badgeSpan = document.createElement('span');
         badgeSpan.className = 'material-badge';
-        badgeSpan.textContent = mat.isColor ? 'Color' : 'Has Texture';
+        badgeSpan.textContent = 'Has Texture';
 
         btn.appendChild(leftDiv);
         btn.appendChild(badgeSpan);
@@ -508,7 +499,7 @@ export class MaterialManager {
 
         const badgeSpan = document.createElement('span');
         badgeSpan.className = 'material-badge';
-        badgeSpan.textContent = mat.isColor ? 'Color' : 'Has Texture';
+        badgeSpan.textContent = 'Has Texture';
 
         btn.appendChild(leftDiv);
         btn.appendChild(badgeSpan);
@@ -647,107 +638,16 @@ export class MaterialManager {
                 this.textureGrid.innerHTML = '';
                 this.catalogTitle.innerText = 'Select a Category';
 
-                const colorBtn = document.createElement('button');
-                colorBtn.className = 'texture-category-btn';
-                colorBtn.innerText = 'Solid Colors';
-                colorBtn.onclick = () => this.showSolidColorsView();
-                this.textureGrid.appendChild(colorBtn);
-
                 this.textureCategories.forEach(cat => {
                     const btn = document.createElement('button');
                     btn.className = 'texture-category-btn';
-                    btn.innerText = cat;
+                    btn.innerText = this.getCategoryDisplayName(cat);
                     btn.onclick = () => this.loadCategoryTextures(cat);
                     this.textureGrid.appendChild(btn);
                 });
             }
         } catch (e) {
             console.error("Failed to load categories:", e);
-        }
-    }
-
-    showSolidColorsView() {
-        if (this.selectedMaterialIndex < 0) return;
-        this.catalogTitle.innerText = 'Solid Colors';
-        this.textureGrid.innerHTML = '';
-
-        const mat = this.detectedMaterials[this.selectedMaterialIndex];
-        let currentColorHex = mat.isColor ? mat.colorHex?.toUpperCase() : null;
-        if (!currentColorHex && !mat.hasTexture && mat.material.color) {
-            currentColorHex = '#' + mat.material.color.getHexString().toUpperCase();
-        }
-
-        this.insertBrowseButton();
-
-        const presetsDiv = document.createElement('div');
-        presetsDiv.className = 'color-presets';
-        this.COLOR_PRESETS.forEach(preset => {
-            const swatch = document.createElement('button');
-            swatch.className = 'color-swatch';
-            swatch.style.backgroundColor = preset.hex;
-            if (currentColorHex === preset.hex.toUpperCase()) swatch.classList.add('active');
-            swatch.title = preset.name;
-            swatch.onclick = () => {
-                const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
-                indices.forEach(idx => this.onApplyColor(idx, preset.hex, null, true));
-                this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
-                swatch.classList.add('active');
-            };
-            presetsDiv.appendChild(swatch);
-        });
-        this.textureGrid.appendChild(presetsDiv);
-
-        const pickerRow = document.createElement('div');
-        pickerRow.className = 'color-picker-row';
-        const pickerLabel = document.createElement('label');
-        pickerLabel.textContent = 'Custom:';
-        pickerLabel.htmlFor = 'custom-color-picker';
-        const picker = document.createElement('input');
-        picker.id = 'custom-color-picker';
-        picker.type = 'color';
-        picker.value = currentColorHex || '#C8C8C8';
-        const hexDisplay = document.createElement('span');
-        hexDisplay.className = 'color-hex-display';
-        hexDisplay.textContent = picker.value;
-
-        picker.oninput = () => {
-            hexDisplay.textContent = picker.value;
-            const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
-            indices.forEach(idx => this.onApplyColor(idx, picker.value, null, true));
-            this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
-        };
-        pickerRow.appendChild(pickerLabel);
-        pickerRow.appendChild(picker);
-        pickerRow.appendChild(hexDisplay);
-        this.textureGrid.appendChild(pickerRow);
-
-        const recent = this.getRecentColors();
-        if (recent.length > 0) {
-            const recentSection = document.createElement('div');
-            recentSection.className = 'recent-colors-section';
-            const recentLabel = document.createElement('div');
-            recentLabel.className = 'recent-colors-label';
-            recentLabel.textContent = 'Recent Colors';
-            recentSection.appendChild(recentLabel);
-
-            const recentRow = document.createElement('div');
-            recentRow.className = 'recent-colors-row';
-            recent.forEach(hex => {
-                const swatch = document.createElement('button');
-                swatch.className = 'recent-color-swatch';
-                swatch.style.backgroundColor = hex;
-                if (currentColorHex === hex.toUpperCase()) swatch.classList.add('active');
-                swatch.title = hex;
-                swatch.onclick = () => {
-                    const indices = this.selectedGroupIndices || [this.selectedMaterialIndex];
-                    indices.forEach(idx => this.onApplyColor(idx, hex, null, true));
-                    this.textureGrid.querySelectorAll('.color-swatch, .recent-color-swatch').forEach(s => s.classList.remove('active'));
-                    swatch.classList.add('active');
-                };
-                recentRow.appendChild(swatch);
-            });
-            recentSection.appendChild(recentRow);
-            this.textureGrid.appendChild(recentSection);
         }
     }
 
@@ -758,7 +658,7 @@ export class MaterialManager {
             const data = await resp.json();
             if (data.success) {
                 this.currentCategoryTextures = data.textures;
-                this.catalogTitle.innerText = category;
+                this.catalogTitle.innerText = this.getCategoryDisplayName(category);
                 this.renderTextureGrid();
                 this.insertBrowseButton();
             }
@@ -900,21 +800,15 @@ export class MaterialManager {
             if (!data.success) throw new Error();
             if (this.qpCategoryGrid) this.qpCategoryGrid.innerHTML = '';
 
-            const colorBtn = document.createElement('button');
-            colorBtn.className = 'qp-category-btn';
-            colorBtn.dataset.search = 'solid colors';
-            colorBtn.textContent = 'Solid Colors';
-            colorBtn.addEventListener('click', () => this.loadQpSolidColors(mat));
-            if (this.qpCategoryGrid) this.qpCategoryGrid.appendChild(colorBtn);
-
             data.categories.forEach(cat => {
                 const btn = document.createElement('button');
                 btn.className = 'qp-category-btn';
-                btn.dataset.search = (cat || '').toLowerCase();
+                const displayName = this.getCategoryDisplayName(cat);
+                btn.dataset.search = `${cat || ''} ${displayName}`.toLowerCase();
                 if (mat && mat.bestCategory && cat === mat.bestCategory) {
                     btn.classList.add('current-cat');
                 }
-                btn.textContent = cat;
+                btn.textContent = displayName;
                 btn.addEventListener('click', () => this.loadQpCategoryTextures(cat, mat));
                 if (this.qpCategoryGrid) this.qpCategoryGrid.appendChild(btn);
             });
@@ -929,53 +823,8 @@ export class MaterialManager {
         }
     }
 
-    loadQpSolidColors(mat) {
-        this.qpTitle.textContent = 'Solid Colors';
-        this.showQpTexturesView();
-        if (this.qpTextureStrip) this.qpTextureStrip.innerHTML = '';
-
-        this.COLOR_PRESETS.forEach(preset => {
-            const btn = document.createElement('button');
-            btn.className = 'qp-tex-item';
-            btn.dataset.search = (preset.name || '').toLowerCase();
-            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(preset.hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(preset.name)}</span>`;
-            btn.addEventListener('click', () => {
-                if (this.qpMatGroupIndex >= 0) {
-                    this.onApplyColor(this.qpMatGroupIndex, preset.hex, this.qpTappedMesh, this.qpReplaceAll);
-
-                    if (this.qpTextureStrip) {
-                        this.qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
-                    }
-                    btn.classList.add('active');
-                    this.qpLastTextureUrl = null;
-                    this.qpLastTextureName = preset.name;
-                    this.qpLastColorHex = preset.hex;
-                }
-            });
-            if (this.qpTextureStrip) this.qpTextureStrip.appendChild(btn);
-        });
-
-        const recent = this.getRecentColors();
-        recent.forEach(hex => {
-            const btn = document.createElement('button');
-            btn.className = 'qp-tex-item';
-            btn.dataset.search = (hex || '').toLowerCase();
-            btn.innerHTML = `<div class="color-swatch" style="background-color:${escapeHtml(hex)};width:60px;height:60px;border-radius:8px;"></div><span>${escapeHtml(hex)}</span>`;
-            btn.addEventListener('click', () => {
-                if (this.qpMatGroupIndex >= 0) {
-                    this.onApplyColor(this.qpMatGroupIndex, hex, this.qpTappedMesh, this.qpReplaceAll);
-                    if (this.qpTextureStrip) {
-                        this.qpTextureStrip.querySelectorAll('.qp-tex-item').forEach(b => b.classList.remove('active'));
-                    }
-                    btn.classList.add('active');
-                }
-            });
-            if (this.qpTextureStrip) this.qpTextureStrip.appendChild(btn);
-        });
-    }
-
     async loadQpCategoryTextures(category, mat) {
-        this.qpTitle.textContent = category;
+        this.qpTitle.textContent = this.getCategoryDisplayName(category);
         this.showQpTexturesView();
         const loadingDiv = document.createElement('div');
         loadingDiv.style.cssText = 'color:rgba(255,255,255,0.4);padding:20px;display:flex;align-items:center;';
@@ -1040,7 +889,6 @@ export class MaterialManager {
 
                 this.qpLastTextureUrl = tex.url;
                 this.qpLastTextureName = tex.name;
-                this.qpLastColorHex = null;
             });
             fragment.appendChild(btn);
         });
@@ -1057,40 +905,22 @@ export class MaterialManager {
     // Helper for paint mode called by viewer.js
     handlePaintTap(mesh) {
         if (!this.qpPaintMode) return false;
-        if (!this.qpLastTextureUrl && !this.qpLastColorHex) return false;
+        if (!this.qpLastTextureUrl) return false;
 
         const idx = this.detectedMaterials.findIndex(g => g.meshes.includes(mesh));
         if (idx < 0) return false;
         const mat = this.detectedMaterials[idx];
-        if (!mat.hasTexture && !mat.isColor && !mat.material?.color) return false;
+        if (!mat.hasTexture) return false;
 
         this.onClearHighlight();
         this.qpTappedMesh = mesh;
         this.onHighlightMesh(mesh);
 
-        // For paint tap, we just do a partial apply
-        if (this.qpLastColorHex) {
-            this.onApplyColor(idx, this.qpLastColorHex, mesh, false);
-        } else {
-            // Retrieve width/height from the current Qp textures
-            const texData = this.qpCurrentTextures.find(t => t.url === this.qpLastTextureUrl);
-            const tWidth = texData ? texData.width : null;
-            const tHeight = texData ? texData.height : null;
-            this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false, tWidth, tHeight, true);
-        }
+        // Retrieve width/height from the current Qp textures
+        const texData = this.qpCurrentTextures.find(t => t.url === this.qpLastTextureUrl);
+        const tWidth = texData ? texData.width : null;
+        const tHeight = texData ? texData.height : null;
+        this.onApplyTexture(idx, this.qpLastTextureUrl, null, null, this.qpLastTextureName, mesh, false, tWidth, tHeight, true);
         return true;
-    }
-
-    getRecentColors() {
-        try {
-            return JSON.parse(localStorage.getItem('kkc_recent_colors') || '[]').slice(0, 10);
-        } catch { return []; }
-    }
-
-    addRecentColor(hex) {
-        let recent = this.getRecentColors().filter(c => c !== hex);
-        recent.unshift(hex);
-        if (recent.length > 10) recent = recent.slice(0, 10);
-        localStorage.setItem('kkc_recent_colors', JSON.stringify(recent));
     }
 }
