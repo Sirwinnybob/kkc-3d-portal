@@ -47,6 +47,8 @@ const SUB_CATEGORIES = {
 const GRAIN_DIRS = ['horizontal', 'vertical'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
 
+const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-\. ]+$/;
+
 // Auto-parse rules for Cabinet Vision mesh naming conventions
 // Order matters: more specific patterns must come first
 const AUTO_PARSE_RULES = [
@@ -1517,6 +1519,14 @@ async function processQueue() {
     const dir = path.dirname(filePath);
     const roomName = path.basename(filePath, '.dae'); // Keep original dae name
     const inputFilename = path.basename(filePath);
+
+    if (!SAFE_FILENAME_REGEX.test(inputFilename)) {
+        console.error(`[Security] Invalid filename detected in processQueue: ${inputFilename}`);
+        isConverting = false;
+        setImmediate(processQueue);
+        return;
+    }
+
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
 
@@ -2443,6 +2453,12 @@ if (require.main === module) {
             console.log(`[Staging] New DAE detected: ${path.basename(fp)}`);
             const dir = path.dirname(fp);
             const inputFilename = path.basename(fp);
+
+            if (!SAFE_FILENAME_REGEX.test(inputFilename)) {
+                console.error(`[Security] Invalid filename detected in staging watcher: ${inputFilename}`);
+                return;
+            }
+
             const baseName = path.basename(fp, path.extname(fp));
             const outputGlb = `${baseName.replace(/ /g, '_')}.glb`;
             const finalGlb = path.join(dir, `${baseName}.glb`);
