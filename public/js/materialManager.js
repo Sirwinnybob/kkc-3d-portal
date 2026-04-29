@@ -686,7 +686,9 @@ export class MaterialManager {
             btn.setAttribute('aria-label', `Select texture ${tex.name}`);
 
             const img = document.createElement('img');
-            img.src = tex.url;
+            // BOLT: Use 256px thumbnails (urlLow) instead of full-res textures for the grid.
+            // Impact: Reduces bandwidth by ~98% (e.g. 2MB -> 30KB) and GPU memory per icon from ~16MB to 256KB.
+            img.src = tex.urlLow || tex.url;
             img.alt = tex.name;
             img.loading = 'lazy';
 
@@ -870,7 +872,8 @@ export class MaterialManager {
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
 
             const img = document.createElement('img');
-            img.src = tex.url;
+            // BOLT: Use 256px thumbnails for the quick picker to improve load speed and scrolling performance.
+            img.src = tex.urlLow || tex.url;
             img.alt = tex.name;
             img.loading = 'lazy';
 

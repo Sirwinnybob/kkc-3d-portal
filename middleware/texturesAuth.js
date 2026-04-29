@@ -12,9 +12,16 @@ module.exports = (req, res, next) => {
     const segments = checkPath.split('/').filter(Boolean);
 
     // Check if any segment is "Hidden" or "Uncategorized"
-    if (segments.some(segment => {
+    // Exception: Allow access to Hidden/LOD/ for thumbnails
+    if (segments.some((segment, index) => {
         const lower = segment.toLowerCase();
-        return lower === 'hidden' || lower === 'uncategorized';
+        if (lower === 'uncategorized') return true;
+        if (lower === 'hidden') {
+            const nextSegment = segments[index + 1] ? segments[index + 1].toLowerCase() : null;
+            if (nextSegment === 'lod') return false; // Allow Hidden/LOD
+            return true;
+        }
+        return false;
     })) {
         return res.status(403).send('Forbidden');
     }
