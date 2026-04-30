@@ -12,14 +12,28 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
+
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isInput) {
                     active.blur();
                     return;
                 }
                 this.closeActiveModals();
+                return;
             }
+
+            // Global shortcuts (ignored if in input or modifiers are pressed)
+            if (isInput || e.ctrlKey || e.altKey || e.metaKey) return;
+
+            const key = e.key.toLowerCase();
+            if (key === 'm') document.getElementById('menu-btn')?.click();
+            if (key === 't') document.getElementById('texture-btn')?.click();
+            if (key === 'c') document.getElementById('camera-btn')?.click();
+            if (key === 'l') document.getElementById('light-mode-btn')?.click();
+            if (key === 's') document.getElementById('share-btn')?.click();
+            if (key === 'h' || e.key === '?') document.getElementById('help-btn')?.click();
         });
     }
 
