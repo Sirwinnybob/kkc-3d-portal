@@ -133,8 +133,19 @@ body {
     text-decoration: none;
     font-size: 0.85em;
     font-weight: bold;
-    padding-top: 10px;
+    padding: 10px;
     border-top: 1px solid #eee;
+    border-radius: 8px;
+    transition: background 0.2s, color 0.2s, transform 0.1s;
+}
+
+.logout-btn:hover {
+    background: #fff1f1;
+    color: #e60000;
+}
+
+.logout-btn:active {
+    transform: scale(0.98);
 }
 
 .menu-btn-style { border:none; margin-right:5px; background:none; font-size:18px; }
@@ -148,6 +159,7 @@ body {
 .joystick-label { position: absolute; top: -20px; width: 100%; text-align: center; color: white; font-size: 9px; font-weight: bold; text-transform: uppercase; }
 
 /* Help Button */
+#light-mode-btn,
 #help-btn {
     background: #fff;
     border: 1px solid #000;
@@ -162,6 +174,7 @@ body {
     transition: transform 0.1s;
 }
 
+#light-mode-btn:active,
 #help-btn:active {
     transform: scale(0.92);
 }
@@ -517,7 +530,12 @@ body {
 
 .material-status {
     font-size: 0.75em;
-    color: #999;
+    color: #666;
+}
+
+.material-status.is-modified {
+    color: #3b82f6;
+    font-weight: 600;
 }
 
 .material-badge {
