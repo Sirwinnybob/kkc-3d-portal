@@ -46,6 +46,7 @@ const SUB_CATEGORIES = {
 // Grain directions (only slab doors have grain)
 const GRAIN_DIRS = ['horizontal', 'vertical'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
+const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-\. (),+]+$/;
 
 // Auto-parse rules for Cabinet Vision mesh naming conventions
 // Order matters: more specific patterns must come first
@@ -1520,6 +1521,13 @@ async function processQueue() {
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
 
+    if (!SAFE_FILENAME_REGEX.test(inputFilename) || !SAFE_FILENAME_REGEX.test(outputGlb)) {
+        console.error(`!!! [FAILED] Invalid characters in filename: ${inputFilename} or ${outputGlb}`);
+        isConverting = false;
+        setImmediate(processQueue);
+        return;
+    }
+
     // Extract textures from DAE images folder before GLB conversion
     await extractTexturesFromDaeImages(filePath);
     await cleanDae(filePath);
@@ -2446,6 +2454,12 @@ if (require.main === module) {
             const baseName = path.basename(fp, path.extname(fp));
             const outputGlb = `${baseName.replace(/ /g, '_')}.glb`;
             const finalGlb = path.join(dir, `${baseName}.glb`);
+
+            if (!SAFE_FILENAME_REGEX.test(inputFilename) || !SAFE_FILENAME_REGEX.test(outputGlb)) {
+                console.error(`[Staging] Invalid characters in filename: ${inputFilename} or ${outputGlb}`);
+                // Since this is in chokidar's 'add' event callback, returning skips this specific file
+                return;
+            }
 
             // Skip if GLB already exists and is newer
             try {
