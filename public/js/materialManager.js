@@ -387,15 +387,17 @@ export class MaterialManager {
         document.getElementById('catalog-view').style.display = 'none';
     }
 
-    createGroupedMaterialItem(group) {
-        const btn = document.createElement('button');
-        btn.className = 'material-item';
-        const mat = group.primaryMat;
-        // Store indices to apply to all when clicked
-        btn.dataset.indices = JSON.stringify(group.indices);
-        btn.dataset.index = group.indices[0].toString();
+    _getMaterialPreview(mat) {
+        if (mat.previewCache) return mat.previewCache;
+        if (!mat.hasTexture) {
+            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+            return `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+        }
 
-        if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
+        if (mat.urlLow) {
+            // Bolt: Use low-res thumbnail directly to avoid expensive canvas operations
+            mat.previewCache = `<img class="material-preview" src="${mat.urlLow}" alt="Preview" loading="lazy">`;
+        } else if (mat.material.map && mat.material.map.image) {
             try {
                 const img = mat.material.map.image;
                 const canvas = document.createElement('canvas');
@@ -405,12 +407,23 @@ export class MaterialManager {
                 ctx.drawImage(img, 0, 0, 64, 64);
                 mat.previewCache = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
             } catch {
-                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+                const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
             }
-        } else if (!mat.previewCache) {
-            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-            mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
         }
+
+        return mat.previewCache || `<div class="material-preview-placeholder" style="background-color: #cccccc"></div>`;
+    }
+
+    createGroupedMaterialItem(group) {
+        const btn = document.createElement('button');
+        btn.className = 'material-item';
+        const mat = group.primaryMat;
+        // Store indices to apply to all when clicked
+        btn.dataset.indices = JSON.stringify(group.indices);
+        btn.dataset.index = group.indices[0].toString();
+
+        mat.previewCache = this._getMaterialPreview(mat);
 
         const displayName = group.displayName;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
@@ -457,22 +470,7 @@ export class MaterialManager {
         const originalIndex = this.detectedMaterials.indexOf(mat);
         btn.dataset.index = originalIndex.toString();
 
-        if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
-            try {
-                const img = mat.material.map.image;
-                const canvas = document.createElement('canvas');
-                canvas.width = 64;
-                canvas.height = 64;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, 64, 64);
-                mat.previewCache = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
-            } catch {
-                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
-            }
-        } else if (!mat.previewCache) {
-            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-            mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
-        }
+        mat.previewCache = this._getMaterialPreview(mat);
 
         const displayName = mat.matchedName || mat.name;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
@@ -686,7 +684,8 @@ export class MaterialManager {
             btn.setAttribute('aria-label', `Select texture ${tex.name}`);
 
             const img = document.createElement('img');
-            img.src = tex.url;
+            // Bolt: Prioritize 256px low-res thumbnail to reduce bandwidth (~98% payload reduction)
+            img.src = tex.urlLow || tex.url;
             img.alt = tex.name;
             img.loading = 'lazy';
 
@@ -870,7 +869,8 @@ export class MaterialManager {
             if (tex.name === currentName) { btn.classList.add('active'); activeEl = btn; }
 
             const img = document.createElement('img');
-            img.src = tex.url;
+            // Bolt: Prioritize 256px low-res thumbnail for faster strip rendering and lower GPU memory usage
+            img.src = tex.urlLow || tex.url;
             img.alt = tex.name;
             img.loading = 'lazy';
 
