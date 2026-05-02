@@ -23,3 +23,8 @@
 **Vulnerability:** The `/textures` static file route was serving all files in the `textures/` directory, including those in `Hidden` and `Uncategorized` folders, bypassing the checks in the `/api/textures/:category` endpoint.
 **Learning:** Security checks in API endpoints do not protect static file routes serving the same underlying directories. The static middleware must have its own equivalent security checks, or the sensitive data must be moved out of the publicly served static directory tree.
 **Prevention:** Implement a middleware specifically for the static route to block access to system directories (`Hidden`, `Uncategorized`), ensuring that static file serving matches the security policy of the API endpoints.
+
+## 2024-11-25 - [Validation Bypass via Path Normalization Order]
+**Vulnerability:** The `/api/textures/:category` route performed validation against restricted system directories (`Hidden`, `Uncategorized`) *before* normalizing the user input with `path.basename`. This allowed requests like `../Hidden` or `%2e%2e%2fHidden` to bypass the `category.toLowerCase() === 'hidden'` check, which were later evaluated as just `Hidden` when `path.basename(category)` was applied.
+**Learning:** Security validations that rely on string matching must be performed *after* any path normalization or un-escaping logic. Otherwise, an attacker can use encoding or directory traversal syntax to bypass the string match and reach the protected resource when the string is later normalized.
+**Prevention:** Always apply normalizations like `path.basename` to user input before checking the result against a deny-list.

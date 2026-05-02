@@ -833,12 +833,16 @@ app.get('/api/textures/:category', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid category' });
     }
 
-    const lowerCat = category.toLowerCase();
+    const safeCategory = path.basename(category);
+    const lowerCat = safeCategory.toLowerCase();
+
+    // Security: Block exact matches of system directories after resolving base name
+    // This prevents traversal bypasses like `../Hidden` which otherwise wouldn't match 'hidden'
     if (lowerCat === 'hidden' || lowerCat === 'uncategorized') {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
-    const categoryPath = path.join(TEXTURES_DIR, path.basename(category));
+    const categoryPath = path.join(TEXTURES_DIR, safeCategory);
     const rel = path.relative(TEXTURES_DIR, categoryPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
