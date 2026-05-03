@@ -517,7 +517,12 @@ body {
 
 .material-status {
     font-size: 0.75em;
-    color: #999;
+    color: #666;
+}
+
+.material-status.is-modified {
+    color: #3b82f6;
+    font-weight: 600;
 }
 
 .material-badge {
