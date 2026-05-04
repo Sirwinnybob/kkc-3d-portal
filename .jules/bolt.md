@@ -13,3 +13,9 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-15 - Thumbnail Pipeline & Middleware Optimization
+
+**Learning:** Enabling low-resolution thumbnails required a coordinated change across the security layer (middleware) and the UI layer. Security rules that block entire directories (like `Hidden/`) can unintentionally create performance bottlenecks by preventing the use of optimized assets (LODs) stored within them. Furthermore, synchronous canvas operations for previews were a hidden main-thread blocker.
+
+**Action:** Always verify if security middleware is blocking performance-optimized assets. Use pre-compiled regex for path authorization to maintain O(1) performance. Prioritize pre-computed thumbnails (`urlLow`) in the UI to bypass expensive client-side image processing.
