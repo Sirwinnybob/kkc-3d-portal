@@ -1,3 +1,7 @@
 ## 2025-05-14 - Modal Backdrop Closure Pattern
 **Learning:** For web-based 3D viewers, users expect modals to be dismissible by clicking the surrounding backdrop, especially when touch navigation is used. Implementing this requires ensuring the event listener targets the backdrop container itself (e.g., via `e.target === backdrop`) to avoid closing the modal when the content area is clicked.
 **Action:** Always implement backdrop closure alongside keyboard Escape listeners for non-critical modals, ensuring focus is returned to the trigger button for accessibility.
+
+## 2025-05-15 - Keyboard Shortcuts and Modal Accessibility
+**Learning:** Global keyboard shortcuts significantly improve navigation efficiency for power users in complex 3D web applications. Suppressing these shortcuts when the user is typing in an input, textarea, or contentEditable element is critical to prevent accidental triggers. Discoverability is enhanced by adding shortcut hints to button \`title\` attributes and using semantic \`<kbd>\` tags in help documentation. Furthermore, explicit \`aria-labelledby\` associations on modals ensure screen readers correctly announce the modal's context upon opening.
+**Action:** Implement keyboard shortcuts with focus-aware suppression and clear UI hints (titles and help guides). Always ensure modals are properly labeled for screen readers using \`aria-labelledby\` linked to a clear heading ID.
