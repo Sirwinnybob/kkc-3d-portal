@@ -430,6 +430,7 @@ export class MaterialManager {
         const statusSpan = document.createElement('span');
         statusSpan.className = 'material-status';
         statusSpan.textContent = isModified ? 'Modified' : 'Customizable';
+        if (isModified) statusSpan.classList.add('is-modified');
 
         infoDiv.appendChild(nameSpan);
         infoDiv.appendChild(statusSpan);
@@ -492,6 +493,7 @@ export class MaterialManager {
         const statusSpan = document.createElement('span');
         statusSpan.className = 'material-status';
         statusSpan.textContent = isModified ? 'Modified' : 'Customizable';
+        if (isModified) statusSpan.classList.add('is-modified');
 
         infoDiv.appendChild(nameSpan);
         infoDiv.appendChild(statusSpan);
