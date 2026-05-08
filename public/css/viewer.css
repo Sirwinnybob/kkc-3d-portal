@@ -162,6 +162,11 @@ body {
     transition: transform 0.1s;
 }
 
+#help-btn:hover {
+    background: #f5f5f5;
+    border-color: #007bff;
+}
+
 #help-btn:active {
     transform: scale(0.92);
 }
@@ -212,7 +217,22 @@ body {
     margin: 6px 0 3px;
 }
 
-.close-help { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; background: none; border: none; padding: 0; }
+.close-help {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+    font-size: 20px;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    color: #999;
+    transition: color 0.2s;
+}
+
+.close-help:hover {
+    color: #333;
+}
 
 #status {
     position: fixed;
@@ -289,9 +309,24 @@ body {
     border-color: #bbb;
 }
 
+#light-mode-btn:hover {
+    background: #f5f5f5 !important;
+    border-color: #007bff !important;
+}
+
 #camera-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.92);
     background: #e0e0e0;
+}
+
+#light-mode-btn:active,
+#share-btn:active {
+    transform: scale(0.92);
+}
+
+#share-btn:hover {
+    background: #f5f5f5 !important;
+    border-color: #007bff !important;
 }
 
 .camera-inner {
@@ -517,7 +552,12 @@ body {
 
 .material-status {
     font-size: 0.75em;
-    color: #999;
+    color: #666;
+}
+
+.material-status.is-modified {
+    color: #007bff;
+    font-weight: 600;
 }
 
 .material-badge {
@@ -1609,6 +1649,7 @@ body {
 #showroom-btn:focus-visible,
 #save-config-btn:focus-visible,
 #help-btn:focus-visible,
+#light-mode-btn:focus-visible,
 #menu-btn:focus-visible,
 #joystick-handle:focus-visible {
     outline: 3px solid #3b82f6;
