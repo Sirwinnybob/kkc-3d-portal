@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-14 - [Middleware Optimization & Path Normalization]
+**Learning:** In high-traffic middlewares performing path-based security checks, replacing string splitting and array iteration with a pre-compiled regular expression yields significant performance gains (~2.3x speedup). However, when using regex for path exceptions (like allowing `/Hidden/LOD/`), it is critical to use `path.normalize()` on the decoded URI first to prevent directory traversal bypasses (e.g., `../Hidden`).
+**Action:** Always normalize paths before security regex matching and prefer anchored regexes for directory exceptions.
