@@ -23,3 +23,8 @@
 **Vulnerability:** The `/textures` static file route was serving all files in the `textures/` directory, including those in `Hidden` and `Uncategorized` folders, bypassing the checks in the `/api/textures/:category` endpoint.
 **Learning:** Security checks in API endpoints do not protect static file routes serving the same underlying directories. The static middleware must have its own equivalent security checks, or the sensitive data must be moved out of the publicly served static directory tree.
 **Prevention:** Implement a middleware specifically for the static route to block access to system directories (`Hidden`, `Uncategorized`), ensuring that static file serving matches the security policy of the API endpoints.
+
+## 2026-05-10 - [Authentication Bypass on Static Admin Route]
+**Vulnerability:** The `/admin` static files (e.g., `/admin/tagger.html`) were accessible without authentication because the catch-all `express.static('public')` middleware was applied before any authentication checks for the `/admin` path.
+**Learning:** Security checks applied to API endpoints do not automatically protect static files served from the same conceptual area if the static middleware is mounted generically (e.g., on `/`). Route-specific authentication middleware must be mounted *before* general static file handlers to properly protect sensitive static assets.
+**Prevention:** Always mount authentication middleware for sensitive paths (like `/admin`) explicitly before catch-all static file middleware.
