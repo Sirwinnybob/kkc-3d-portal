@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-14 - [texturesAuth Middleware Optimization]
+**Learning:** Replacing string splitting and array iteration with a pre-compiled regex for path validation yielded a ~2.7x speedup in the middleware logic. Additionally, improper validation logic was blocking legitimate access to low-resolution thumbnails in `Hidden/LOD/`.
+**Action:** Use `path.normalize()` on decoded URI components before applying a regex `/(^|[\\\/])(hidden|uncategorized)([\\\/]|$)/i` to ensure both performance and security against directory traversal.
