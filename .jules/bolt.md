@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-14 - Optimized Material Preview Generation
+**Learning:** Generating material previews by creating a new canvas and using PNG encoding for each item is expensive. Reusing a single shared canvas and switching to JPEG 0.7 significantly reduces memory allocations and encoding time. Additionally, prioritizing `urlLow` (if available) bypasses canvas operations entirely. Pre-clearing the shared canvas with `ctx.clearRect` is essential to prevent "ghosting" when images have transparency.
+**Action:** Always reuse canvas elements for repeated image processing tasks and prefer JPEG for thumbnails when alpha transparency is not strictly required.

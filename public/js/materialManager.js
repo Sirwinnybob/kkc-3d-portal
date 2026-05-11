@@ -25,6 +25,9 @@ export class MaterialManager {
         this.qpPaintMode = false;
         this.qpLastTextureUrl = null;
         this.qpLastTextureName = null;
+
+        this._previewCanvas = null;
+
         this.initDOM();
         this.bindEvents();
     }
@@ -387,6 +390,36 @@ export class MaterialManager {
         document.getElementById('catalog-view').style.display = 'none';
     }
 
+    _getMaterialPreview(mat) {
+        if (mat.previewCache) return mat.previewCache;
+
+        // Prioritize low-res URL if available to bypass canvas generation
+        if (mat.urlLow) {
+            return mat.previewCache = `<img class="material-preview" src="${mat.urlLow}" alt="Preview" loading="lazy">`;
+        }
+
+        if (mat.hasTexture && mat.material.map && mat.material.map.image) {
+            try {
+                const img = mat.material.map.image;
+                if (!this._previewCanvas) {
+                    this._previewCanvas = document.createElement('canvas');
+                    this._previewCanvas.width = 64;
+                    this._previewCanvas.height = 64;
+                }
+                const ctx = this._previewCanvas.getContext('2d');
+                ctx.clearRect(0, 0, 64, 64);
+                ctx.drawImage(img, 0, 0, 64, 64);
+                // Use JPEG with 0.7 quality for faster encoding and smaller payload
+                return mat.previewCache = `<img class="material-preview" src="${this._previewCanvas.toDataURL('image/jpeg', 0.7)}" alt="Preview">`;
+            } catch {
+                return mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
+            }
+        }
+
+        const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
+        return mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
+    }
+
     createGroupedMaterialItem(group) {
         const btn = document.createElement('button');
         btn.className = 'material-item';
@@ -395,29 +428,12 @@ export class MaterialManager {
         btn.dataset.indices = JSON.stringify(group.indices);
         btn.dataset.index = group.indices[0].toString();
 
-        if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
-            try {
-                const img = mat.material.map.image;
-                const canvas = document.createElement('canvas');
-                canvas.width = 64;
-                canvas.height = 64;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, 64, 64);
-                mat.previewCache = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
-            } catch {
-                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
-            }
-        } else if (!mat.previewCache) {
-            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-            mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
-        }
-
         const displayName = group.displayName;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
 
         const leftDiv = document.createElement('div');
         leftDiv.className = 'material-item-left';
-        leftDiv.innerHTML = mat.previewCache;
+        leftDiv.innerHTML = this._getMaterialPreview(mat);
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'material-info';
@@ -457,29 +473,12 @@ export class MaterialManager {
         const originalIndex = this.detectedMaterials.indexOf(mat);
         btn.dataset.index = originalIndex.toString();
 
-        if (!mat.previewCache && mat.hasTexture && mat.material.map && mat.material.map.image) {
-            try {
-                const img = mat.material.map.image;
-                const canvas = document.createElement('canvas');
-                canvas.width = 64;
-                canvas.height = 64;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, 64, 64);
-                mat.previewCache = `<img class="material-preview" src="${canvas.toDataURL()}" alt="Preview">`;
-            } catch {
-                mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${mat.material.color.getHexString()}"></div>`;
-            }
-        } else if (!mat.previewCache) {
-            const colorHex = mat.material.color ? mat.material.color.getHexString() : 'cccccc';
-            mat.previewCache = `<div class="material-preview-placeholder" style="background-color: #${colorHex}"></div>`;
-        }
-
         const displayName = mat.matchedName || mat.name;
         const isModified = mat.matchedName !== mat.originalMatchedName || mat.hasPartialChange;
 
         const leftDiv = document.createElement('div');
         leftDiv.className = 'material-item-left';
-        leftDiv.innerHTML = mat.previewCache;
+        leftDiv.innerHTML = this._getMaterialPreview(mat);
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'material-info';
