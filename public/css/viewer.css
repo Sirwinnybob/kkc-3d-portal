@@ -520,6 +520,11 @@ body {
     color: #999;
 }
 
+.material-status.is-modified {
+    color: #007bff;
+    font-weight: 600;
+}
+
 .material-badge {
     font-size: 0.72em;
     padding: 3px 8px;
