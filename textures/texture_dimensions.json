@@ -1,0 +1,14 @@
+{
+  "TestCategory": {
+    "Test Canonical.png": {
+      "width": 1,
+      "height": 1,
+      "hash": "0",
+      "mtime": 1778553472062.9749
+    },
+    "variant:Test Canonical_1.png": {
+      "hash": "4751844650242425845",
+      "mtime": 1778553472066.9749
+    }
+  }
+}
