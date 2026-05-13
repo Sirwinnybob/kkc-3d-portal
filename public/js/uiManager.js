@@ -245,8 +245,10 @@ export class UIManager {
                 const isLightMode = localStorage.getItem("lightMode") === "true";
                 if (isLightMode) {
                     lightModeBtn.style.background = '#e0e0e0';
+                    lightModeBtn.style.borderColor = '#3b82f6';
                 } else {
-                    lightModeBtn.style.background = '#fff';
+                    lightModeBtn.style.background = '';
+                    lightModeBtn.style.borderColor = '';
                 }
             };
 
