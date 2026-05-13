@@ -322,8 +322,17 @@ async function loadStagingGlb() {
         }
     } catch { /* no existing tags */ }
 
+    const nameSet = new Set(serverMeshNames);
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        // Optimized O(1) lookup using a Set instead of O(N) Array.find
+        let serverName = null;
+        if (nameSet.has(entry.name)) {
+            serverName = entry.name;
+        } else {
+            const fallback = `Node_${originalIndex}`;
+            if (nameSet.has(fallback)) serverName = fallback;
+        }
+
         if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
         if (existingTags?.meshCategories?.[entry.name]) {
             entry.tag = existingTags.meshCategories[entry.name];
@@ -671,8 +680,17 @@ async function loadCategoryGlb() {
         }
     } catch { /* no existing tags */ }
 
+    const nameSet = new Set(serverMeshNames);
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        // Optimized O(1) lookup using a Set instead of O(N) Array.find
+        let serverName = null;
+        if (nameSet.has(entry.name)) {
+            serverName = entry.name;
+        } else {
+            const fallback = `Node_${originalIndex}`;
+            if (nameSet.has(fallback)) serverName = fallback;
+        }
+
         if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
 
         if (existingTags?.meshTags?.[entry.name]) {

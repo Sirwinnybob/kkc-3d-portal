@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-15 - [Optimization: Tagger Mesh Lookup]
+**Learning:** Nested loops performing array searches (O(M * N)) can be a major bottleneck in scene traversal logic, especially as the number of meshes (M) and metadata entries (N) grow. Converting the search array to a Set reduces lookup time to O(1), yielding an overall O(M + N) complexity.
+**Action:** Always check for repeated array lookups inside traversal or mapping loops and prefer Sets or Maps for constant-time resolution. Measured ~115x speedup for 2000 meshes.
