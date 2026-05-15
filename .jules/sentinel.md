@@ -23,3 +23,8 @@
 **Vulnerability:** The `/textures` static file route was serving all files in the `textures/` directory, including those in `Hidden` and `Uncategorized` folders, bypassing the checks in the `/api/textures/:category` endpoint.
 **Learning:** Security checks in API endpoints do not protect static file routes serving the same underlying directories. The static middleware must have its own equivalent security checks, or the sensitive data must be moved out of the publicly served static directory tree.
 **Prevention:** Implement a middleware specifically for the static route to block access to system directories (`Hidden`, `Uncategorized`), ensuring that static file serving matches the security policy of the API endpoints.
+
+## 2025-05-18 - [Express.js Route Shadowing Authentication Bypass]
+**Vulnerability:** Static administration files (`/admin`) and staging environments (`/showroom/staging`) were accessible without authentication because their parent directories (`/public` and `/showroom`) were served using catch-all `express.static` middleware *before* the protected routes were mounted. In Express, routes are executed in the order they are defined.
+**Learning:** Adding authentication middleware to a specific path (like `/showroom/staging`) is ineffective if a broader wildcard or catch-all path (like `/showroom`) is mounted earlier in the middleware chain. The earlier handler will intercept the request and serve the file without triggering the later authentication checks.
+**Prevention:** Always mount more specific protected routes (e.g., `app.use('/showroom/staging', adminAuth, express.static(...))`) *before* broader, unprotected catch-all routes (e.g., `app.use('/showroom', express.static(...))`).
