@@ -127,6 +127,28 @@ body {
     color: #fff;
 }
 
+.room-switcher-btn {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 5px;
+    border-radius: 8px;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    color: #333;
+    font-size: 0.9em;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.08s;
+}
+.room-switcher-btn:hover { background: #f0f0f0; border-color: #b9b9b9; }
+.room-switcher-btn:active { transform: scale(0.98); }
+.room-switcher-btn.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: #fff;
+}
+
 .logout-btn {
     text-align: center;
     color: #ff4d4d;
