@@ -90,7 +90,9 @@ button:disabled {
     border-color: #007bff;
 }
 
-.btn-back { background: #444; }
+.btn-back { background: #444; transition: background 0.2s, transform 0.1s; }
+.btn-back:hover { background: #333; }
+.btn-back:active { transform: scale(0.98); }
 
 .error {
     color: #ff4d4d;

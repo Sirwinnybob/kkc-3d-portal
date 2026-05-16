@@ -142,6 +142,22 @@ body {
 .room-name-style { color: #000; }
 .room-switcher-style { display: none; margin-bottom: 15px; }
 .room-list-ui-style { display: flex; flex-direction: column; gap: 5px; max-height: 45vh; overflow-y: auto; padding-right: 4px; }
+.room-switcher-btn {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    background: #fff;
+    color: #000;
+    margin-bottom: 5px;
+    width: 100%;
+    text-align: left;
+    font-weight: bold;
+    transition: background 0.2s, transform 0.1s;
+}
+.room-switcher-btn:hover { background: #f0f0f0; }
+.room-switcher-btn:active { transform: scale(0.98); }
+.room-switcher-btn.active { background: #007bff; color: #fff; border-color: #007bff; }
 .controls-title { margin-top:0; }
 .controls-body { text-align:left; font-size: 0.9em; line-height: 1.6; }
 .close-help-btn-style { margin-top:20px; width:100%; padding:10px; border-radius:8px; border:none; background:#007bff; color:white; font-weight:bold; cursor:pointer; }
