@@ -19,7 +19,23 @@ const sharp = require('sharp');
 
 const app = express();
 app.disable('x-powered-by'); // Security: disable X-Powered-By header
-const APP_VERSION = "2.1.9";
+const APP_VERSION = "2.1.11";
+
+/**
+ * Limit concurrency of an array of async functions.
+ * Prevents EMFILE errors and memory pressure for large I/O batches.
+ */
+async function mapLimit(items, limit, fn) {
+    const results = [];
+    const iterator = items.entries();
+    const workers = new Array(Math.min(items.length, limit)).fill(0).map(async () => {
+        for (const [index, item] of iterator) {
+            results[index] = await fn(item);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -174,10 +190,10 @@ app.get('/api/job/:code', async (req, res) => {
     const rooms = [];
     const findGlbs = async (dir) => {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        const promises = entries.map(entry => {
+        await mapLimit(entries, 10, async (entry) => {
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
-                return findGlbs(fullPath);
+                await findGlbs(fullPath);
             } else if (entry.name.toLowerCase().endsWith('.glb') || entry.name.toLowerCase().endsWith('.obj')) {
                 const lowerName = entry.name.toLowerCase();
                 if (lowerName.endsWith('_medium.glb') || lowerName.endsWith('_low.glb')) return;
@@ -191,7 +207,6 @@ app.get('/api/job/:code', async (req, res) => {
                 }
             }
         });
-        await Promise.all(promises);
     };
     await findGlbs(jobPath);
     res.json({ success: true, rooms: [...new Set(rooms)] });
@@ -996,24 +1011,20 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
 
         // Find all DAE files in jobs directory
         const findDaes = async (dir) => {
-            const daes = [];
             try {
                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                for (const entry of entries) {
+                const results = await mapLimit(entries, 10, async (entry) => {
                     const fullPath = path.join(dir, entry.name);
-                    if (entry.isDirectory()) {
-                        daes.push(...(await findDaes(fullPath)));
-                    } else if (entry.name.toLowerCase().endsWith('.dae')) {
-                        daes.push(fullPath);
-                    }
-                }
-            } catch { /* ignore */ }
-            return daes;
+                    if (entry.isDirectory()) return findDaes(fullPath);
+                    return entry.name.toLowerCase().endsWith('.dae') ? [fullPath] : [];
+                });
+                return results.flat();
+            } catch { return []; }
         };
 
         const daeFiles = await findDaes(JOBS_DIR);
 
-        for (const daePath of daeFiles) {
+        await mapLimit(daeFiles, 5, async (daePath) => {
             try {
                 let imagesDir = path.join(path.dirname(daePath), 'images');
 
@@ -1034,12 +1045,12 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
                     }
                 }
 
-                if (!hasImages) continue;
+                if (!hasImages) return;
 
                 const files = await fs.promises.readdir(imagesDir);
-                for (const file of files) {
+                await mapLimit(files, 20, async (file) => {
                     // Skip Thumbs.db and system files
-                    if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+                    if (file === 'Thumbs.db' || file.startsWith('.')) return;
                     const ext = path.extname(file).toLowerCase();
                     if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
                         const srcPath = path.join(imagesDir, file);
@@ -1053,12 +1064,12 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
                             console.log(`[Texture Scan] Extracted: ${file}`);
                         }
                     }
-                }
+                });
             } catch (e) {
                 errors.push({ file: daePath, error: e.message });
                 console.error(`[Texture Scan] Error processing ${daePath}: ${e.message}`);
             }
-        }
+        });
 
         // Invalidate hash cache since new textures may have been added
         textureHashCache = null;
@@ -1086,7 +1097,13 @@ async function extractTexturesFromGlb(glbPath) {
 
     const index = await buildTextureHashIndex();
     const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
-    if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+    try {
+        await fs.promises.access(uncategorizedDir);
+    } catch {
+        await fs.promises.mkdir(uncategorizedDir, { recursive: true });
+    }
+
+    const existingTextures = new Set(await fs.promises.readdir(uncategorizedDir).catch(() => []));
 
     // Parse GLB header to find BIN chunk offset
     const jsonChunkLength = glbBuffer.readUInt32LE(12);
@@ -1133,8 +1150,9 @@ async function extractTexturesFromGlb(glbPath) {
             const ext = image.mimeType === 'image/png' ? '.png' : '.jpg';
             const safeName = `${jobName}_texture_${Date.now()}${ext}`;
             const destPath = path.join(uncategorizedDir, safeName);
-            if (!fs.existsSync(destPath)) {
+            if (!existingTextures.has(safeName)) {
                 await fs.promises.writeFile(destPath, imageData);
+                existingTextures.add(safeName);
                 console.log(`[Texture Extract] Saved: ${safeName}`);
             }
         }
@@ -1168,13 +1186,20 @@ async function extractTexturesFromDaeImages(daeFilePath) {
     if (!hasImages) return;
 
     const uncategorizedDir = path.join(TEXTURES_DIR, 'Uncategorized');
-    if (!fs.existsSync(uncategorizedDir)) fs.mkdirSync(uncategorizedDir, { recursive: true });
+    try {
+        await fs.promises.access(uncategorizedDir);
+    } catch {
+        await fs.promises.mkdir(uncategorizedDir, { recursive: true });
+    }
 
     const index = await buildTextureHashIndex();
-    const files = await fs.promises.readdir(imagesDir);
+    const [files, existingTextures] = await Promise.all([
+        fs.promises.readdir(imagesDir),
+        fs.promises.readdir(uncategorizedDir).then(list => new Set(list)).catch(() => new Set())
+    ]);
     let extracted = 0;
 
-    await Promise.all(files.map(async (file) => {
+    await mapLimit(files, 10, async (file) => {
         // Skip Thumbs.db and system files
         if (file === 'Thumbs.db' || file.startsWith('.')) return;
         const ext = path.extname(file).toLowerCase();
@@ -1182,8 +1207,8 @@ async function extractTexturesFromDaeImages(daeFilePath) {
             const srcPath = path.join(imagesDir, file);
             const destPath = path.join(uncategorizedDir, file);
 
-            // Avoid duplicates
-            if (fs.existsSync(destPath)) return;
+            // Avoid duplicates (Set lookup replaces O(N) synchronous fs.access)
+            if (existingTextures.has(file)) return;
 
             try {
                 const buffer = await fs.promises.readFile(srcPath);
@@ -1203,6 +1228,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
 
                 if (!isMatched) {
                     await fs.promises.writeFile(destPath, buffer);
+                    existingTextures.add(file); // Update Set to prevent duplicates in same batch
                     extracted++;
                     console.log(`[DAE Texture] Extracted (unmatched): ${file}`);
                 } else {
@@ -1212,7 +1238,7 @@ async function extractTexturesFromDaeImages(daeFilePath) {
                 console.error(`[DAE Texture] Error processing ${file}: ${e.message}`);
             }
         }
-    }));
+    });
 
     if (extracted > 0) {
         textureHashCache = null; // Invalidate cache since new textures were added
@@ -1258,7 +1284,7 @@ async function generateTextureManifest(glbPath) {
             return Buffer.from(glbBuffer.subarray(binChunkOffset + byteOffset, binChunkOffset + byteOffset + bufferView.byteLength));
         };
 
-        await Promise.all(gltf.materials.map(async (gltfMat) => {
+        await mapLimit(gltf.materials, 5, async (gltfMat) => {
             try {
                 const matName = gltfMat.name || '';
                 const pbr = gltfMat.pbrMetallicRoughness;
@@ -1333,7 +1359,7 @@ async function generateTextureManifest(glbPath) {
             } catch (e) {
                 console.error(`[Texture Manifest] Error processing material "${gltfMat.name}": ${e.message}`);
             }
-        }));
+        });
 
         // Write sidecar JSON
         const manifestPath = glbPath.replace(/\.glb$/i, '.textures.json');
@@ -1349,7 +1375,7 @@ async function generateTextureManifest(glbPath) {
 async function generateAllManifests(dir, force = false) {
     try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        await Promise.all(entries.map(async (entry) => {
+        await mapLimit(entries, 5, async (entry) => {
             const fullPath = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 await generateAllManifests(fullPath, force);
@@ -1370,7 +1396,7 @@ async function generateAllManifests(dir, force = false) {
                 }
                 await generateTextureManifest(fullPath);
             }
-        }));
+        });
     } catch (e) {
         console.error(`[Texture Manifest] Batch error in ${dir}: ${e.message}`);
     }
@@ -2538,28 +2564,24 @@ if (require.main === module) {
                     try {
                         const jobDir = path.join(JOBS_DIR, jobName);
                         const findDaes = async (dir) => {
-                            const daes = [];
                             try {
                                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                                for (const entry of entries) {
+                                const results = await mapLimit(entries, 10, async (entry) => {
                                     const fullPath = path.join(dir, entry.name);
-                                    if (entry.isDirectory()) {
-                                        daes.push(...(await findDaes(fullPath)));
-                                    } else if (entry.name.toLowerCase().endsWith('.dae')) {
-                                        daes.push(fullPath);
-                                    }
-                                }
-                            } catch { /* ignore */ }
-                            return daes;
+                                    if (entry.isDirectory()) return findDaes(fullPath);
+                                    return entry.name.toLowerCase().endsWith('.dae') ? [fullPath] : [];
+                                });
+                                return results.flat();
+                            } catch { return []; }
                         };
                         const daeFiles = await findDaes(jobDir);
-                        for (const daePath of daeFiles) {
+                        await mapLimit(daeFiles, 5, async (daePath) => {
                             try {
                                 await extractTexturesFromDaeImages(daePath);
                             } catch (e) {
                                 console.error(`[Texture Rescan] Error for ${daePath}: ${e.message}`);
                             }
-                        }
+                        });
                         console.log(`[Texture] Auto re-scan complete for job ${jobName}.`);
                     } catch (e) {
                         console.error(`[Texture] Auto re-scan error: ${e.message}`);

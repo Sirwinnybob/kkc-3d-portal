@@ -13,3 +13,9 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-22 - Concurrency-Limited Parallel Directory Scanning and Texture Extraction
+
+**Learning:** Parallelizing I/O-bound tasks in Node.js using `Promise.all` can provide massive speedups (up to 5.5x for recursive scans), but unbounded concurrency risks `EMFILE` errors and excessive memory usage on large directories. Using a `mapLimit` utility provides a balance of speed and stability.
+
+**Action:** Always use a concurrency-limited map (like `mapLimit`) when performing batch I/O operations or recursive directory traversals. Combine with `Set`-based existence checks to replace synchronous `fs.existsSync` calls in loops.
