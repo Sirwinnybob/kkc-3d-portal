@@ -36,3 +36,63 @@ test('Admin endpoints require authentication', async (t) => {
         assert.strictEqual(response.status, 200);
     });
 });
+
+test('Admin static files require authentication', async (t) => {
+    const originalAdminUser = process.env.ADMIN_USER;
+    const originalAdminPass = process.env.ADMIN_PASS;
+
+    t.after(() => {
+        process.env.ADMIN_USER = originalAdminUser;
+        process.env.ADMIN_PASS = originalAdminPass;
+    });
+
+    await t.test('GET /admin/tagger.html without auth returns 401', async () => {
+        process.env.ADMIN_USER = 'admin';
+        process.env.ADMIN_PASS = 'password';
+        const response = await request(app).get('/admin/tagger.html');
+        assert.strictEqual(response.status, 401);
+    });
+
+    await t.test('GET /admin/tagger.html with valid auth succeeds', async () => {
+        process.env.ADMIN_USER = 'admin';
+        process.env.ADMIN_PASS = 'password';
+        const response = await request(app)
+            .get('/admin/tagger.html')
+            .set('Authorization', 'Basic ' + Buffer.from('admin:password').toString('base64'));
+        assert.strictEqual(response.status, 200);
+    });
+});
+
+test('Showroom staging static files require authentication', async (t) => {
+    const originalAdminUser = process.env.ADMIN_USER;
+    const originalAdminPass = process.env.ADMIN_PASS;
+
+    t.after(() => {
+        process.env.ADMIN_USER = originalAdminUser;
+        process.env.ADMIN_PASS = originalAdminPass;
+    });
+
+    const fs = require('fs');
+    const path = require('path');
+    const STAGING_DIR = path.join(__dirname, '../Showroom/staging');
+    if (!fs.existsSync(STAGING_DIR)) {
+        fs.mkdirSync(STAGING_DIR, { recursive: true });
+    }
+    fs.writeFileSync(path.join(STAGING_DIR, 'test_static_auth.txt'), 'secret');
+
+    await t.test('GET /showroom/staging/test_static_auth.txt without auth returns 401', async () => {
+        process.env.ADMIN_USER = 'admin';
+        process.env.ADMIN_PASS = 'password';
+        const response = await request(app).get('/showroom/staging/test_static_auth.txt');
+        assert.strictEqual(response.status, 401);
+    });
+
+    await t.test('GET /showroom/staging/test_static_auth.txt with valid auth succeeds', async () => {
+        process.env.ADMIN_USER = 'admin';
+        process.env.ADMIN_PASS = 'password';
+        const response = await request(app)
+            .get('/showroom/staging/test_static_auth.txt')
+            .set('Authorization', 'Basic ' + Buffer.from('admin:password').toString('base64'));
+        assert.strictEqual(response.status, 200);
+    });
+});
