@@ -141,14 +141,42 @@ body {
 .room-info-style { font-size: 0.8em; margin-bottom: 10px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px; }
 .room-name-style { color: #000; }
 .room-switcher-style { display: none; margin-bottom: 15px; }
-.room-list-ui-style { display: flex; flex-direction: column; gap: 5px; max-height: 45vh; overflow-y: auto; padding-right: 4px; }
+.room-list-ui-style { display: flex; flex-direction: column; gap: 6px; max-height: 45vh; overflow-y: auto; padding-right: 4px; }
+
+.room-switcher-btn {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    background: #fff;
+    color: #000;
+    width: 100%;
+    text-align: left;
+    font-weight: bold;
+    transition: background 0.2s, border-color 0.2s, transform 0.1s;
+}
+
+.room-switcher-btn:hover {
+    background: #f8f8f8;
+    border-color: #3b82f6;
+}
+
+.room-switcher-btn:active {
+    transform: scale(0.98);
+}
+
+.room-switcher-btn.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: #fff;
+}
 .controls-title { margin-top:0; }
 .controls-body { text-align:left; font-size: 0.9em; line-height: 1.6; }
 .close-help-btn-style { margin-top:20px; width:100%; padding:10px; border-radius:8px; border:none; background:#007bff; color:white; font-weight:bold; cursor:pointer; }
 .joystick-label { position: absolute; top: -20px; width: 100%; text-align: center; color: white; font-size: 9px; font-weight: bold; text-transform: uppercase; }
 
-/* Help Button */
-#help-btn {
+/* Top Utility Buttons */
+.top-util-btn {
     background: #fff;
     border: 1px solid #000;
     border-radius: 50%;
@@ -159,11 +187,16 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.1s;
+    transition: background 0.2s, transform 0.1s;
+    padding: 0;
 }
 
-#help-btn:active {
-    transform: scale(0.92);
+.top-util-btn:hover {
+    background: #f0f0f0;
+}
+
+.top-util-btn:active {
+    transform: scale(0.95);
 }
 
 /* Help Modal */
