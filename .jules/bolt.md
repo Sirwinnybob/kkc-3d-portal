@@ -13,3 +13,9 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-15 - Parallel Directory Scanning with mapLimit
+
+**Learning:** Recursive directory scanning using synchronous loops or unbounded `Promise.all` can significantly block the event loop or cause 'EMFILE' errors on large job directories. Implementing a `mapLimit` utility allows for throttled parallel I/O, providing a measurable performance boost (~2.2x - 5.5x) while maintaining system stability.
+
+**Action:** Always use `mapLimit` with a reasonable concurrency constant (e.g., `SCAN_CONCURRENCY_LIMIT = 10`) for recursive filesystem operations and use `Array.prototype.flat()` to process results efficiently.

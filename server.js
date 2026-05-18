@@ -46,6 +46,29 @@ const SUB_CATEGORIES = {
 // Grain directions (only slab doors have grain)
 const GRAIN_DIRS = ['horizontal', 'vertical'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
+const SCAN_CONCURRENCY_LIMIT = 10;
+
+/**
+ * Throttles parallel execution of an asynchronous function over an array of items.
+ * @param {Array} items - Items to process
+ * @param {number} limit - Max concurrent operations
+ * @param {Function} fn - Async function to run for each item
+ */
+async function mapLimit(items, limit, fn) {
+    const results = [];
+    const executing = new Set();
+    for (const item of items) {
+        const p = Promise.resolve().then(() => fn(item));
+        results.push(p);
+        executing.add(p);
+        const clean = () => executing.delete(p);
+        p.then(clean).catch(clean);
+        if (executing.size >= limit) {
+            await Promise.race(executing);
+        }
+    }
+    return Promise.all(results);
+}
 
 // Auto-parse rules for Cabinet Vision mesh naming conventions
 // Order matters: more specific patterns must come first
@@ -171,29 +194,31 @@ app.get('/api/job/:code', async (req, res) => {
         return res.status(404).json({ success: false });
     }
 
-    const rooms = [];
     const findGlbs = async (dir) => {
-        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        const promises = entries.map(entry => {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                return findGlbs(fullPath);
-            } else if (entry.name.toLowerCase().endsWith('.glb') || entry.name.toLowerCase().endsWith('.obj')) {
-                const lowerName = entry.name.toLowerCase();
-                if (lowerName.endsWith('_medium.glb') || lowerName.endsWith('_low.glb')) return;
+        try {
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            const results = await mapLimit(entries, SCAN_CONCURRENCY_LIMIT, async (entry) => {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    return await findGlbs(fullPath);
+                } else if (entry.name.toLowerCase().endsWith('.glb') || entry.name.toLowerCase().endsWith('.obj')) {
+                    const lowerName = entry.name.toLowerCase();
+                    if (lowerName.endsWith('_medium.glb') || lowerName.endsWith('_low.glb')) return [];
 
-                // If the file is directly in the job directory, use the filename (without extension).
-                // If it's in a subfolder, use the immediate parent folder's name.
-                if (dir === jobPath) {
-                    rooms.push(path.basename(entry.name, path.extname(entry.name)));
-                } else {
-                    rooms.push(path.basename(dir));
+                    // If the file is directly in the job directory, use the filename (without extension).
+                    // If it's in a subfolder, use the immediate parent folder's name.
+                    if (dir === jobPath) {
+                        return [path.basename(entry.name, path.extname(entry.name))];
+                    } else {
+                        return [path.basename(dir)];
+                    }
                 }
-            }
-        });
-        await Promise.all(promises);
+                return [];
+            });
+            return results.flat();
+        } catch { return []; }
     };
-    await findGlbs(jobPath);
+    const rooms = await findGlbs(jobPath);
     res.json({ success: true, rooms: [...new Set(rooms)] });
 });
 
@@ -996,19 +1021,19 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
 
         // Find all DAE files in jobs directory
         const findDaes = async (dir) => {
-            const daes = [];
             try {
                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                for (const entry of entries) {
+                const results = await mapLimit(entries, SCAN_CONCURRENCY_LIMIT, async (entry) => {
                     const fullPath = path.join(dir, entry.name);
                     if (entry.isDirectory()) {
-                        daes.push(...(await findDaes(fullPath)));
+                        return await findDaes(fullPath);
                     } else if (entry.name.toLowerCase().endsWith('.dae')) {
-                        daes.push(fullPath);
+                        return [fullPath];
                     }
-                }
-            } catch { /* ignore */ }
-            return daes;
+                    return [];
+                });
+                return results.flat();
+            } catch { return []; }
         };
 
         const daeFiles = await findDaes(JOBS_DIR);
@@ -2538,19 +2563,19 @@ if (require.main === module) {
                     try {
                         const jobDir = path.join(JOBS_DIR, jobName);
                         const findDaes = async (dir) => {
-                            const daes = [];
                             try {
                                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                                for (const entry of entries) {
+                                const results = await mapLimit(entries, SCAN_CONCURRENCY_LIMIT, async (entry) => {
                                     const fullPath = path.join(dir, entry.name);
                                     if (entry.isDirectory()) {
-                                        daes.push(...(await findDaes(fullPath)));
+                                        return await findDaes(fullPath);
                                     } else if (entry.name.toLowerCase().endsWith('.dae')) {
-                                        daes.push(fullPath);
+                                        return [fullPath];
                                     }
-                                }
-                            } catch { /* ignore */ }
-                            return daes;
+                                    return [];
+                                });
+                                return results.flat();
+                            } catch { return []; }
                         };
                         const daeFiles = await findDaes(jobDir);
                         for (const daePath of daeFiles) {
