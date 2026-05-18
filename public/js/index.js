@@ -19,6 +19,7 @@ async function checkJob() {
     btn.innerText = 'Checking...';
     btn.disabled = true;
     errorMsg.style.display = 'none';
+    errorMsg.innerText = "Job code not found. Please check and try again.";
 
     try {
         const response = await fetch(`/api/job/${encodeURIComponent(code)}`);
@@ -44,16 +45,33 @@ async function checkJob() {
                 if (acceptBtn) acceptBtn.focus();
             }
         } else {
-            errorMsg.style.display = 'block';
-            const jobInput = document.getElementById('jobCode');
-            if (jobInput) jobInput.setAttribute('aria-invalid', 'true');
+            showLoginError(errorMsg);
         }
     } catch (err) {
         console.error(err);
-        alert("Could not connect to server.");
+        errorMsg.innerText = "Could not connect to server. Please try again later.";
+        showLoginError(errorMsg);
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
+    }
+}
+
+function showLoginError(errorEl) {
+    errorEl.style.display = 'block';
+    const jobInput = document.getElementById('jobCode');
+    const container = document.getElementById('login-container');
+
+    if (jobInput) {
+        jobInput.setAttribute('aria-invalid', 'true');
+        jobInput.focus();
+        jobInput.select();
+    }
+
+    if (container) {
+        container.classList.remove('shake');
+        void container.offsetWidth; // Trigger reflow
+        container.classList.add('shake');
     }
 }
 
