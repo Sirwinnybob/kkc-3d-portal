@@ -322,8 +322,12 @@ async function loadStagingGlb() {
         }
     } catch { /* no existing tags */ }
 
+    // Optimization: Use a Set for O(1) lookups during model traversal
+    const serverNameSet = new Set(serverMeshNames);
+
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        const nodeName = `Node_${originalIndex}`;
+        const serverName = serverNameSet.has(entry.name) ? entry.name : (serverNameSet.has(nodeName) ? nodeName : null);
         if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
         if (existingTags?.meshCategories?.[entry.name]) {
             entry.tag = existingTags.meshCategories[entry.name];
@@ -671,8 +675,12 @@ async function loadCategoryGlb() {
         }
     } catch { /* no existing tags */ }
 
+    // Optimization: Use a Set for O(1) lookups during model traversal
+    const serverNameSet = new Set(serverMeshNames);
+
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        const nodeName = `Node_${originalIndex}`;
+        const serverName = serverNameSet.has(entry.name) ? entry.name : (serverNameSet.has(nodeName) ? nodeName : null);
         if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
 
         if (existingTags?.meshTags?.[entry.name]) {
