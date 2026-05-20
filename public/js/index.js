@@ -2,6 +2,32 @@ let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
 
+function showLoginError(msg) {
+    const errorMsg = document.getElementById('errorMsg');
+    const loginContainer = document.getElementById('login-container');
+    const jobInput = document.getElementById('jobCode');
+
+    if (errorMsg) {
+        errorMsg.textContent = msg;
+        errorMsg.style.display = 'block';
+        errorMsg.classList.remove('fade-in');
+        void errorMsg.offsetWidth; // trigger reflow
+        errorMsg.classList.add('fade-in');
+    }
+
+    if (loginContainer) {
+        loginContainer.classList.remove('shake');
+        void loginContainer.offsetWidth; // trigger reflow
+        loginContainer.classList.add('shake');
+    }
+
+    if (jobInput) {
+        jobInput.setAttribute('aria-invalid', 'true');
+        jobInput.focus();
+        jobInput.select();
+    }
+}
+
 async function checkJob() {
     const code = document.getElementById('jobCode').value.trim();
     if (!code) return;
@@ -44,13 +70,11 @@ async function checkJob() {
                 if (acceptBtn) acceptBtn.focus();
             }
         } else {
-            errorMsg.style.display = 'block';
-            const jobInput = document.getElementById('jobCode');
-            if (jobInput) jobInput.setAttribute('aria-invalid', 'true');
+            showLoginError("Job code not found. Please check and try again.");
         }
     } catch (err) {
         console.error(err);
-        alert("Could not connect to server.");
+        showLoginError("Could not connect to server. Please try again later.");
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -158,7 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         input.addEventListener('input', () => {
             const errorMsg = document.getElementById('errorMsg');
+            const loginContainer = document.getElementById('login-container');
             if (errorMsg) errorMsg.style.display = 'none';
+            if (loginContainer) loginContainer.classList.remove('shake');
             input.removeAttribute('aria-invalid');
 
             // Adaptive button text: if 5 digits, it's a showroom PIN
