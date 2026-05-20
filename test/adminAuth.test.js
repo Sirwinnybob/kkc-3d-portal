@@ -35,4 +35,20 @@ test('Admin endpoints require authentication', async (t) => {
             .set('Authorization', 'Basic ' + Buffer.from('admin:password').toString('base64'));
         assert.strictEqual(response.status, 200);
     });
+
+    await t.test('GET /admin/tagger.html requires auth', async () => {
+        process.env.ADMIN_USER = 'admin';
+        process.env.ADMIN_PASS = 'password';
+        const response = await request(app).get('/admin/tagger.html');
+        assert.strictEqual(response.status, 401);
+    });
+
+    await t.test('GET /admin/tagger.html with valid auth succeeds', async () => {
+        process.env.ADMIN_USER = 'admin';
+        process.env.ADMIN_PASS = 'password';
+        const response = await request(app)
+            .get('/admin/tagger.html')
+            .set('Authorization', 'Basic ' + Buffer.from('admin:password').toString('base64'));
+        assert.strictEqual(response.status, 200);
+    });
 });
