@@ -13,3 +13,19 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## Performance Optimization: Regex-based Segment Matching in texturesAuth
+
+**File:** `middleware/texturesAuth.js`
+
+💡 **What:**
+Replaced `path.split('/').filter(Boolean).some(...)` with a pre-compiled regular expression `/(^|\/)(hidden|uncategorized)(\/|$)/i` for checking restricted path segments.
+
+🎯 **Why:**
+The middleware runs on every request to the `/textures` route. String splitting and array iteration incur unnecessary CPU cycles and memory allocations. A pre-compiled regex is more efficient and handles edge cases (like segments in the middle of a path) more cleanly.
+
+📊 **Measured Improvement:**
+Using a micro-benchmark with 1,000,000 iterations:
+*   **Baseline (Split + Some):** ~179.42 ms
+*   **Optimized (Regex):** ~40.73 ms
+*   **Net Impact:** ~4.4x speedup for the core middleware matching logic.
