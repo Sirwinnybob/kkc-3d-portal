@@ -2,6 +2,32 @@ let currentJob = '';
 let pendingRedirectUrl = '';
 let pendingRooms = null;
 
+function showLoginError(msg) {
+    const errorMsg = document.getElementById('errorMsg');
+    const container = document.getElementById('login-container');
+    const input = document.getElementById('jobCode');
+
+    if (errorMsg) {
+        errorMsg.textContent = msg || 'Job code not found. Please check and try again.';
+        errorMsg.style.display = 'block';
+        errorMsg.classList.remove('fade-in');
+        void errorMsg.offsetWidth; // trigger reflow
+        errorMsg.classList.add('fade-in');
+    }
+
+    if (container) {
+        container.classList.remove('shake');
+        void container.offsetWidth; // trigger reflow
+        container.classList.add('shake');
+    }
+
+    if (input) {
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+        input.select();
+    }
+}
+
 async function checkJob() {
     const code = document.getElementById('jobCode').value.trim();
     if (!code) return;
@@ -18,7 +44,7 @@ async function checkJob() {
     const originalText = btn.innerText;
     btn.innerText = 'Checking...';
     btn.disabled = true;
-    errorMsg.style.display = 'none';
+    if (errorMsg) errorMsg.style.display = 'none';
 
     try {
         const response = await fetch(`/api/job/${encodeURIComponent(code)}`);
@@ -44,13 +70,11 @@ async function checkJob() {
                 if (acceptBtn) acceptBtn.focus();
             }
         } else {
-            errorMsg.style.display = 'block';
-            const jobInput = document.getElementById('jobCode');
-            if (jobInput) jobInput.setAttribute('aria-invalid', 'true');
+            showLoginError();
         }
     } catch (err) {
         console.error(err);
-        alert("Could not connect to server.");
+        showLoginError("Could not connect to server.");
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -158,7 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         input.addEventListener('input', () => {
             const errorMsg = document.getElementById('errorMsg');
+            const container = document.getElementById('login-container');
             if (errorMsg) errorMsg.style.display = 'none';
+            if (container) container.classList.remove('shake');
             input.removeAttribute('aria-invalid');
 
             // Adaptive button text: if 5 digits, it's a showroom PIN
