@@ -13,3 +13,11 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-15 - Material Preview Optimization
+**Learning:** Rendering a list of items where each item creates a temporary DOM element (like a canvas) and performs a synchronous, CPU-intensive encoding operation () creates significant memory pressure and GC churn. Prioritizing pre-rendered thumbnails and reusing a shared, persistent canvas eliminates this bottleneck.
+**Action:** Always check if repeating expensive DOM or I/O operations in a loop can be avoided by using pre-computed assets or shared resource pools.
+
+## 2025-05-15 - Material Preview Optimization
+**Learning:** Rendering a list of items where each item creates a temporary DOM element (like a canvas) and performs a synchronous, CPU-intensive encoding operation (`toDataURL`) creates significant memory pressure and GC churn. Prioritizing pre-rendered thumbnails and reusing a shared, persistent canvas eliminates this bottleneck.
+**Action:** Always check if repeating expensive DOM or I/O operations in a loop can be avoided by using pre-computed assets or shared resource pools.
