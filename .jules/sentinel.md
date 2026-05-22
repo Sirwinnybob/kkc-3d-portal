@@ -23,3 +23,8 @@
 **Vulnerability:** The `/textures` static file route was serving all files in the `textures/` directory, including those in `Hidden` and `Uncategorized` folders, bypassing the checks in the `/api/textures/:category` endpoint.
 **Learning:** Security checks in API endpoints do not protect static file routes serving the same underlying directories. The static middleware must have its own equivalent security checks, or the sensitive data must be moved out of the publicly served static directory tree.
 **Prevention:** Implement a middleware specifically for the static route to block access to system directories (`Hidden`, `Uncategorized`), ensuring that static file serving matches the security policy of the API endpoints.
+
+## 2024-11-20 - [Information Disclosure via Static File Serving]
+**Vulnerability:** The `/admin` static file routes were not properly authenticated, allowing any unauthenticated user to access the tagger or other utilities inside the `public/admin/` folder.
+**Learning:** Security checks in API endpoints do not protect static file routes. Just as the `/textures` and `/jobs` directories were secured via `texturesAuth` and `jobsAuth` respectively, the admin directory in `public` must be protected with the `adminAuth` middleware.
+**Prevention:** Always ensure that statically served files are protected by appropriate middleware *before* the generic `express.static('public')` catch-all middleware is applied.
