@@ -54,7 +54,22 @@ export class UIManager {
             }
         };
 
-        if (shareBtn) shareBtn.onclick = () => this.toggleShare(true);
+        if (shareBtn) {
+            shareBtn.onclick = () => {
+                const fullUrl = window.location.origin + window.location.pathname + window.location.search;
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'KKC 3D Portal',
+                        text: 'Check out this 3D cabinet design!',
+                        url: fullUrl
+                    }).catch(err => {
+                        if (err.name !== 'AbortError') this.toggleShare(true);
+                    });
+                } else {
+                    this.toggleShare(true);
+                }
+            };
+        }
         if (shareModalClose) shareModalClose.onclick = () => this.toggleShare(false);
         if (shareModal) {
             shareModal.addEventListener('click', (e) => {
@@ -68,6 +83,7 @@ export class UIManager {
                 if (!shareLinkDisplay) return;
                 const link = shareLinkDisplay.textContent;
                 navigator.clipboard.writeText(link).then(() => {
+                    if (navigator.vibrate) navigator.vibrate(20);
                     copyShareLinkBtn.classList.add('copied');
                     copyShareLinkBtn.setAttribute('aria-label', 'Link Copied!');
                     copyShareLinkBtn.innerHTML = `
