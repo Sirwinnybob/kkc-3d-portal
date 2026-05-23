@@ -517,7 +517,7 @@ body {
 
 .material-status {
     font-size: 0.75em;
-    color: #999;
+    color: #666;
 }
 
 .material-badge {
@@ -568,7 +568,7 @@ body {
 }
 
 #texture-search::placeholder {
-    color: #999;
+    color: #757575;
 }
 
 #texture-search:focus {

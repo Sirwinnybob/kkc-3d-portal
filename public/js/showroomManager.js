@@ -137,6 +137,7 @@ export class ShowroomManager {
             copyPinBtn.onclick = () => {
                 const pin = pinDisplay.textContent;
                 navigator.clipboard.writeText(pin).then(() => {
+                    if (navigator.vibrate) navigator.vibrate(20);
                     if (copyTimeout) clearTimeout(copyTimeout);
                     copyPinBtn.classList.add('copied');
                     copyPinBtn.setAttribute('aria-label', 'PIN Copied!');

@@ -68,6 +68,7 @@ export class UIManager {
                 if (!shareLinkDisplay) return;
                 const link = shareLinkDisplay.textContent;
                 navigator.clipboard.writeText(link).then(() => {
+                    if (navigator.vibrate) navigator.vibrate(20);
                     copyShareLinkBtn.classList.add('copied');
                     copyShareLinkBtn.setAttribute('aria-label', 'Link Copied!');
                     copyShareLinkBtn.innerHTML = `
