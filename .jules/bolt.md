@@ -13,3 +13,9 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2026-05-24 - [Tagger] O(1) Mesh Name Lookups
+
+**Learning:** When matching hundreds or thousands of 3D mesh nodes against a server-provided list of names (e.g., for tagging or categorization), an O(N) array search inside the traversal loop creates a significant M*N bottleneck that blocks the browser's main thread, causing visible UI stuttering.
+
+**Action:** Always convert the lookup array into a `Set` before starting the traversal. This reduces the complexity to O(M+N) and ensures the UI remains responsive even for extremely complex models.
