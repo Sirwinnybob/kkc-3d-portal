@@ -1312,7 +1312,7 @@ body {
 #tour-skip {
     background: none;
     border: none;
-    color: rgba(255,255,255,0.38);
+    color: rgba(255,255,255,0.65);
     font-size: 0.8em;
     cursor: pointer;
     padding: 0;
@@ -1320,7 +1320,7 @@ body {
     transition: color 0.15s;
 }
 
-#tour-skip:hover { color: rgba(255,255,255,0.65); }
+#tour-skip:hover { color: rgba(255,255,255,0.95); }
 
 #tour-next {
     background: #3b82f6;
@@ -1531,6 +1531,10 @@ body {
 }
 .copy-btn:active {
     transform: scale(0.92);
+}
+
+#help-btn svg {
+    display: block;
 }
 .copy-btn.copied {
     background: #28a745;
