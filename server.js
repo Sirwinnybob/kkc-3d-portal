@@ -112,6 +112,7 @@ app.use(helmet({
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
+app.use('/admin', adminAuth, express.static(path.join(__dirname, 'public', 'admin'), { maxAge: 0, etag: true, lastModified: true }));
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
 app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {

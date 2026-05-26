@@ -8,6 +8,9 @@ module.exports = (req, res, next) => {
         return res.status(400).send('Bad Request');
     }
 
+    // Normalize path to resolve .. and convert \ to /
+    checkPath = path.posix.normalize(checkPath.replace(/\\/g, '/'));
+
     // Split the path and check if it contains Hidden or Uncategorized
     const segments = checkPath.split('/').filter(Boolean);
 

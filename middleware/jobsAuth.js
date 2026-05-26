@@ -10,6 +10,9 @@ module.exports = (req, res, next) => {
         return res.status(400).send('Bad Request');
     }
 
+    // Normalize path to resolve .. and convert \ to /
+    checkPath = path.posix.normalize(checkPath.replace(/\\/g, '/'));
+
     const ext = path.extname(checkPath).toLowerCase();
     // Security: Prevent serving unauthorized file types or files without extensions by explicitly requiring allowed extensions.
     if (ALLOWED_EXTENSIONS.has(ext)) return next();
