@@ -123,6 +123,7 @@ app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {
 
 // --- API ---
 const apiLimiter = rateLimit({
+    skip: () => process.env.NODE_ENV === 'test',
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
     standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
@@ -134,6 +135,7 @@ app.use('/api/', apiLimiter);
 
 // Strict rate limiter for showroom config creation to prevent abuse
 const configLimiter = rateLimit({
+    skip: () => process.env.NODE_ENV === 'test',
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 5, // Limit each IP to 5 requests per `window` (here, per 15 minutes).
     standardHeaders: 'draft-7',
@@ -143,6 +145,7 @@ const configLimiter = rateLimit({
 
 // Strict rate limiter for showroom config retrieval to prevent PIN brute-forcing
 const configGetLimiter = rateLimit({
+    skip: () => process.env.NODE_ENV === 'test',
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 10, // Limit each IP to 10 requests per `window`
     standardHeaders: 'draft-7',
@@ -337,12 +340,12 @@ app.get('/api/job/:code/:room/textures', async (req, res) => {
     }
 
     try {
-        const [manifestRaw, dimRaw] = await Promise.all([
-            fs.promises.readFile(manifestPath, 'utf8'),
-            fs.promises.readFile(path.join(TEXTURES_DIR, 'texture_dimensions.json'), 'utf8').catch(() => '{}'),
-        ]);
+        const manifestRaw = await fs.promises.readFile(manifestPath, 'utf8');
         const manifest = JSON.parse(manifestRaw);
-        const dimensions = JSON.parse(dimRaw);
+
+        // Use cached dimensions from the texture index to avoid redundant disk I/O
+        const index = await buildTextureHashIndex();
+        const dimensions = index._dimensions || {};
 
         // Overlay current dimensions onto each bestMatch so stale cached nulls are always overridden
         if (manifest.materials) {
@@ -774,11 +777,12 @@ async function buildTextureHashIndex() {
                 }
             }
 
-            // Flatten the library index once to avoid repeated Object.entries() and nested loop overhead.
-            // Using TypedArrays for hashes to improve memory locality and performance in the hot loop.
+            // Pre-build category maps and flatten index for O(1) lookups and faster matching
+            const categoryMaps = {};
             const flatLibrary = [];
             for (const category of Object.keys(index)) {
                 const textures = index[category];
+                categoryMaps[category] = new Map(textures.map(t => [t.file, t]));
                 for (let i = 0; i < textures.length; i++) {
                     const tex = textures[i];
                     tex.category = category;
@@ -787,16 +791,21 @@ async function buildTextureHashIndex() {
             }
             const flatLow = new Uint32Array(flatLibrary.length);
             const flatHigh = new Uint32Array(flatLibrary.length);
+            const flatHidden = new Uint8Array(flatLibrary.length);
             for (let i = 0; i < flatLibrary.length; i++) {
                 flatLow[i] = flatLibrary[i].hLow;
                 flatHigh[i] = flatLibrary[i].hHigh;
+                flatHidden[i] = flatLibrary[i].hidden ? 1 : 0;
             }
 
-            // Attach flattened index as non-enumerable properties to the main index
+            // Attach caches as non-enumerable properties to the index
             Object.defineProperties(index, {
                 '_flatLibrary': { value: flatLibrary, enumerable: false },
                 '_flatLow': { value: flatLow, enumerable: false },
-                '_flatHigh': { value: flatHigh, enumerable: false }
+                '_flatHigh': { value: flatHigh, enumerable: false },
+                '_flatHidden': { value: flatHidden, enumerable: false },
+                '_categoryMaps': { value: categoryMaps, enumerable: false },
+                '_dimensions': { value: dimensions, enumerable: false }
             });
 
             textureHashCache = index;
@@ -847,9 +856,9 @@ app.get('/api/textures/:category', async (req, res) => {
     try {
         const files = await fs.promises.readdir(categoryPath);
 
-        // Optimize metadata lookups by using a Map for O(1) access instead of O(N) array searching.
-        const catCache = textureHashCache && textureHashCache[category];
-        const cacheMap = catCache ? new Map(catCache.map(t => [t.file, t])) : null;
+        // Use pre-built category map for O(1) metadata lookups
+        const index = await buildTextureHashIndex();
+        const cacheMap = index._categoryMaps ? index._categoryMaps[category] : null;
 
         const textures = files
             .filter(f => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(f).toLowerCase()))
@@ -906,10 +915,11 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         const index = await buildTextureHashIndex();
 
         // Find best match using the optimized flat index
-        const { _flatLibrary, _flatLow, _flatHigh } = index;
+        const { _flatLibrary, _flatLow, _flatHigh, _flatHidden } = index;
         let bestMatchIdx = -1;
         let bestDistance = Infinity;
-        const allMatches = [];
+        const similarIndices = [];
+        const similarDistances = [];
 
         for (let i = 0; i < _flatLibrary.length; i++) {
             const distance = hammingDistance(inLow, inHigh, _flatLow[i], _flatHigh[i]);
@@ -921,15 +931,19 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
             }
 
             // Track similar non-hidden matches for the catalog view
-            if (distance <= 20 && !_flatLibrary[i].hidden) {
-                allMatches.push({ ..._flatLibrary[i], distance });
+            if (distance <= 20 && !_flatHidden[i]) {
+                similarIndices.push(i);
+                similarDistances.push(distance);
             }
         }
 
         const bestMatch = bestMatchIdx >= 0 ? _flatLibrary[bestMatchIdx] : null;
 
-        // Sort matches by distance
-        allMatches.sort((a, b) => a.distance - b.distance);
+        // Map and sort matches by distance
+        const allMatches = similarIndices.map((idx, i) => ({
+            ..._flatLibrary[idx],
+            distance: similarDistances[i]
+        })).sort((a, b) => a.distance - b.distance);
 
         // If no good match found, copy to Uncategorized
         const MATCH_THRESHOLD = 15; // Stricter threshold to avoid false matches
@@ -1242,7 +1256,7 @@ async function generateTextureManifest(glbPath) {
         const imageMatchCache = new Map();
 
         // Use the optimized flattened index cached in libraryIndex
-        const { _flatLibrary: flatLibrary, _flatLow: flatLow, _flatHigh: flatHigh } = libraryIndex;
+        const { _flatLibrary: flatLibrary, _flatLow: flatLow, _flatHigh: flatHigh, _flatHidden: flatHidden } = libraryIndex;
 
         const getImageData = (imageIdx) => {
             const image = gltf.images[imageIdx];
@@ -1280,7 +1294,8 @@ async function generateTextureManifest(glbPath) {
 
                         let bestMatchIdx = -1;
                         let bestDistance = Infinity;
-                        const allMatches = [];
+                        const similarIndices = [];
+                        const similarDistances = [];
 
                         // Optimized Hamming distance loop using TypedArrays and SWAR popcount
                         for (let i = 0; i < flatLibrary.length; i++) {
@@ -1290,12 +1305,17 @@ async function generateTextureManifest(glbPath) {
                                 bestDistance = distance;
                                 bestMatchIdx = i;
                             }
-                            if (distance <= 20 && !flatLibrary[i].hidden) {
-                                allMatches.push({ ...flatLibrary[i], distance });
+                            if (distance <= 20 && !flatHidden[i]) {
+                                similarIndices.push(i);
+                                similarDistances.push(distance);
                             }
                         }
 
-                        allMatches.sort((a, b) => a.distance - b.distance);
+                        // Map and sort matches by distance
+                        const allMatches = similarIndices.map((idx, i) => ({
+                            ...flatLibrary[idx],
+                            distance: similarDistances[i]
+                        })).sort((a, b) => a.distance - b.distance);
                         const isMatched = bestDistance <= 15;
                         const bestMatch = isMatched ? flatLibrary[bestMatchIdx] : null;
 
@@ -2585,3 +2605,4 @@ module.exports.safeShowroomPath = safeShowroomPath;
 module.exports.hammingDistance = hammingDistance;
 module.exports.popcount32 = popcount32;
 module.exports.sanitizeGlbSamplers = sanitizeGlbSamplers;
+module.exports.buildTextureHashIndex = buildTextureHashIndex;
