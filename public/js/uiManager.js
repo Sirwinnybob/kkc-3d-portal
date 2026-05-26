@@ -12,13 +12,51 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isTyping) {
                     active.blur();
                     return;
                 }
                 this.closeActiveModals();
+                return;
+            }
+
+            if (isTyping) return;
+
+            // Global Shortcuts
+            const key = e.key.toLowerCase();
+            if (key === 'h' || e.key === '?') {
+                e.preventDefault();
+                this.toggleHelp(true);
+            } else if (key === 'm') {
+                e.preventDefault();
+                document.getElementById('menu-btn')?.click();
+            } else if (key === 't') {
+                e.preventDefault();
+                document.getElementById('texture-btn')?.click();
+            } else if (key === 'c') {
+                e.preventDefault();
+                document.getElementById('camera-btn')?.click();
+            } else if (key === 'l') {
+                e.preventDefault();
+                document.getElementById('light-mode-btn')?.click();
+            } else if (key === 's') {
+                e.preventDefault();
+                this.toggleShare(true);
+            } else if (key === '+' || key === '=' || key === '-' || key === '_') {
+                // Proxy zoom keys to joystick for consistent behavior
+                const joystick = document.getElementById('joystick-handle');
+                if (joystick) {
+                    const mappedKey = (key === '+' || key === '=') ? 'PageUp' : 'PageDown';
+                    joystick.dispatchEvent(new KeyboardEvent('keydown', { key: mappedKey, bubbles: true }));
+                    // Auto-release after a short delay
+                    setTimeout(() => {
+                        joystick.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                    }, 150);
+                }
             }
         });
     }
