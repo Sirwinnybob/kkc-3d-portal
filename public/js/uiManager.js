@@ -12,15 +12,56 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isTyping) {
                     active.blur();
                     return;
                 }
                 this.closeActiveModals();
+                return;
+            }
+
+            if (isTyping) return;
+
+            const key = e.key.toLowerCase();
+            if (key === 'm') {
+                document.getElementById('menu-btn')?.click();
+            } else if (key === 'h' || key === '?') {
+                this.toggleHelp?.(!document.getElementById('help-modal')?.classList.contains('show'));
+            } else if (key === 'l') {
+                document.getElementById('light-mode-btn')?.click();
+            } else if (key === 't') {
+                document.getElementById('texture-btn')?.click();
+            } else if (key === 'c') {
+                document.getElementById('camera-btn')?.click();
+            } else if (key === 's') {
+                this.toggleShare?.(!document.getElementById('share-modal')?.classList.contains('show'));
+            } else if (key === '+' || key === '=') {
+                this.proxyJoystickEvent('keydown', 'PageUp');
+            } else if (key === '-' || key === '_') {
+                this.proxyJoystickEvent('keydown', 'PageDown');
             }
         });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (['+', '=', '-', '_'].includes(key)) {
+                this.proxyJoystickEvent('keyup');
+            }
+        });
+    }
+
+    proxyJoystickEvent(type, key) {
+        const handle = document.getElementById('joystick-handle');
+        if (!handle) return;
+        handle.dispatchEvent(new KeyboardEvent(type, {
+            key: key,
+            bubbles: true,
+            cancelable: true
+        }));
     }
 
     setupShare() {

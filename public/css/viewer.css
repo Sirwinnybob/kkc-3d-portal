@@ -517,7 +517,7 @@ body {
 
 .material-status {
     font-size: 0.75em;
-    color: #999;
+    color: #666;
 }
 
 .material-badge {
@@ -568,7 +568,7 @@ body {
 }
 
 #texture-search::placeholder {
-    color: #999;
+    color: #757575;
 }
 
 #texture-search:focus {
@@ -1312,7 +1312,7 @@ body {
 #tour-skip {
     background: none;
     border: none;
-    color: rgba(255,255,255,0.38);
+    color: rgba(255,255,255,0.65);
     font-size: 0.8em;
     cursor: pointer;
     padding: 0;
@@ -1320,7 +1320,7 @@ body {
     transition: color 0.15s;
 }
 
-#tour-skip:hover { color: rgba(255,255,255,0.65); }
+#tour-skip:hover { color: rgba(255,255,255,0.85); }
 
 #tour-next {
     background: #3b82f6;
