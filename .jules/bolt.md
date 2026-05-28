@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-14 - [O(1) Mesh Name Lookup in Tagger]
+**Learning:** Using `.find()` inside a traversal loop over thousands of meshes leads to O(M*N) complexity, which noticeably lags the UI during GLB loading. Pre-computing a `Map` of server-provided names reduces this to O(M+N).
+**Action:** Always prefer Map/Set lookups over array searches when processing large scene graphs or metadata lists in the frontend.

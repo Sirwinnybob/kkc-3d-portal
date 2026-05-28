@@ -322,8 +322,23 @@ async function loadStagingGlb() {
         }
     } catch { /* no existing tags */ }
 
+    // Optimization: Use a Map for O(1) mesh name lookups instead of O(N) .find() inside the traversal loop.
+    // This reduces loading complexity from O(M*N) to O(M+N), where M is meshes and N is server names.
+    const serverNameMap = new Map();
+    serverMeshNames.forEach((name, idx) => { if (!serverNameMap.has(name)) serverNameMap.set(name, idx); });
+
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        const idx1 = serverNameMap.get(entry.name);
+        const idx2 = serverNameMap.get(`Node_${originalIndex}`);
+        let serverName = null;
+        if (idx1 !== undefined && idx2 !== undefined) {
+            serverName = serverMeshNames[Math.min(idx1, idx2)];
+        } else if (idx1 !== undefined) {
+            serverName = serverMeshNames[idx1];
+        } else if (idx2 !== undefined) {
+            serverName = serverMeshNames[idx2];
+        }
+
         if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
         if (existingTags?.meshCategories?.[entry.name]) {
             entry.tag = existingTags.meshCategories[entry.name];
@@ -671,8 +686,22 @@ async function loadCategoryGlb() {
         }
     } catch { /* no existing tags */ }
 
+    // Optimization: Use a Map for O(1) mesh name lookups instead of O(N) .find() inside the traversal loop.
+    const serverNameMap = new Map();
+    serverMeshNames.forEach((name, idx) => { if (!serverNameMap.has(name)) serverNameMap.set(name, idx); });
+
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
+        const idx1 = serverNameMap.get(entry.name);
+        const idx2 = serverNameMap.get(`Node_${originalIndex}`);
+        let serverName = null;
+        if (idx1 !== undefined && idx2 !== undefined) {
+            serverName = serverMeshNames[Math.min(idx1, idx2)];
+        } else if (idx1 !== undefined) {
+            serverName = serverMeshNames[idx1];
+        } else if (idx2 !== undefined) {
+            serverName = serverMeshNames[idx2];
+        }
+
         if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
 
         if (existingTags?.meshTags?.[entry.name]) {
