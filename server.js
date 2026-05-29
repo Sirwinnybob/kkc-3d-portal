@@ -112,6 +112,10 @@ app.use(helmet({
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
+// Security: Explicitly protect admin and staging physical static assets from unauthenticated access
+app.use('/admin', adminAuth);
+app.use('/showroom/staging', adminAuth);
+
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
 app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {
