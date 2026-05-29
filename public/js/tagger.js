@@ -322,9 +322,25 @@ async function loadStagingGlb() {
         }
     } catch { /* no existing tags */ }
 
+    // Optimize mesh name lookup with a Map to avoid O(N) searching inside the loading loop
+    const nameToIndex = new Map();
+    serverMeshNames.forEach((n, i) => {
+        if (!nameToIndex.has(n)) nameToIndex.set(n, i);
+    });
+
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
-        if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
+        // Priority-preserving lookup: find the first name in serverMeshNames that matches entry.name or Node_idx
+        const idx1 = nameToIndex.has(entry.name) ? nameToIndex.get(entry.name) : Infinity;
+        const nodeName = `Node_${originalIndex}`;
+        const idx2 = nameToIndex.has(nodeName) ? nameToIndex.get(nodeName) : Infinity;
+        const bestIdx = Math.min(idx1, idx2);
+
+        if (bestIdx !== Infinity) {
+            const serverName = serverMeshNames[bestIdx];
+            entry.name = serverName;
+            entry.mesh.name = serverName;
+        }
+
         if (existingTags?.meshCategories?.[entry.name]) {
             entry.tag = existingTags.meshCategories[entry.name];
         }
@@ -671,9 +687,24 @@ async function loadCategoryGlb() {
         }
     } catch { /* no existing tags */ }
 
+    // Optimize mesh name lookup with a Map to avoid O(N) searching inside the loading loop
+    const nameToIndex = new Map();
+    serverMeshNames.forEach((n, i) => {
+        if (!nameToIndex.has(n)) nameToIndex.set(n, i);
+    });
+
     loadGlbFromUrl(glbUrl, (entry, originalIndex) => {
-        const serverName = serverMeshNames.find(n => n === entry.name || n === `Node_${originalIndex}`);
-        if (serverName) { entry.name = serverName; entry.mesh.name = serverName; }
+        // Priority-preserving lookup: find the first name in serverMeshNames that matches entry.name or Node_idx
+        const idx1 = nameToIndex.has(entry.name) ? nameToIndex.get(entry.name) : Infinity;
+        const nodeName = `Node_${originalIndex}`;
+        const idx2 = nameToIndex.has(nodeName) ? nameToIndex.get(nodeName) : Infinity;
+        const bestIdx = Math.min(idx1, idx2);
+
+        if (bestIdx !== Infinity) {
+            const serverName = serverMeshNames[bestIdx];
+            entry.name = serverName;
+            entry.mesh.name = serverName;
+        }
 
         if (existingTags?.meshTags?.[entry.name]) {
             entry.tag = existingTags.meshTags[entry.name];
