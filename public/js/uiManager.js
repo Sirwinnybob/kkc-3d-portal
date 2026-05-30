@@ -12,13 +12,22 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-                    active.blur();
-                    return;
-                }
+                if (isTyping) { active.blur(); return; }
                 this.closeActiveModals();
+                return;
+            }
+            if (isTyping) return;
+            const key = e.key.toLowerCase();
+            const btnMap = { m: 'menu-btn', t: 'texture-btn', c: 'camera-btn', l: 'light-mode-btn', s: 'share-btn', h: 'help-btn', '?': 'help-btn' };
+            if (btnMap[key]) document.getElementById(btnMap[key])?.click();
+            if ('+=-_'.includes(key)) {
+                const handle = document.getElementById('joystick-handle');
+                const mapped = '+='.includes(key) ? 'PageUp' : 'PageDown';
+                handle?.dispatchEvent(new KeyboardEvent('keydown', { key: mapped, bubbles: true }));
+                handle?.dispatchEvent(new KeyboardEvent('keyup', { key: mapped, bubbles: true }));
             }
         });
     }
