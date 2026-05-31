@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2026-05-31 - Optimized Hamming Distance Hot Loop
+**Learning:** Accessing properties on objects inside tight loops (like `flatLibrary[i].hidden`) is significantly slower than accessing TypedArrays in Node.js. Furthermore, deferring object spreading (`{...obj, dist}`) until after the loop reduces object allocation pressure and GC churn.
+**Action:** Always prefer TypedArrays for data that must be accessed in hot loops, and defer object creation/merging until absolutely necessary outside the loop.
