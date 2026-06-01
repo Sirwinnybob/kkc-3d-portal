@@ -23,3 +23,8 @@
 **Vulnerability:** The `/textures` static file route was serving all files in the `textures/` directory, including those in `Hidden` and `Uncategorized` folders, bypassing the checks in the `/api/textures/:category` endpoint.
 **Learning:** Security checks in API endpoints do not protect static file routes serving the same underlying directories. The static middleware must have its own equivalent security checks, or the sensitive data must be moved out of the publicly served static directory tree.
 **Prevention:** Implement a middleware specifically for the static route to block access to system directories (`Hidden`, `Uncategorized`), ensuring that static file serving matches the security policy of the API endpoints.
+
+## 2024-05-25 - [Information Disclosure via Route Shadowing]
+**Vulnerability:** The `/showroom/staging` endpoint was intended to be secured, but its specific static route was placed after the general `/showroom` static route in Express. This caused the unauthenticated `/showroom` catch-all to shadow the protected `/showroom/staging` directory, exposing sensitive staging files.
+**Learning:** In Express, the order of middleware is critical. A less specific route (like a parent directory) will intercept requests intended for a more specific route (like a subdirectory) if it is defined first, completely bypassing any security middleware intended for the subdirectory.
+**Prevention:** Always mount more specific routes before their parent catch-all routes, especially when dealing with overlapping static directories and differing authentication requirements.

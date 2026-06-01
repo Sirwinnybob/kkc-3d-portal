@@ -1675,6 +1675,11 @@ function ensureShowroomDirs() {
 }
 ensureShowroomDirs();
 
+// Serve staging GLB files securely, before the general showroom route to prevent shadowing
+app.use('/showroom/staging', adminAuth, express.static(STAGING_DIR, {
+    etag: true, lastModified: true, maxAge: 0, cacheControl: true
+}));
+
 // Serve showroom GLB files
 app.use('/showroom', express.static(SHOWROOM_DIR, {
     etag: true,
@@ -2212,10 +2217,6 @@ app.get('/api/showroom/staging', adminAuth, async (req, res) => {
     }
 });
 
-// Serve staging GLB files
-app.use('/showroom/staging', express.static(STAGING_DIR, {
-    etag: true, lastModified: true, maxAge: 0, cacheControl: true
-}));
 
 // GET /api/showroom/staging/meshes/:file - Extract mesh names from a staged GLB
 app.get('/api/showroom/staging/meshes/:file', adminAuth, async (req, res) => {
