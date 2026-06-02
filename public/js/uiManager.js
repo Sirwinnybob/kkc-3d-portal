@@ -12,13 +12,42 @@ export class UIManager {
         this.setupLightMode();
 
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isTyping) {
                     active.blur();
                     return;
                 }
                 this.closeActiveModals();
+                return;
+            }
+
+            if (isTyping) return;
+
+            const tour = document.getElementById('product-tour');
+            if (tour?.classList.contains('show')) return;
+
+            const key = e.key.toLowerCase();
+            if (key === 'm') {
+                e.preventDefault();
+                document.getElementById('menu-btn')?.click();
+            } else if (key === 't') {
+                e.preventDefault();
+                document.getElementById('texture-btn')?.click();
+            } else if (key === 'c') {
+                e.preventDefault();
+                document.getElementById('camera-btn')?.click();
+            } else if (key === 'l') {
+                e.preventDefault();
+                document.getElementById('light-mode-btn')?.click();
+            } else if (key === 's') {
+                e.preventDefault();
+                document.getElementById('share-btn')?.click();
+            } else if (key === 'h' || e.key === '?') {
+                e.preventDefault();
+                document.getElementById('help-btn')?.click();
             }
         });
     }
