@@ -13,3 +13,7 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-14 - Hamming Distance Loop Optimization
+**Learning:** Object property access and spread operators inside hot loops (like Hamming distance matching for 5000+ textures) significantly bottleneck the event loop due to allocation pressure and slow lookups.
+**Action:** Use TypedArrays (e.g., Uint8Array) for fast boolean/status flags and defer object creation (spreading) until after the loop and sorting are complete.
