@@ -12,7 +12,7 @@
     <div id="top-ui">
         <div id="menu-container">
             <div id="job-info" class="ui-panel">
-                <button id="menu-btn" title="Menu" aria-label="Menu" aria-expanded="false" class="menu-btn-style">&#9776;</button>
+                <button id="menu-btn" title="Menu (M)" aria-label="Menu (M)" aria-expanded="false" class="menu-btn-style">&#9776;</button>
                 <span>Job: <span id="job-code-display">...</span></span>
             </div>
 
@@ -47,7 +47,7 @@
         </div>
 
         <div style="display: flex; gap: 10px;">
-            <button id="light-mode-btn" class="ui-panel" title="Toggle Light Mode" aria-label="Toggle Light Mode" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
+            <button id="light-mode-btn" class="ui-panel" title="Toggle Light Mode (L)" aria-label="Toggle Light Mode (L)" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="5"></circle>
                     <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -60,7 +60,7 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <button id="share-btn" class="ui-panel" title="Share Link" aria-label="Share Link" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
+            <button id="share-btn" class="ui-panel" title="Share Link (S)" aria-label="Share Link (S)" style="width: 32px; height: 32px; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #000; border-radius: 50%; cursor: pointer;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="18" cy="5" r="3"></circle>
                     <circle cx="6" cy="12" r="3"></circle>
@@ -69,7 +69,7 @@
                     <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
                 </svg>
             </button>
-            <button id="help-btn" class="ui-panel" title="Help" aria-label="Help">?</button>
+            <button id="help-btn" class="ui-panel" title="Help (H / ?)" aria-label="Help (H / ?)">?</button>
         </div>
     </div>
 
@@ -93,6 +93,14 @@
                 <b>Change Texture:</b> Tap any surface<br>
                 <b>Paint Mode:</b> Pick "Paint Mode" — keep tapping surfaces, press <kbd>×</kbd> when done<br>
                 <br>
+                <div class="help-section-label">Shortcuts</div>
+                <b>Menu:</b> <kbd>M</kbd><br>
+                <b>Textures:</b> <kbd>T</kbd><br>
+                <b>Camera:</b> <kbd>C</kbd><br>
+                <b>Light Mode:</b> <kbd>L</kbd><br>
+                <b>Share:</b> <kbd>S</kbd><br>
+                <b>Help:</b> <kbd>H</kbd> / <kbd>?</kbd><br>
+                <br>
                 <div class="help-section-label">Buttons</div>
                 <b>☰ Menu:</b> Switch rooms, sensitivity, log out<br>
                 <b>🎨 Textures:</b> Browse the full material library<br>
@@ -110,7 +118,7 @@
         <div class="joystick-label">Zoom</div>
     </div>
 
-    <button id="camera-btn" title="Render Photo" aria-label="Take Photo">
+    <button id="camera-btn" title="Render Photo (C)" aria-label="Take Photo (C)">
         <div class="camera-inner">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-camera">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -119,7 +127,7 @@
         </div>
     </button>
 
-    <button id="texture-btn" title="Texture Catalog" aria-label="Texture Catalog">
+    <button id="texture-btn" title="Texture Catalog (T)" aria-label="Texture Catalog (T)">
         <div class="camera-inner">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
