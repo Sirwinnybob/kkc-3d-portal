@@ -19,7 +19,7 @@ const sharp = require('sharp');
 
 const app = express();
 app.disable('x-powered-by'); // Security: disable X-Powered-By header
-const APP_VERSION = "2.1.9";
+const APP_VERSION = "2.1.11";
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -46,6 +46,22 @@ const SUB_CATEGORIES = {
 // Grain directions (only slab doors have grain)
 const GRAIN_DIRS = ['horizontal', 'vertical'];
 const STAGING_DIR = path.join(SHOWROOM_DIR, 'staging');
+
+// Concurrency helper to avoid EMFILE errors during heavy I/O
+const mapLimit = async (items, limit, fn) => {
+    const results = [];
+    const executing = new Set();
+    for (const item of items) {
+        const p = (async () => await fn(item))().then(res => {
+            executing.delete(p);
+            return res;
+        });
+        results.push(p);
+        executing.add(p);
+        if (executing.size >= limit) await Promise.race(executing);
+    }
+    return Promise.all(results);
+};
 
 // Auto-parse rules for Cabinet Vision mesh naming conventions
 // Order matters: more specific patterns must come first
@@ -996,24 +1012,20 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
 
         // Find all DAE files in jobs directory
         const findDaes = async (dir) => {
-            const daes = [];
             try {
                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                for (const entry of entries) {
+                const results = await Promise.all(entries.map(async (entry) => {
                     const fullPath = path.join(dir, entry.name);
-                    if (entry.isDirectory()) {
-                        daes.push(...(await findDaes(fullPath)));
-                    } else if (entry.name.toLowerCase().endsWith('.dae')) {
-                        daes.push(fullPath);
-                    }
-                }
-            } catch { /* ignore */ }
-            return daes;
+                    if (entry.isDirectory()) return await findDaes(fullPath);
+                    return entry.name.toLowerCase().endsWith('.dae') ? fullPath : null;
+                }));
+                return results.flat().filter(r => r !== null);
+            } catch { return []; }
         };
 
         const daeFiles = await findDaes(JOBS_DIR);
 
-        for (const daePath of daeFiles) {
+        await mapLimit(daeFiles, 5, async (daePath) => {
             try {
                 let imagesDir = path.join(path.dirname(daePath), 'images');
 
@@ -1034,12 +1046,12 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
                     }
                 }
 
-                if (!hasImages) continue;
+                if (!hasImages) return;
 
                 const files = await fs.promises.readdir(imagesDir);
-                for (const file of files) {
+                await Promise.all(files.map(async (file) => {
                     // Skip Thumbs.db and system files
-                    if (file === 'Thumbs.db' || file.startsWith('.')) continue;
+                    if (file === 'Thumbs.db' || file.startsWith('.')) return;
                     const ext = path.extname(file).toLowerCase();
                     if (['.jpg', '.jpeg', '.png', '.webp', '.tga', '.bmp'].includes(ext)) {
                         const srcPath = path.join(imagesDir, file);
@@ -1047,18 +1059,18 @@ app.post('/api/textures/scan-jobs', adminAuth, async (req, res) => {
 
                         // Avoid duplicates
                         if (!existingTextures.has(file)) {
+                            existingTextures.add(file); // Mark as seen immediately to avoid race conditions
                             await fs.promises.copyFile(srcPath, destPath);
-                            existingTextures.add(file);
                             extracted++;
                             console.log(`[Texture Scan] Extracted: ${file}`);
                         }
                     }
-                }
+                }));
             } catch (e) {
                 errors.push({ file: daePath, error: e.message });
                 console.error(`[Texture Scan] Error processing ${daePath}: ${e.message}`);
             }
-        }
+        });
 
         // Invalidate hash cache since new textures may have been added
         textureHashCache = null;
@@ -1133,7 +1145,8 @@ async function extractTexturesFromGlb(glbPath) {
             const ext = image.mimeType === 'image/png' ? '.png' : '.jpg';
             const safeName = `${jobName}_texture_${Date.now()}${ext}`;
             const destPath = path.join(uncategorizedDir, safeName);
-            if (!fs.existsSync(destPath)) {
+            const exists = await fs.promises.access(destPath).then(() => true).catch(() => false);
+            if (!exists) {
                 await fs.promises.writeFile(destPath, imageData);
                 console.log(`[Texture Extract] Saved: ${safeName}`);
             }
@@ -1183,7 +1196,8 @@ async function extractTexturesFromDaeImages(daeFilePath) {
             const destPath = path.join(uncategorizedDir, file);
 
             // Avoid duplicates
-            if (fs.existsSync(destPath)) return;
+            const exists = await fs.promises.access(destPath).then(() => true).catch(() => false);
+            if (exists) return;
 
             try {
                 const buffer = await fs.promises.readFile(srcPath);
@@ -2538,19 +2552,15 @@ if (require.main === module) {
                     try {
                         const jobDir = path.join(JOBS_DIR, jobName);
                         const findDaes = async (dir) => {
-                            const daes = [];
                             try {
                                 const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-                                for (const entry of entries) {
+                                const results = await Promise.all(entries.map(async (entry) => {
                                     const fullPath = path.join(dir, entry.name);
-                                    if (entry.isDirectory()) {
-                                        daes.push(...(await findDaes(fullPath)));
-                                    } else if (entry.name.toLowerCase().endsWith('.dae')) {
-                                        daes.push(fullPath);
-                                    }
-                                }
-                            } catch { /* ignore */ }
-                            return daes;
+                                    if (entry.isDirectory()) return await findDaes(fullPath);
+                                    return entry.name.toLowerCase().endsWith('.dae') ? fullPath : null;
+                                }));
+                                return results.flat().filter(r => r !== null);
+                            } catch { return []; }
                         };
                         const daeFiles = await findDaes(jobDir);
                         for (const daePath of daeFiles) {
