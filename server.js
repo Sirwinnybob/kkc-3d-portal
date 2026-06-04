@@ -112,6 +112,8 @@ app.use(helmet({
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
+// Security: Protect admin directory statically served from public
+app.use('/admin', adminAuth);
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
 app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {
@@ -1675,6 +1677,11 @@ function ensureShowroomDirs() {
 }
 ensureShowroomDirs();
 
+// Serve staging GLB files (must come before /showroom to avoid shadowing)
+app.use('/showroom/staging', adminAuth, express.static(STAGING_DIR, {
+    etag: true, lastModified: true, maxAge: 0, cacheControl: true
+}));
+
 // Serve showroom GLB files
 app.use('/showroom', express.static(SHOWROOM_DIR, {
     etag: true,
@@ -2211,11 +2218,6 @@ app.get('/api/showroom/staging', adminAuth, async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to list staging files' });
     }
 });
-
-// Serve staging GLB files
-app.use('/showroom/staging', express.static(STAGING_DIR, {
-    etag: true, lastModified: true, maxAge: 0, cacheControl: true
-}));
 
 // GET /api/showroom/staging/meshes/:file - Extract mesh names from a staged GLB
 app.get('/api/showroom/staging/meshes/:file', adminAuth, async (req, res) => {
