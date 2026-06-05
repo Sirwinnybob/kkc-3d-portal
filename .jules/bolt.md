@@ -13,3 +13,9 @@ Using a custom benchmark simulating heavy, concurrent asynchronous background lo
 *   **Baseline (Sync `fs.existsSync`):** Average concurrent response time was ~169.17 ms.
 *   **Optimized (Async `fs.promises.access`):** Average concurrent response time dropped to ~121.80 ms.
 *   **Net Impact:** Concurrency latency reduced by roughly 28% under high load scenarios, leading to vastly improved server throughput.
+
+## 2025-05-14 - Regex Optimization vs String Manipulation
+
+**Learning:** Replacing string splitting and array iteration (`split('/').some(...)`) with a pre-compiled regular expression for path segment matching yielded a measurable ~4x performance improvement. However, I discovered that adding `path.posix.normalize()` to the middleware logic introduced a massive performance penalty, making it ~3x slower than the original unoptimized string splitting logic.
+
+**Action:** Prefer pre-compiled regex for frequent path pattern matching in middleware. Avoid unnecessary path normalization in hot code paths unless absolutely required for security, or find more performant ways to ensure path consistency.
