@@ -19,7 +19,24 @@ export class UIManager {
                     return;
                 }
                 this.closeActiveModals();
+                return;
             }
+
+            // Global shortcuts
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+            const key = e.key.toLowerCase();
+            let triggered = false;
+            if (key === 'm') { document.getElementById('menu-btn')?.click(); triggered = true; }
+            if (key === 't') { document.getElementById('texture-btn')?.click(); triggered = true; }
+            if (key === 'c') { document.getElementById('camera-btn')?.click(); triggered = true; }
+            if (key === 'l') { document.getElementById('light-mode-btn')?.click(); triggered = true; }
+            if (key === 's') { document.getElementById('share-btn')?.click(); triggered = true; }
+            if (key === 'h' || key === '?') { document.getElementById('help-btn')?.click(); triggered = true; }
+
+            if (triggered) e.preventDefault();
         });
     }
 
@@ -243,10 +260,31 @@ export class UIManager {
         if (lightModeBtn) {
             const updateLightModeUI = () => {
                 const isLightMode = localStorage.getItem("lightMode") === "true";
+                lightModeBtn.style.background = isLightMode ? '#e0e0e0' : '#fff';
+                lightModeBtn.title = isLightMode ? 'Switch to Dark Mode (L)' : 'Switch to Light Mode (L)';
+                lightModeBtn.setAttribute('aria-label', lightModeBtn.title);
+
+                // Swap SVG icon: Sun (Dark Mode active) vs Moon (Light Mode active)
                 if (isLightMode) {
-                    lightModeBtn.style.background = '#e0e0e0';
+                    lightModeBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    `;
                 } else {
-                    lightModeBtn.style.background = '#fff';
+                    lightModeBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                    `;
                 }
             };
 
