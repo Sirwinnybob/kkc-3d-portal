@@ -787,16 +787,19 @@ async function buildTextureHashIndex() {
             }
             const flatLow = new Uint32Array(flatLibrary.length);
             const flatHigh = new Uint32Array(flatLibrary.length);
+            const flatHidden = new Uint8Array(flatLibrary.length);
             for (let i = 0; i < flatLibrary.length; i++) {
                 flatLow[i] = flatLibrary[i].hLow;
                 flatHigh[i] = flatLibrary[i].hHigh;
+                flatHidden[i] = flatLibrary[i].hidden ? 1 : 0;
             }
 
             // Attach flattened index as non-enumerable properties to the main index
             Object.defineProperties(index, {
                 '_flatLibrary': { value: flatLibrary, enumerable: false },
                 '_flatLow': { value: flatLow, enumerable: false },
-                '_flatHigh': { value: flatHigh, enumerable: false }
+                '_flatHigh': { value: flatHigh, enumerable: false },
+                '_flatHidden': { value: flatHidden, enumerable: false }
             });
 
             textureHashCache = index;
@@ -906,7 +909,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
         const index = await buildTextureHashIndex();
 
         // Find best match using the optimized flat index
-        const { _flatLibrary, _flatLow, _flatHigh } = index;
+        const { _flatLibrary, _flatLow, _flatHigh, _flatHidden } = index;
         let bestMatchIdx = -1;
         let bestDistance = Infinity;
         const allMatches = [];
@@ -921,15 +924,16 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
             }
 
             // Track similar non-hidden matches for the catalog view
-            if (distance <= 20 && !_flatLibrary[i].hidden) {
-                allMatches.push({ ..._flatLibrary[i], distance });
+            if (distance <= 20 && _flatHidden[i] === 0) {
+                allMatches.push({ i, distance });
             }
         }
 
         const bestMatch = bestMatchIdx >= 0 ? _flatLibrary[bestMatchIdx] : null;
 
-        // Sort matches by distance
+        // Sort matches by distance and hydration
         allMatches.sort((a, b) => a.distance - b.distance);
+        const topMatches = allMatches.slice(0, 12).map(m => ({ ..._flatLibrary[m.i], distance: m.distance }));
 
         // If no good match found, copy to Uncategorized
         const MATCH_THRESHOLD = 15; // Stricter threshold to avoid false matches
@@ -963,7 +967,7 @@ app.post('/api/textures/match', express.json({ limit: '10mb' }), async (req, res
             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
             isHidden: isMatched && bestMatch && bestMatch.hidden,
             distance: bestDistance,
-            similarTextures: allMatches.slice(0, 12).map(t => ({
+            similarTextures: topMatches.map(t => ({
                 name: t.name,
                 url: t.url,
                 urlMedium: t.urlMedium,
@@ -1242,7 +1246,7 @@ async function generateTextureManifest(glbPath) {
         const imageMatchCache = new Map();
 
         // Use the optimized flattened index cached in libraryIndex
-        const { _flatLibrary: flatLibrary, _flatLow: flatLow, _flatHigh: flatHigh } = libraryIndex;
+        const { _flatLibrary: flatLibrary, _flatLow: flatLow, _flatHigh: flatHigh, _flatHidden: flatHidden } = libraryIndex;
 
         const getImageData = (imageIdx) => {
             const image = gltf.images[imageIdx];
@@ -1290,8 +1294,8 @@ async function generateTextureManifest(glbPath) {
                                 bestDistance = distance;
                                 bestMatchIdx = i;
                             }
-                            if (distance <= 20 && !flatLibrary[i].hidden) {
-                                allMatches.push({ ...flatLibrary[i], distance });
+                            if (distance <= 20 && flatHidden[i] === 0) {
+                                allMatches.push({ i, distance });
                             }
                         }
 
@@ -1314,16 +1318,19 @@ async function generateTextureManifest(glbPath) {
                             bestCategory: (isMatched && bestMatch) ? bestMatch.category : null,
                             isHidden: isMatched && bestMatch && !!bestMatch.hidden,
                             distance: bestDistance,
-                            similarTextures: allMatches.slice(0, 12).map(t => ({
-                                name: t.name,
-                                url: t.url,
-                                urlMedium: t.urlMedium,
-                                urlLow: t.urlLow,
-                                category: t.category,
-                                width: t.width,
-                                height: t.height,
-                                distance: t.distance
-                            }))
+                            similarTextures: allMatches.slice(0, 12).map(m => {
+                                const t = flatLibrary[m.i];
+                                return {
+                                    name: t.name,
+                                    url: t.url,
+                                    urlMedium: t.urlMedium,
+                                    urlLow: t.urlLow,
+                                    category: t.category,
+                                    width: t.width,
+                                    height: t.height,
+                                    distance: m.distance
+                                };
+                            })
                         };
                     })());
                 }
