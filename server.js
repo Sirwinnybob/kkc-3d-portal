@@ -112,6 +112,9 @@ app.use(helmet({
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
+// Protect static admin files before public static middleware
+app.use('/admin', adminAuth);
+
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true, lastModified: true }));
 app.use('/jobs', jobsAuth, express.static(JOBS_DIR));
 app.use('/textures', texturesAuth, express.static(TEXTURES_DIR, {
@@ -1675,6 +1678,9 @@ function ensureShowroomDirs() {
 }
 ensureShowroomDirs();
 
+// Ensure /showroom/staging is protected from catch-all /showroom
+app.use('/showroom/staging', adminAuth);
+
 // Serve showroom GLB files
 app.use('/showroom', express.static(SHOWROOM_DIR, {
     etag: true,
@@ -2213,7 +2219,7 @@ app.get('/api/showroom/staging', adminAuth, async (req, res) => {
 });
 
 // Serve staging GLB files
-app.use('/showroom/staging', express.static(STAGING_DIR, {
+app.use('/showroom/staging', adminAuth, express.static(STAGING_DIR, {
     etag: true, lastModified: true, maxAge: 0, cacheControl: true
 }));
 
