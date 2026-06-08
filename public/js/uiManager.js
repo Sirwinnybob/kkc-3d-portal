@@ -10,16 +10,60 @@ export class UIManager {
         this.setupHelp();
         this.setupTour();
         this.setupLightMode();
+        this.setupShortcuts();
+    }
 
+    setupShortcuts() {
         window.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
+
             if (e.key === 'Escape') {
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                if (isInput) {
                     active.blur();
-                    return;
+                } else {
+                    this.closeActiveModals();
                 }
-                this.closeActiveModals();
+                return;
             }
+
+            if (isInput || e.ctrlKey || e.metaKey || e.altKey) return;
+
+            const key = e.key.toLowerCase();
+            let triggered = false;
+
+            switch (key) {
+                case 'm':
+                    document.getElementById('menu-btn')?.click();
+                    triggered = true;
+                    break;
+                case 't':
+                    document.getElementById('texture-btn')?.click();
+                    triggered = true;
+                    break;
+                case 'c':
+                    document.getElementById('camera-btn')?.click();
+                    triggered = true;
+                    break;
+                case 'l':
+                    document.getElementById('light-mode-btn')?.click();
+                    triggered = true;
+                    break;
+                case 's':
+                    const shareBtn = document.getElementById('share-btn');
+                    if (shareBtn && window.getComputedStyle(shareBtn).display !== 'none') {
+                        shareBtn.click();
+                        triggered = true;
+                    }
+                    break;
+                case 'h':
+                case '?':
+                    document.getElementById('help-btn')?.click();
+                    triggered = true;
+                    break;
+            }
+
+            if (triggered) e.preventDefault();
         });
     }
 
