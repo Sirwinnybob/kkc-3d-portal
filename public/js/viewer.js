@@ -716,8 +716,8 @@ async function init() {
 
             joystickHandle.addEventListener('keydown', (e) => {
                 let v = 0;
-                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') v = 0.5;
-                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') v = -0.5;
+                if (e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === '+' || e.key === '=') v = 0.5;
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === '-' || e.key === '_') v = -0.5;
                 else if (e.key === 'PageUp') v = 1.0;
                 else if (e.key === 'PageDown') v = -1.0;
 

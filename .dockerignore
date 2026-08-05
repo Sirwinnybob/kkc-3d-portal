@@ -1,1 +1,52 @@
+# Dependencies (installed inside the image)
+node_modules/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Dev / test / CI
+e2e_tests/
+test/
 Test Library/
+.github/
+playwright.config.js
+.jules/
+.ai-codex/
+.claude/
+
+# Build artifacts and logs
+*.log
+*.err.log
+*.out.log
+npm-debug.log*
+
+# Screenshots
+screenshot_*.png
+
+# Docs and config not needed at runtime
+*.md
+!.dockerignore
+.nvmrc
+.npmignore
+docker-compose.yml
+docker logs.txt
+inspect.json
+staging_ls.txt
+logs.txt
+
+# Unused source / tools
+Showroom/
+setup_share.py
+test_*.js
+test_*.mjs
+test_*.sh
+update_picker_css.sh
+perf_benchmark.js
+pnpm-lock.yaml
+*.tar.gz
+
+# OS junk
+.DS_Store
+Thumbs.db

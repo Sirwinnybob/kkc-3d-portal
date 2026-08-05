@@ -135,7 +135,11 @@ body {
     font-weight: bold;
     padding-top: 10px;
     border-top: 1px solid #eee;
+    transition: opacity 0.2s;
 }
+
+.logout-btn:hover { text-decoration: underline; opacity: 0.7; }
+.logout-btn:active { opacity: 0.9; }
 
 .menu-btn-style { border:none; margin-right:5px; background:none; font-size:18px; }
 .room-info-style { font-size: 0.8em; margin-bottom: 10px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px; }
@@ -159,10 +163,19 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.1s;
+    transition: transform 0.1s, background 0.2s, border-color 0.2s;
 }
 
-#help-btn:active {
+#help-btn:hover,
+#light-mode-btn:hover,
+#share-btn:hover {
+    background: #f5f5f5;
+    border-color: #3b82f6;
+}
+
+#help-btn:active,
+#light-mode-btn:active,
+#share-btn:active {
     transform: scale(0.92);
 }
 
@@ -212,7 +225,8 @@ body {
     margin: 6px 0 3px;
 }
 
-.close-help { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; background: none; border: none; padding: 0; }
+.close-help { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; background: none; border: none; padding: 0; transition: color 0.2s; }
+.close-help:hover { color: #3b82f6; }
 
 #status {
     position: fixed;
@@ -517,7 +531,7 @@ body {
 
 .material-status {
     font-size: 0.75em;
-    color: #999;
+    color: #666;
 }
 
 .material-badge {

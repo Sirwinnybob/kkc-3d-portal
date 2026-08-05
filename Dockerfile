@@ -1,5 +1,6 @@
-# Use Node.js 22 as base for npm 11 compatibility (requires >=22.9.0 || ^20.17.0)
-FROM node:22
+# Use Node.js 22-slim for a much smaller base image
+# (slim omits the full C/C++ build toolchain, git, etc. — we don't need them at runtime)
+FROM node:22-slim
 
 # Install Assimp and its dependencies
 RUN apt-get update && apt-get install -y \
@@ -10,11 +11,11 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /app
 
-# Copy package files and install
+# Copy package files and install dependencies
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Copy app source
+# Copy app source (respects .dockerignore)
 COPY . .
 
 # Create persistent storage directories

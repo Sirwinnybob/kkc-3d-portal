@@ -10,60 +10,60 @@ export class UIManager {
         this.setupHelp();
         this.setupTour();
         this.setupLightMode();
-        this.setupShortcuts();
-    }
 
-    setupShortcuts() {
         window.addEventListener('keydown', (e) => {
             const active = document.activeElement;
-            const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
+            const isInput = !!(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable));
 
             if (e.key === 'Escape') {
                 if (isInput) {
                     active.blur();
-                } else {
-                    this.closeActiveModals();
+                    return;
+                }
+                this.closeActiveModals();
+                return;
+            }
+
+            if (isInput || e.ctrlKey || e.altKey || e.metaKey) return;
+
+            const shortcuts = {
+                m: 'menu-btn',
+                t: 'texture-btn',
+                c: 'camera-btn',
+                l: 'light-mode-btn',
+                s: 'share-btn',
+                h: 'help-btn',
+                '?': 'help-btn'
+            };
+            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            if (shortcuts[key]) {
+                const btn = document.getElementById(shortcuts[key]);
+                if (btn) {
+                    e.preventDefault();
+                    btn.click();
                 }
                 return;
             }
 
-            if (isInput || e.ctrlKey || e.metaKey || e.altKey) return;
-
-            const key = e.key.toLowerCase();
-            let triggered = false;
-
-            switch (key) {
-                case 'm':
-                    document.getElementById('menu-btn')?.click();
-                    triggered = true;
-                    break;
-                case 't':
-                    document.getElementById('texture-btn')?.click();
-                    triggered = true;
-                    break;
-                case 'c':
-                    document.getElementById('camera-btn')?.click();
-                    triggered = true;
-                    break;
-                case 'l':
-                    document.getElementById('light-mode-btn')?.click();
-                    triggered = true;
-                    break;
-                case 's':
-                    const shareBtn = document.getElementById('share-btn');
-                    if (shareBtn && window.getComputedStyle(shareBtn).display !== 'none') {
-                        shareBtn.click();
-                        triggered = true;
-                    }
-                    break;
-                case 'h':
-                case '?':
-                    document.getElementById('help-btn')?.click();
-                    triggered = true;
-                    break;
+            // Forward zoom keys to the joystick handle so the existing zoom logic + visual
+            // joystick stay in sync (instead of duplicating that state in a global handler).
+            const zoomKeys = ['+', '=', '-', '_', 'PageUp', 'PageDown'];
+            if (zoomKeys.includes(e.key)) {
+                const joystick = document.getElementById('joystick-handle');
+                if (joystick && document.activeElement !== joystick) {
+                    joystick.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, bubbles: false }));
+                }
             }
+        });
 
-            if (triggered) e.preventDefault();
+        window.addEventListener('keyup', (e) => {
+            const zoomKeys = ['+', '=', '-', '_', 'PageUp', 'PageDown'];
+            if (zoomKeys.includes(e.key)) {
+                const joystick = document.getElementById('joystick-handle');
+                if (joystick && document.activeElement !== joystick) {
+                    joystick.dispatchEvent(new KeyboardEvent('keyup', { key: e.key, bubbles: false }));
+                }
+            }
         });
     }
 
@@ -285,13 +285,14 @@ export class UIManager {
     setupLightMode() {
         const lightModeBtn = document.getElementById('light-mode-btn');
         if (lightModeBtn) {
+            const sunSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
+            const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
+
             const updateLightModeUI = () => {
                 const isLightMode = localStorage.getItem("lightMode") === "true";
-                if (isLightMode) {
-                    lightModeBtn.style.background = '#e0e0e0';
-                } else {
-                    lightModeBtn.style.background = '#fff';
-                }
+                lightModeBtn.style.background = isLightMode ? '#e0e0e0' : '#fff';
+                // Show moon when light mode is active (click to go dark), sun when dark mode is active.
+                lightModeBtn.innerHTML = isLightMode ? moonSvg : sunSvg;
             };
 
             lightModeBtn.addEventListener('click', () => {

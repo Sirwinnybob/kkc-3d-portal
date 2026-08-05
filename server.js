@@ -20,6 +20,7 @@ const sharp = require('sharp');
 const app = express();
 app.disable('x-powered-by'); // Security: disable X-Powered-By header
 const APP_VERSION = "2.1.9";
+const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-. ]+$/;
 
 // --- CONFIG ---
 const PORT = parseInt(process.env.PORT) || 5021;
@@ -828,17 +829,21 @@ app.get('/api/textures', async (req, res) => {
 
 // GET /api/textures/:category - List textures in a category
 app.get('/api/textures/:category', async (req, res) => {
-    const category = req.params.category;
+    let category = req.params.category;
     if (typeof category !== 'string' || category.length > 100) {
         return res.status(400).json({ success: false, error: 'Invalid category' });
     }
+
+    // Sanitize before authorization check so traversal patterns like `..%2FHidden`
+    // can't bypass the equality check by being normalized only at path-construction time.
+    category = path.basename(category);
 
     const lowerCat = category.toLowerCase();
     if (lowerCat === 'hidden' || lowerCat === 'uncategorized') {
         return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
-    const categoryPath = path.join(TEXTURES_DIR, path.basename(category));
+    const categoryPath = path.join(TEXTURES_DIR, category);
     const rel = path.relative(TEXTURES_DIR, categoryPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
@@ -1519,6 +1524,13 @@ async function processQueue() {
     const inputFilename = path.basename(filePath);
     const outputGlb = `${roomName.replace(/ /g, '_')}.glb`;
     const finalGlb = path.join(dir, `${roomName}.glb`);
+
+    if (!SAFE_FILENAME_REGEX.test(inputFilename) || !SAFE_FILENAME_REGEX.test(outputGlb)) {
+        console.error(`[Security] Invalid filename in processQueue: input=${inputFilename}, output=${outputGlb}`);
+        isConverting = false;
+        setImmediate(processQueue);
+        return;
+    }
 
     // Extract textures from DAE images folder before GLB conversion
     await extractTexturesFromDaeImages(filePath);
@@ -2446,6 +2458,11 @@ if (require.main === module) {
             const baseName = path.basename(fp, path.extname(fp));
             const outputGlb = `${baseName.replace(/ /g, '_')}.glb`;
             const finalGlb = path.join(dir, `${baseName}.glb`);
+
+            if (!SAFE_FILENAME_REGEX.test(inputFilename) || !SAFE_FILENAME_REGEX.test(outputGlb)) {
+                console.error(`[Security] Invalid filename in staging watcher: input=${inputFilename}, output=${outputGlb}`);
+                return;
+            }
 
             // Skip if GLB already exists and is newer
             try {
