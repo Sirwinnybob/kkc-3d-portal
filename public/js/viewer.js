@@ -1,7 +1,7 @@
 import { UIManager } from './uiManager.js';
 import { MaterialManager } from './materialManager.js';
 import { ShowroomManager } from './showroomManager.js';
-import { CoreEngine } from './engine.js';
+import { CoreEngine } from './engine.js?v=2.3.1';
 import { loadModel } from './modelLoader.js';
 import { MeshEdges } from './meshEdges.js';
 import { escapeHtml } from './utils.js';
@@ -581,6 +581,16 @@ async function init() {
                 try {
                     localStorage.setItem('kkc_antialiasing_quality', engine.antialiasingQuality);
                 } catch (e) { /* Quality changes still work without persistent storage. */ }
+            });
+        }
+
+        const quickPickerSearch = document.getElementById('qp-search-input');
+        if (quickPickerSearch) {
+            quickPickerSearch.addEventListener('focus', () => {
+                quickPickerSearch.style.width = '160px';
+            });
+            quickPickerSearch.addEventListener('blur', () => {
+                quickPickerSearch.style.width = '100px';
             });
         }
 
