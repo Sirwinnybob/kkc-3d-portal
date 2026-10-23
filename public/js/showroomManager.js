@@ -337,11 +337,11 @@ export class ShowroomManager {
 
             // Collect meshes for array filtering
             const oldMeshes = new Set();
-            oldPart.traverse(c => { if (c.isMesh) oldMeshes.add(c); });
+            oldPart.traverse(c => { if (c.isMesh && !c.isLineSegments2) oldMeshes.add(c); });
 
             // Memory cleanup logic for WebGL
             oldPart.traverse((child) => {
-                if (child.isMesh) {
+                if (child.isMesh && !child.isLineSegments2) {
                     if (child.geometry) child.geometry.dispose();
                     if (child.material) {
                         const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -381,7 +381,7 @@ export class ShowroomManager {
                 let meshIdx = 0;
 
                 group.traverse((child) => {
-                    if (!child.isMesh) return;
+                    if (!child.isMesh || child.isLineSegments2) return;
                     let originalIndex = meshIdx;
                     if (gltf.parser?.associations) {
                         const assoc = gltf.parser.associations.get(child);
@@ -452,7 +452,7 @@ export class ShowroomManager {
         if (!basePart?.tagData?.paneledEndReplacements) return;
         const replaceableNames = new Set(basePart.tagData.paneledEndReplacements);
         basePart.group.traverse(child => {
-            if (child.isMesh && replaceableNames.has(child.name)) {
+            if (child.isMesh && !child.isLineSegments2 && replaceableNames.has(child.name)) {
                 child.visible = false;
                 child.userData._hiddenByPaneledEnd = true;
             }
@@ -463,7 +463,7 @@ export class ShowroomManager {
         const basePart = this.showroomParts[`${ctx}/base`];
         if (!basePart) return;
         basePart.group.traverse(child => {
-            if (child.isMesh && child.userData._hiddenByPaneledEnd) {
+            if (child.isMesh && !child.isLineSegments2 && child.userData._hiddenByPaneledEnd) {
                 child.visible = true;
                 delete child.userData._hiddenByPaneledEnd;
             }

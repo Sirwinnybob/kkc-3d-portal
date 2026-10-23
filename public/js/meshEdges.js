@@ -1,12 +1,21 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+function updateLineResolution(renderer) {
+    // Use logical pixels so thickness stays consistent on high-DPI displays and exports.
+    renderer.getSize(this.material.resolution);
+}
 
 export class MeshEdges {
     constructor(scene) {
         this.scene = scene;
         this.enabled = true;
         this.lines = new Map();
-        this.material = new THREE.LineBasicMaterial({
+        this.material = new LineMaterial({
             color: 0x333333,
+            linewidth: 1.5,
             transparent: true,
             opacity: 0.45,
             depthTest: true,
@@ -25,13 +34,16 @@ export class MeshEdges {
         // Collect first: attaching helpers during traversal changes the graph.
         const meshes = [];
         root.traverse(obj => {
-            if (obj.isMesh && obj.geometry?.attributes.position && !this.lines.has(obj)) meshes.push(obj);
+            if (obj.isMesh && !obj.isLineSegments2 && obj.geometry?.attributes.position && !this.lines.has(obj)) meshes.push(obj);
         });
         meshes.forEach(mesh => {
             // Ignore coplanar triangle seams and small changes along curved surfaces.
-            const geometry = new THREE.EdgesGeometry(mesh.geometry, 30);
-            const line = new THREE.LineSegments(geometry, this.material);
+            const edges = new THREE.EdgesGeometry(mesh.geometry, 30);
+            const geometry = new LineSegmentsGeometry().fromEdgesGeometry(edges);
+            edges.dispose();
+            const line = new LineSegments2(geometry, this.material);
             line.name = 'mesh-edges';
+            line.onBeforeRender = updateLineResolution;
             // Surface taps and double-tap pivoting must still hit the mesh.
             line.raycast = () => {};
             mesh.add(line);
@@ -41,7 +53,7 @@ export class MeshEdges {
 
     remove(root) {
         const meshes = [];
-        root.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
+        root.traverse(obj => { if (obj.isMesh && !obj.isLineSegments2) meshes.push(obj); });
         this.removeMeshes(meshes);
     }
 

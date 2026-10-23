@@ -362,7 +362,7 @@ function disposeModel(model) {
     if (!model) return;
     if (meshEdges) meshEdges.remove(model);
     model.traverse(obj => {
-        if (!obj.isMesh) return;
+        if (!obj.isMesh || obj.isLineSegments2) return;
         if (obj.geometry) obj.geometry.dispose();
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(mat => {
@@ -565,6 +565,22 @@ async function init() {
                 try {
                     localStorage.setItem('kkc_mesh_edges', String(meshEdgesToggle.checked));
                 } catch (e) { /* The toggle still works without persistent storage. */ }
+            });
+        }
+
+        const antialiasingSelect = document.getElementById('antialiasing-quality');
+        let antialiasingQuality = 'high';
+        try {
+            antialiasingQuality = localStorage.getItem('kkc_antialiasing_quality') || 'high';
+        } catch (e) { /* Use the default when browser storage is unavailable. */ }
+        engine.setAntialiasingQuality(antialiasingQuality);
+        if (antialiasingSelect) {
+            antialiasingSelect.value = engine.antialiasingQuality;
+            antialiasingSelect.addEventListener('change', () => {
+                engine.setAntialiasingQuality(antialiasingSelect.value);
+                try {
+                    localStorage.setItem('kkc_antialiasing_quality', engine.antialiasingQuality);
+                } catch (e) { /* Quality changes still work without persistent storage. */ }
             });
         }
 
@@ -779,7 +795,7 @@ async function init() {
                             const materialMap = new Map();
                             // Re-run the material grouping logic from GLTFLoader on the new meshes
                             newGroup.traverse((child) => {
-                                if (!child.isMesh) return;
+                                if (!child.isMesh || child.isLineSegments2) return;
                                 const mats = Array.isArray(child.material) ? child.material : [child.material];
                                 mats.forEach(mat => {
                                     if (mat.map) {

@@ -18,6 +18,7 @@ export class CoreEngine {
             lightIntensity: 1.0,
             gloss: 0.10,
             colorTemp: 0.5,
+            antialiasingQuality: 'high',
             onBeforeRender: null
         }, config);
 
@@ -54,6 +55,7 @@ export class CoreEngine {
 
         this._setupLighting();
         this._setupPostProcessing(dpr);
+        this.setAntialiasingQuality(this.config.antialiasingQuality);
 
         window.addEventListener('resize', this._onWindowResize.bind(this));
     }
@@ -143,10 +145,25 @@ export class CoreEngine {
         this.fxaaPass = new ShaderPass(FXAAShader);
         this.fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * dpr);
         this.fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * dpr);
-        this.composer.addPass(this.fxaaPass);
-
         const outputPass = new OutputPass();
         this.composer.addPass(outputPass);
+        // FXAA detects contrast in the display colors produced by OutputPass.
+        this.composer.addPass(this.fxaaPass);
+    }
+
+    setAntialiasingQuality(quality) {
+        const samplesByQuality = { off: 0, low: 0, medium: 2, high: 4 };
+        if (!Object.prototype.hasOwnProperty.call(samplesByQuality, quality)) quality = 'high';
+        this.antialiasingQuality = quality;
+        const maxSamples = this.renderer.capabilities.isWebGL2 ? this.renderer.capabilities.maxSamples : 0;
+        const samples = Math.min(samplesByQuality[quality], maxSamples);
+        // The scene is rendered offscreen, so canvas antialiasing alone cannot smooth it.
+        for (const target of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+            if (target.samples === samples) continue;
+            target.samples = samples;
+            target.dispose();
+        }
+        this.fxaaPass.enabled = quality !== 'off';
     }
 
     _onWindowResize() {
@@ -158,6 +175,7 @@ export class CoreEngine {
         this.camera.updateProjectionMatrix();
 
         this.renderer.setSize(width, height);
+        this.composer.setPixelRatio(dpr);
         this.composer.setSize(width, height);
 
         if (this.fxaaPass) {
@@ -169,6 +187,7 @@ export class CoreEngine {
     setResolution(width, height, dpr) {
         this.renderer.setPixelRatio(dpr || 1);
         this.renderer.setSize(width, height, false);
+        this.composer.setPixelRatio(this.renderer.getPixelRatio());
         this.composer.setSize(width, height);
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();

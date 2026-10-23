@@ -33,12 +33,12 @@ async function meshState(page) {
     return page.evaluate(() => {
         const meshes = [];
         window.getScene()?.traverse(obj => {
-            if (!obj.isMesh) return;
+            if (!obj.isMesh || obj.isLineSegments2) return;
             const edges = obj.children.filter(child => child.name === 'mesh-edges');
             meshes.push({
                 count: edges.length,
                 visible: edges[0]?.visible,
-                segments: edges[0]?.geometry.attributes.position.count / 2
+                segments: edges[0]?.isLineSegments2 ? edges[0].geometry.attributes.instanceStart.count : edges[0]?.geometry.attributes.position.count / 2
             });
         });
         return meshes;
@@ -126,4 +126,67 @@ test('edges follow transforms, do not intercept picks, and release removed mesh 
     });
     expect(result).toEqual({ followsTransform: true, onlyMeshPicks: true, depthTest: true, depthWrite: false,
         disposed: true, removed: true, recreated: true });
+});
+
+test('outlines use slightly thicker screen-space lines and stay out of mesh collections', async ({ page }) => {
+    const outlines = await page.evaluate(() => {
+        const result = [];
+        window.getScene().traverse(obj => {
+            if (obj.name === 'mesh-edges') result.push({ wide: obj.isLineSegments2 === true, width: obj.material.linewidth });
+        });
+        return result;
+    });
+    expect(outlines).toEqual([{ wide: true, width: 1.5 }, { wide: true, width: 1.5 }]);
+});
+
+test('anti-aliasing quality is selectable and remembered', async ({ page }) => {
+    await page.locator('#menu-btn').click();
+    const quality = page.getByLabel('Anti-aliasing Quality');
+    await expect(quality).toHaveValue('high');
+    for (const value of ['off', 'low', 'medium', 'high', 'medium']) {
+        await quality.selectOption(value);
+        await expect(quality).toHaveValue(value);
+        expect(await page.evaluate(() => localStorage.getItem('kkc_antialiasing_quality'))).toBe(value);
+    }
+    await page.reload();
+    await expect.poll(async () => (await meshState(page)).length).toBe(2);
+    await page.locator('#menu-btn').click();
+    await expect(quality).toHaveValue('medium');
+});
+
+test('anti-aliasing updates render targets and stays in sync with photo resolution and resizing', async ({ page }) => {
+    const state = await page.evaluate(async () => {
+        const { CoreEngine } = await import('/js/engine.js');
+        const engine = new CoreEngine({ containerId: 'test-only-container' });
+        const maxSamples = engine.renderer.capabilities.maxSamples || 0;
+        const levels = {};
+        for (const quality of ['off', 'low', 'medium', 'high']) {
+            engine.setAntialiasingQuality(quality);
+            engine.composer.render();
+            levels[quality] = { samples: engine.composer.renderTarget1.samples, fxaa: engine.fxaaPass.enabled };
+        }
+        engine.setAntialiasingQuality('invalid');
+        const fallback = engine.antialiasingQuality;
+        engine.setResolution(320, 240, 2);
+        const desktop = { width: engine.composer.renderTarget1.width, height: engine.composer.renderTarget1.height };
+        engine.setResolution(960, 720, 1);
+        const photo = { width: engine.composer.renderTarget1.width, height: engine.composer.renderTarget1.height,
+            fxaaX: engine.fxaaPass.material.uniforms.resolution.value.x };
+        engine.setResolution(320, 240, 2);
+        engine._onWindowResize();
+        const restored = engine.composer.renderTarget1.width === window.innerWidth * 2;
+        engine.controls.dispose();
+        engine.composer.dispose();
+        engine.renderer.dispose();
+        return { levels, maxSamples, fallback, desktop, photo, restored };
+    });
+    expect(state.levels).toEqual({
+        off: { samples: 0, fxaa: false }, low: { samples: 0, fxaa: true },
+        medium: { samples: Math.min(2, state.maxSamples), fxaa: true },
+        high: { samples: Math.min(4, state.maxSamples), fxaa: true }
+    });
+    expect(state.fallback).toBe('high');
+    expect(state.desktop).toEqual({ width: 640, height: 480 });
+    expect(state.photo).toEqual({ width: 960, height: 720, fxaaX: 1 / 960 });
+    expect(state.restored).toBe(true);
 });
