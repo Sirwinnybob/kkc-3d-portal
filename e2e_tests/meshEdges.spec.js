@@ -65,7 +65,7 @@ test.beforeEach(async ({ page }) => {
 
 test('white meshes have edges by default; keyboard toggle persists across reloads', async ({ page }) => {
     await page.locator('#menu-btn').click();
-    const toggle = page.getByRole('checkbox', { name: 'Show mesh edges' });
+    const toggle = page.getByRole('checkbox', { name: 'Show Outlines' });
     await expect(toggle).toBeChecked();
     expect(await meshState(page)).toEqual([
         { count: 1, visible: true, segments: 12 },
@@ -90,7 +90,7 @@ test('quality replacement keeps edges enabled without duplicates', async ({ page
     await page.locator('#lod-quality-medium').click();
     await expect.poll(() => page.evaluate(() => window.activeModelQuality)).toBe('medium');
     expect((await meshState(page)).every(mesh => mesh.count === 1 && mesh.visible)).toBe(true);
-    const toggle = page.getByRole('checkbox', { name: 'Show mesh edges' });
+    const toggle = page.getByRole('checkbox', { name: 'Show Outlines' });
     await toggle.uncheck();
     await toggle.check();
     expect((await meshState(page)).every(mesh => mesh.count === 1 && mesh.visible)).toBe(true);
