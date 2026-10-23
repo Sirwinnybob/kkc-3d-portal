@@ -195,7 +195,10 @@ app.get('/api/job/:code', async (req, res) => {
         await Promise.all(promises);
     };
     await findGlbs(jobPath);
-    res.json({ success: true, rooms: [...new Set(rooms)] });
+    const sortedRooms = [...new Set(rooms)].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+    res.json({ success: true, rooms: sortedRooms });
 });
 
 app.get('/api/job/:code/:room', async (req, res) => {

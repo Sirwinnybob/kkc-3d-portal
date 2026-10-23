@@ -871,7 +871,7 @@ async function init() {
             const listUi   = document.getElementById('room-list-ui');
             if (switcher && listUi) {
                 switcher.style.display = 'block';
-                data.rooms.forEach(r => {
+                [...data.rooms].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })).forEach(r => {
                     const btn = document.createElement('button');
                     btn.innerText = r;
                     btn.className = 'room-switcher-btn';

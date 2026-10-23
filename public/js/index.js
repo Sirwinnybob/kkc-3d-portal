@@ -83,7 +83,7 @@ function showRoomSelection(rooms) {
     const roomList = document.getElementById('room-list');
     roomList.innerHTML = '';
 
-    rooms.forEach((room, index) => {
+    [...rooms].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })).forEach((room, index) => {
         const btn = document.createElement('button');
         btn.textContent = room;
         btn.className = 'room-btn';
