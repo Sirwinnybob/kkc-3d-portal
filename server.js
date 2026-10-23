@@ -19,7 +19,7 @@ const sharp = require('sharp');
 
 const app = express();
 app.disable('x-powered-by'); // Security: disable X-Powered-By header
-const APP_VERSION = "2.1.10";
+const APP_VERSION = "2.2.0";
 const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-. ]+$/;
 
 // --- CONFIG ---

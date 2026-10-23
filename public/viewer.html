@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KKC 3D Portal</title>
     <link rel="icon" type="image/jpeg" href="/images/kkc_logo.jpg">
-<link rel="stylesheet" href="/css/viewer.css?v=1881">
+<link rel="stylesheet" href="/css/viewer.css?v=2.2.0">
 </head>
 <body>
     <a href="#canvas-container" class="skip-link">Skip to 3D Viewer</a>
@@ -41,6 +41,11 @@
                         <button type="button" id="lod-quality-low" class="lod-quality-btn" aria-label="Low texture quality">Low</button>
                     </div>
                 </div>
+
+                <label class="mesh-edges-option" for="mesh-edges-toggle">
+                    <input type="checkbox" id="mesh-edges-toggle" checked>
+                    Show mesh edges
+                </label>
 
 <a href="/" class="logout-btn">Log Out / Change Job</a>
             </div>
@@ -94,7 +99,7 @@
                 <b>Paint Mode:</b> Pick "Paint Mode" — keep tapping surfaces, press <kbd>×</kbd> when done<br>
                 <br>
                 <div class="help-section-label">Buttons</div>
-                <b>☰ Menu:</b> <kbd>M</kbd> — Switch rooms, sensitivity, log out<br>
+                <b>☰ Menu:</b> <kbd>M</kbd> — Switch rooms, sensitivity, mesh edges, log out<br>
                 <b>🎨 Textures:</b> <kbd>T</kbd> — Browse the full material library<br>
                 <b>📷 Camera:</b> <kbd>C</kbd> — Save a hi-res photo with texture notes<br>
                 <b>☀ Light Mode:</b> <kbd>L</kbd> — Toggle bright/dark<br>
@@ -424,6 +429,6 @@
     }
     </script>
 <div id="camera-flash" aria-hidden="true"></div>
-    <script type="module" src="/js/viewer.js?v=1883"></script>
+    <script type="module" src="/js/viewer.js?v=2.2.0"></script>
 </body>
 </html>

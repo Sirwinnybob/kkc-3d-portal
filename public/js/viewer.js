@@ -3,6 +3,7 @@ import { MaterialManager } from './materialManager.js';
 import { ShowroomManager } from './showroomManager.js';
 import { CoreEngine } from './engine.js';
 import { loadModel } from './modelLoader.js';
+import { MeshEdges } from './meshEdges.js';
 import { escapeHtml } from './utils.js';
 // Resolved via importmap in viewer.html
 import * as THREE from 'three';
@@ -25,6 +26,7 @@ let activeModelQuality = null;
 let activeModelUrl = null;
 let switchModelQuality = null;
 let modelQualityLoadToken = 0;
+let meshEdges = null;
 
 // Surface Highlight state
 // Texture cache
@@ -358,6 +360,7 @@ async function applyMaterialStateSnapshot(snapshot) {
 
 function disposeModel(model) {
     if (!model) return;
+    if (meshEdges) meshEdges.remove(model);
     model.traverse(obj => {
         if (!obj.isMesh) return;
         if (obj.geometry) obj.geometry.dispose();
@@ -546,6 +549,24 @@ async function init() {
         kkcShader = engine.kkcShader;
         fxaaPass = engine.fxaaPass;
         window.scene = scene;
+
+        // Edge lines are enabled for new visitors; remember an explicit opt-out.
+        meshEdges = new MeshEdges(scene);
+        const meshEdgesToggle = document.getElementById('mesh-edges-toggle');
+        let showMeshEdges = true;
+        try {
+            showMeshEdges = localStorage.getItem('kkc_mesh_edges') !== 'false';
+        } catch (e) { /* Keep the default when browser storage is unavailable. */ }
+        meshEdges.setEnabled(showMeshEdges);
+        if (meshEdgesToggle) {
+            meshEdgesToggle.checked = showMeshEdges;
+            meshEdgesToggle.addEventListener('change', () => {
+                meshEdges.setEnabled(meshEdgesToggle.checked);
+                try {
+                    localStorage.setItem('kkc_mesh_edges', String(meshEdgesToggle.checked));
+                } catch (e) { /* The toggle still works without persistent storage. */ }
+            });
+        }
 
         // --- LOD QUALITY ---
         window.lodQualityMode = isMobileDevice() ? 'medium' : 'high';
@@ -750,9 +771,11 @@ async function init() {
                     onStatusUpdate: updateStatus,
                     onMeshesUpdated: (action, data) => {
                         if (action === 'remove') {
+                            meshEdges.removeMeshes(data);
                             detectedMaterials = detectedMaterials.filter(m => !m.meshes.some(mesh => data.has(mesh)));
                         } else if (action === 'add') {
                             const newGroup = data;
+                            meshEdges.add(newGroup);
                             const materialMap = new Map();
                             // Re-run the material grouping logic from GLTFLoader on the new meshes
                             newGroup.traverse((child) => {
@@ -930,6 +953,7 @@ async function init() {
             loadedModel = model;
             detectedMaterials = parsedMaterials;
             scene.add(loadedModel);
+            meshEdges.add(loadedModel);
             activeModelUrl = targetUrl;
             activeModelQuality = quality;
             window.activeModelQuality = activeModelQuality;
