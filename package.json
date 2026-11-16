@@ -1,29 +1,29 @@
 {
   "name": "kkc-cabinet-portal",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "Production portal for viewing 3D cabinet models",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@gltf-transform/core": "^4.3.0",
-    "@gltf-transform/extensions": "^4.3.0",
-    "@gltf-transform/functions": "^4.3.0",
-    "chokidar": "^5.0.0",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.3.1",
-    "gltf-pipeline": "^4.3.0",
-    "helmet": "^8.1.0",
-    "meshoptimizer": "^1.0.1",
-    "morgan": "^1.10.1",
-    "sharp": "^0.34.5"
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "chokidar": "^6.0.0",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "gltf-pipeline": "^4.3.1",
+    "helmet": "^8.3.0",
+    "meshoptimizer": "^1.3.0",
+    "morgan": "^1.12.1",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "jsdom": "^29.0.1",
-    "playwright": "^1.58.2",
-    "supertest": "^7.2.2"
+    "@playwright/test": "^1.65.1",
+    "jsdom": "^31.0.1",
+    "playwright": "^1.65.1",
+    "supertest": "^7.3.2"
   },
   "directories": {
     "test": "test"
@@ -41,7 +41,7 @@
   },
   "homepage": "https://github.com/Sirwinnybob/kkc-3d-portal#readme",
   "engines": {
-    "node": "^20.17.0 || >=22.9.0",
+    "node": ">=22.22.0",
     "npm": "^11.0.0"
   }
 }

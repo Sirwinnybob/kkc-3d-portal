@@ -10,7 +10,7 @@ const indexJsContent = fs.readFileSync(indexJsPath, 'utf8').replace("import { es
 test('frontend index.js proceedAfterDisclaimer', async (t) => {
     let dom;
 
-    t.beforeEach(() => {
+    t.beforeEach(async () => {
         dom = new JSDOM(`
             <!DOCTYPE html>
             <html>
@@ -62,6 +62,13 @@ test('frontend index.js proceedAfterDisclaimer', async (t) => {
         dom.window._mockLocation = {
             href: 'http://localhost/'
         };
+
+        // index.js wires its input listeners in a DOMContentLoaded handler, which
+        // jsdom fires asynchronously. Wait for the document to finish loading so
+        // those listeners are attached before any test dispatches events.
+        if (dom.window.document.readyState !== 'complete') {
+            await new Promise(resolve => dom.window.addEventListener('load', resolve, { once: true }));
+        }
     });
 
     await t.test('Scenario 1: Sets localStorage if chkDontShow is checked', () => {
